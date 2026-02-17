@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -35,7 +36,7 @@ func NewExecTool(workingDir string, restrict bool) *ExecTool {
 
 	return &ExecTool{
 		workingDir:          workingDir,
-		timeout:             60 * time.Second,
+		timeout:             30 * time.Second,
 		denyPatterns:        denyPatterns,
 		allowPatterns:       nil,
 		restrictToWorkspace: restrict,
@@ -61,6 +62,10 @@ func (t *ExecTool) Parameters() map[string]interface{} {
 			"working_dir": map[string]interface{}{
 				"type":        "string",
 				"description": "Optional working directory for the command",
+			},
+			"timeout": map[string]interface{}{
+				"type":        "integer",
+				"description": "Optional timeout in seconds (default 30, max 120). Use higher values for commands that take longer like scans or builds.",
 			},
 		},
 		"required": []string{"command"},
@@ -89,7 +94,18 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]interface{}) *To
 		return ErrorResult(guardError)
 	}
 
-	cmdCtx, cancel := context.WithTimeout(ctx, t.timeout)
+	// Allow LLM to specify a custom timeout (capped at 120s)
+	timeout := t.timeout
+	if secs, ok := args["timeout"].(float64); ok && secs > 0 {
+		custom := time.Duration(secs) * time.Second
+		maxTimeout := 120 * time.Second
+		if custom > maxTimeout {
+			custom = maxTimeout
+		}
+		timeout = custom
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var cmd *exec.Cmd
@@ -97,6 +113,8 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]interface{}) *To
 		cmd = exec.CommandContext(cmdCtx, "powershell", "-NoProfile", "-NonInteractive", "-Command", command)
 	} else {
 		cmd = exec.CommandContext(cmdCtx, "sh", "-c", command)
+		// Create a new process group so we can kill all child processes on timeout
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
 	if cwd != "" {
 		cmd.Dir = cwd
@@ -107,20 +125,26 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]interface{}) *To
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
+
+	// On timeout, kill the entire process group (not just the shell)
+	if err != nil && cmdCtx.Err() == context.DeadlineExceeded {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		msg := fmt.Sprintf("Command timed out after %v and was killed (including child processes). Use the 'timeout' parameter for commands that need more time.", timeout)
+		return &ToolResult{
+			ForLLM:  msg,
+			ForUser: msg,
+			IsError: true,
+		}
+	}
+
 	output := stdout.String()
 	if stderr.Len() > 0 {
 		output += "\nSTDERR:\n" + stderr.String()
 	}
 
 	if err != nil {
-		if cmdCtx.Err() == context.DeadlineExceeded {
-			msg := fmt.Sprintf("Command timed out after %v", t.timeout)
-			return &ToolResult{
-				ForLLM:  msg,
-				ForUser: msg,
-				IsError: true,
-			}
-		}
 		output += fmt.Sprintf("\nExit code: %v", err)
 	}
 

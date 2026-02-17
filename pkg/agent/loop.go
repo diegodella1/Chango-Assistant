@@ -42,18 +42,21 @@ type AgentLoop struct {
 	tools          *tools.ToolRegistry
 	running        atomic.Bool
 	summarizing    sync.Map // Tracks which sessions are currently being summarized
+	cfg            *config.Config // Reference to config for runtime updates
+	configPath     string         // Path to config.json for persistence
 }
 
 // processOptions configures how a message is processed
 type processOptions struct {
-	SessionKey      string // Session identifier for history/context
-	Channel         string // Target channel for tool execution
-	ChatID          string // Target chat ID for tool execution
-	UserMessage     string // User message content (may include prefix)
-	DefaultResponse string // Response when LLM returns empty
-	EnableSummary   bool   // Whether to trigger summarization
-	SendResponse    bool   // Whether to send response via bus
-	NoHistory       bool   // If true, don't load session history (for heartbeat)
+	SessionKey      string   // Session identifier for history/context
+	Channel         string   // Target channel for tool execution
+	ChatID          string   // Target chat ID for tool execution
+	UserMessage     string   // User message content (may include prefix)
+	Media           []string // Media data URIs (images as base64 data URIs)
+	DefaultResponse string   // Response when LLM returns empty
+	EnableSummary   bool     // Whether to trigger summarization
+	SendResponse    bool     // Whether to send response via bus
+	NoHistory       bool     // If true, don't load session history (for heartbeat)
 }
 
 // createToolRegistry creates a tool registry with common tools.
@@ -86,6 +89,29 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	registry.Register(tools.NewI2CTool())
 	registry.Register(tools.NewSPITool())
 
+	// Memory - persistent notes
+	registry.Register(tools.NewMemoryTool(workspace))
+
+	// Image generation
+	registry.Register(tools.NewImageGenTool())
+
+	// YouTube transcript
+	registry.Register(tools.NewYouTubeTool())
+
+	// Weather
+	registry.Register(tools.NewWeatherTool())
+
+	// Reminder (needs message bus for notifications)
+	reminderTool := tools.NewReminderTool(workspace, msgBus)
+	reminderTool.StartPendingReminders()
+	registry.Register(reminderTool)
+
+	// Snippets
+	registry.Register(tools.NewSnippetTool(workspace))
+
+	// Translator
+	registry.Register(tools.NewTranslateTool())
+
 	// Message tool - available to both agent and subagent
 	// Subagent uses it to communicate directly with user
 	messageTool := tools.NewMessageTool()
@@ -102,7 +128,7 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	return registry
 }
 
-func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers.LLMProvider) *AgentLoop {
+func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers.LLMProvider, configPath string) *AgentLoop {
 	workspace := cfg.WorkspacePath()
 	os.MkdirAll(workspace, 0755)
 
@@ -146,6 +172,8 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		contextBuilder: contextBuilder,
 		tools:          toolsRegistry,
 		summarizing:    sync.Map{},
+		cfg:            cfg,
+		configPath:     configPath,
 	}
 }
 
@@ -162,9 +190,10 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				continue
 			}
 
-			response, err := al.processMessage(ctx, msg)
+			response, media, err := al.processMessage(ctx, msg)
 			if err != nil {
 				response = fmt.Sprintf("Error processing message: %v", err)
+				media = nil
 			}
 
 			if response != "" {
@@ -182,6 +211,7 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 						Channel: msg.Channel,
 						ChatID:  msg.ChatID,
 						Content: response,
+						Media:   media,
 					})
 				}
 			}
@@ -224,13 +254,14 @@ func (al *AgentLoop) ProcessDirectWithChannel(ctx context.Context, content, sess
 		SessionKey: sessionKey,
 	}
 
-	return al.processMessage(ctx, msg)
+	response, _, err := al.processMessage(ctx, msg)
+	return response, err
 }
 
 // ProcessHeartbeat processes a heartbeat request without session history.
 // Each heartbeat is independent and doesn't accumulate context.
 func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, chatID string) (string, error) {
-	return al.runAgentLoop(ctx, processOptions{
+	response, _, err := al.runAgentLoop(ctx, processOptions{
 		SessionKey:      "heartbeat",
 		Channel:         channel,
 		ChatID:          chatID,
@@ -240,9 +271,10 @@ func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, cha
 		SendResponse:    false,
 		NoHistory:       true, // Don't load session history for heartbeat
 	})
+	return response, err
 }
 
-func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage) (string, error) {
+func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage) (string, []string, error) {
 	// Add message preview to log (show full content for error messages)
 	var logContent string
 	if strings.Contains(msg.Content, "Error:") || strings.Contains(msg.Content, "error") {
@@ -260,7 +292,13 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 
 	// Route system messages to processSystemMessage
 	if msg.Channel == "system" {
-		return al.processSystemMessage(ctx, msg)
+		resp, err := al.processSystemMessage(ctx, msg)
+		return resp, nil, err
+	}
+
+	// Handle /model command
+	if response, handled := al.handleModelCommand(msg.Content); handled {
+		return response, nil, nil
 	}
 
 	// Process as user message
@@ -269,6 +307,7 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		Channel:         msg.Channel,
 		ChatID:          msg.ChatID,
 		UserMessage:     msg.Content,
+		Media:           msg.Media,
 		DefaultResponse: "I've completed processing but have no response to give.",
 		EnableSummary:   true,
 		SendResponse:    false,
@@ -327,9 +366,49 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 	return "", nil
 }
 
+// handleModelCommand handles the /model command to view or change the current model at runtime.
+// Returns the response string and true if the command was handled.
+func (al *AgentLoop) handleModelCommand(content string) (string, bool) {
+	trimmed := strings.TrimSpace(content)
+
+	if trimmed == "/model" {
+		return fmt.Sprintf("Current model: %s", al.model), true
+	}
+
+	if strings.HasPrefix(trimmed, "/model ") {
+		newModel := strings.TrimSpace(strings.TrimPrefix(trimmed, "/model "))
+		if newModel == "" {
+			return fmt.Sprintf("Current model: %s", al.model), true
+		}
+
+		oldModel := al.model
+		al.model = newModel
+
+		// Update config and persist
+		al.cfg.Agents.Defaults.Model = newModel
+		if al.configPath != "" {
+			if err := config.SaveConfig(al.configPath, al.cfg); err != nil {
+				logger.WarnCF("agent", "Failed to persist model change",
+					map[string]interface{}{"error": err.Error()})
+				return fmt.Sprintf("Model changed: %s → %s (warning: failed to save config: %v)", oldModel, newModel, err), true
+			}
+		}
+
+		logger.InfoCF("agent", "Model changed via /model command",
+			map[string]interface{}{
+				"old_model": oldModel,
+				"new_model": newModel,
+			})
+
+		return fmt.Sprintf("Model changed: %s → %s", oldModel, newModel), true
+	}
+
+	return "", false
+}
+
 // runAgentLoop is the core message processing logic.
 // It handles context building, LLM calls, tool execution, and response handling.
-func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (string, error) {
+func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (string, []string, error) {
 	// 0. Record last channel for heartbeat notifications (skip internal channels)
 	if opts.Channel != "" && opts.ChatID != "" {
 		// Don't record internal channels (cli, system, subagent)
@@ -355,7 +434,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		history,
 		summary,
 		opts.UserMessage,
-		nil,
+		opts.Media,
 		opts.Channel,
 		opts.ChatID,
 	)
@@ -364,9 +443,9 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	al.sessions.AddMessage(opts.SessionKey, "user", opts.UserMessage)
 
 	// 4. Run LLM iteration loop
-	finalContent, iteration, err := al.runLLMIteration(ctx, messages, opts)
+	finalContent, iteration, media, err := al.runLLMIteration(ctx, messages, opts)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// If last tool had ForUser content and we already sent it, we might not need to send final response
@@ -392,6 +471,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 			Channel: opts.Channel,
 			ChatID:  opts.ChatID,
 			Content: finalContent,
+			Media:   media,
 		})
 	}
 
@@ -404,14 +484,15 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 			"final_length": len(finalContent),
 		})
 
-	return finalContent, nil
+	return finalContent, media, nil
 }
 
 // runLLMIteration executes the LLM call loop with tool handling.
-// Returns the final content, iteration count, and any error.
-func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions) (string, int, error) {
+// Returns the final content, iteration count, collected media URLs, and any error.
+func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.Message, opts processOptions) (string, int, []string, error) {
 	iteration := 0
 	var finalContent string
+	var collectedMedia []string
 
 	for iteration < al.maxIterations {
 		iteration++
@@ -457,7 +538,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 					"iteration": iteration,
 					"error":     err.Error(),
 				})
-			return "", iteration, fmt.Errorf("LLM call failed: %w", err)
+			return "", iteration, nil, fmt.Errorf("LLM call failed: %w", err)
 		}
 
 		// Check if no tool calls - we're done
@@ -465,8 +546,9 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			finalContent = response.Content
 			logger.InfoCF("agent", "LLM response without tool calls (direct answer)",
 				map[string]interface{}{
-					"iteration":     iteration,
-					"content_chars": len(finalContent),
+					"iteration":      iteration,
+					"content_chars":  len(finalContent),
+					"media_count":    len(collectedMedia),
 				})
 			break
 		}
@@ -533,6 +615,11 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 
 			toolResult := al.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, opts.Channel, opts.ChatID, asyncCallback)
 
+			// Collect media URLs from tool results
+			if len(toolResult.Media) > 0 {
+				collectedMedia = append(collectedMedia, toolResult.Media...)
+			}
+
 			// Send ForUser content to user immediately if not Silent
 			if !toolResult.Silent && toolResult.ForUser != "" && opts.SendResponse {
 				al.bus.PublishOutbound(bus.OutboundMessage{
@@ -565,7 +652,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		}
 	}
 
-	return finalContent, iteration, nil
+	return finalContent, iteration, collectedMedia, nil
 }
 
 // updateToolContexts updates the context for tools that need channel/chatID info.
@@ -584,6 +671,11 @@ func (al *AgentLoop) updateToolContexts(channel, chatID string) {
 	if tool, ok := al.tools.Get("subagent"); ok {
 		if st, ok := tool.(tools.ContextualTool); ok {
 			st.SetContext(channel, chatID)
+		}
+	}
+	if tool, ok := al.tools.Get("reminder"); ok {
+		if rt, ok := tool.(tools.ContextualTool); ok {
+			rt.SetContext(channel, chatID)
 		}
 	}
 }

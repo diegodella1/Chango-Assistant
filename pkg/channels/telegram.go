@@ -2,10 +2,13 @@ package channels
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -25,10 +28,27 @@ type TelegramChannel struct {
 	*BaseChannel
 	bot          *telego.Bot
 	config       config.TelegramConfig
+	appConfig    *config.Config
 	chatIDs      map[string]int64
 	transcriber  *voice.GroqTranscriber
 	placeholders sync.Map // chatID -> messageID
 	stopThinking sync.Map // chatID -> thinkingCancel
+	voiceInput   sync.Map // chatID -> bool (true if last input was voice/audio)
+}
+
+var defaultModels = []string{
+	// Top tier
+	"openai/gpt-5",
+	"anthropic/claude-opus-4.6",
+	"google/gemini-2.5-pro",
+	// Rápidos/baratos
+	"openai/gpt-4o-mini",
+	"google/gemini-2.5-flash",
+	"deepseek/deepseek-chat",
+	// Razonamiento
+	"openai/o3",
+	"deepseek/deepseek-r1",
+	"anthropic/claude-3.7-sonnet:thinking",
 }
 
 type thinkingCancel struct {
@@ -41,7 +61,7 @@ func (c *thinkingCancel) Cancel() {
 	}
 }
 
-func NewTelegramChannel(cfg config.TelegramConfig, bus *bus.MessageBus) (*TelegramChannel, error) {
+func NewTelegramChannel(cfg config.TelegramConfig, bus *bus.MessageBus, appConfig *config.Config) (*TelegramChannel, error) {
 	var opts []telego.BotOption
 
 	if cfg.Proxy != "" {
@@ -67,6 +87,7 @@ func NewTelegramChannel(cfg config.TelegramConfig, bus *bus.MessageBus) (*Telegr
 		BaseChannel:  base,
 		bot:          bot,
 		config:       cfg,
+		appConfig:    appConfig,
 		chatIDs:      make(map[string]int64),
 		transcriber:  nil,
 		placeholders: sync.Map{},
@@ -82,7 +103,8 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	logger.InfoC("telegram", "Starting Telegram bot (polling mode)...")
 
 	updates, err := c.bot.UpdatesViaLongPolling(ctx, &telego.GetUpdatesParams{
-		Timeout: 30,
+		Timeout:        30,
+		AllowedUpdates: []string{"message", "callback_query"},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start long polling: %w", err)
@@ -103,7 +125,9 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 					logger.InfoC("telegram", "Updates channel closed, reconnecting...")
 					return
 				}
-				if update.Message != nil {
+				if update.CallbackQuery != nil {
+					c.handleCallbackQuery(ctx, update)
+				} else if update.Message != nil {
 					c.handleMessage(ctx, update)
 				}
 			}
@@ -118,6 +142,9 @@ func (c *TelegramChannel) Stop(ctx context.Context) error {
 	c.setRunning(false)
 	return nil
 }
+
+// ttsMaxChars is the max plain-text length for a response to be sent as voice.
+const ttsMaxChars = 300
 
 func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if !c.IsRunning() {
@@ -137,20 +164,54 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 		c.stopThinking.Delete(msg.ChatID)
 	}
 
-	htmlContent := markdownToTelegramHTML(msg.Content)
-
-	// Try to edit placeholder
+	// Delete placeholder before sending voice or text
 	if pID, ok := c.placeholders.Load(msg.ChatID); ok {
 		c.placeholders.Delete(msg.ChatID)
-		editMsg := tu.EditMessageText(tu.ID(chatID), pID.(int), htmlContent)
-		editMsg.ParseMode = telego.ModeHTML
-
-		if _, err = c.bot.EditMessageText(ctx, editMsg); err == nil {
-			return nil
-		}
-		// Fallback to new message if edit fails
+		_ = c.bot.DeleteMessage(ctx, &telego.DeleteMessageParams{
+			ChatID:    tu.ID(chatID),
+			MessageID: pID.(int),
+		})
 	}
 
+	// Send media as photos if present
+	if len(msg.Media) > 0 {
+		for _, mediaURL := range msg.Media {
+			photoParams := &telego.SendPhotoParams{
+				ChatID: tu.ID(chatID),
+				Photo:  tu.FileFromURL(mediaURL),
+			}
+			if msg.Content != "" {
+				photoParams.Caption = markdownToTelegramHTML(msg.Content)
+				photoParams.ParseMode = telego.ModeHTML
+			}
+			if _, photoErr := c.bot.SendPhoto(ctx, photoParams); photoErr != nil {
+				logger.ErrorCF("telegram", "Failed to send photo, falling back to text", map[string]interface{}{
+					"error": photoErr.Error(),
+					"url":   mediaURL,
+				})
+				break // fall through to text send below
+			} else {
+				return nil // photo sent successfully with caption
+			}
+		}
+	}
+
+	// Only reply with voice if the user sent a voice/audio message
+	if _, wasVoice := c.voiceInput.LoadAndDelete(msg.ChatID); wasVoice {
+		plainText := stripMarkdown(msg.Content)
+		if len(plainText) > 0 && len(plainText) <= ttsMaxChars && !containsCode(msg.Content) {
+			voiceErr := c.sendVoice(ctx, chatID, plainText)
+			if voiceErr == nil {
+				return nil
+			}
+			logger.ErrorCF("telegram", "TTS failed, falling back to text", map[string]interface{}{
+				"error": voiceErr.Error(),
+			})
+		}
+	}
+
+	// Send as text
+	htmlContent := markdownToTelegramHTML(msg.Content)
 	tgMsg := tu.Message(tu.ID(chatID), htmlContent)
 	tgMsg.ParseMode = telego.ModeHTML
 
@@ -164,6 +225,54 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 	}
 
 	return nil
+}
+
+// sendVoice converts text to speech and sends as a Telegram voice message.
+func (c *TelegramChannel) sendVoice(ctx context.Context, chatID int64, text string) error {
+	home, _ := os.UserHomeDir()
+	pythonPath := filepath.Join(home, ".picoclaw", "workspace", "scripts", "google", "venv", "bin", "python")
+	ttsScript := filepath.Join(home, ".picoclaw", "workspace", "scripts", "tts.py")
+
+	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("chango_tts_%d.ogg", time.Now().UnixNano()))
+	defer os.Remove(tmpFile)
+
+	cmd := exec.CommandContext(ctx, pythonPath, ttsScript, text, tmpFile)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("tts failed: %w: %s", err, string(output))
+	}
+
+	voiceFile, err := os.Open(tmpFile)
+	if err != nil {
+		return fmt.Errorf("opening voice file: %w", err)
+	}
+	defer voiceFile.Close()
+
+	voiceParams := &telego.SendVoiceParams{
+		ChatID: tu.ID(chatID),
+		Voice:  telego.InputFile{File: voiceFile},
+	}
+	_, err = c.bot.SendVoice(ctx, voiceParams)
+	return err
+}
+
+// stripMarkdown removes markdown formatting to get plain text length.
+func stripMarkdown(text string) string {
+	text = regexp.MustCompile("```[\\w]*\\n?[\\s\\S]*?```").ReplaceAllString(text, "")
+	text = regexp.MustCompile("`[^`]+`").ReplaceAllString(text, "")
+	text = regexp.MustCompile(`\*\*(.+?)\*\*`).ReplaceAllString(text, "$1")
+	text = regexp.MustCompile(`__(.+?)__`).ReplaceAllString(text, "$1")
+	text = regexp.MustCompile(`_([^_]+)_`).ReplaceAllString(text, "$1")
+	text = regexp.MustCompile(`~~(.+?)~~`).ReplaceAllString(text, "$1")
+	text = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`).ReplaceAllString(text, "$1")
+	text = regexp.MustCompile(`^#{1,6}\s+`).ReplaceAllString(text, "")
+	text = regexp.MustCompile(`^[-*]\s+`).ReplaceAllString(text, "")
+	text = strings.TrimSpace(text)
+	return text
+}
+
+// containsCode checks if the message has code blocks or inline code.
+func containsCode(text string) bool {
+	return strings.Contains(text, "```") || regexp.MustCompile("`[^`]+`").MatchString(text)
 }
 
 func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Update) {
@@ -194,6 +303,12 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 
 	chatID := message.Chat.ID
 	c.chatIDs[senderID] = chatID
+
+	// Intercept bare /model command → show inline keyboard
+	if text := strings.TrimSpace(message.Text); text == "/model" {
+		c.sendModelMenu(ctx, chatID)
+		return
+	}
 
 	content := ""
 	mediaPaths := []string{}
@@ -227,12 +342,25 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 		photoPath := c.downloadPhoto(ctx, photo.FileID)
 		if photoPath != "" {
 			localFiles = append(localFiles, photoPath)
-			mediaPaths = append(mediaPaths, photoPath)
+			// Read and base64-encode the image so it survives temp file cleanup
+			if imgData, err := os.ReadFile(photoPath); err == nil {
+				dataURI := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(imgData)
+				mediaPaths = append(mediaPaths, dataURI)
+			}
 			if content != "" {
 				content += "\n"
 			}
-			content += fmt.Sprintf("[image: photo]")
+			content += "[image: photo]"
 		}
+	}
+
+	// Track whether this input is voice/audio for TTS response
+	isVoiceInput := message.Voice != nil || message.Audio != nil
+	voiceKey := fmt.Sprintf("%d", chatID)
+	if isVoiceInput {
+		c.voiceInput.Store(voiceKey, true)
+	} else {
+		c.voiceInput.Delete(voiceKey)
 	}
 
 	if message.Voice != nil {
@@ -378,6 +506,71 @@ func (c *TelegramChannel) downloadFile(ctx context.Context, fileID, ext string) 
 	}
 
 	return c.downloadFileWithInfo(file, ext)
+}
+
+func (c *TelegramChannel) sendModelMenu(ctx context.Context, chatID int64) {
+	models := c.appConfig.Agents.Defaults.AvailableModels
+	if len(models) == 0 {
+		models = defaultModels
+	}
+	currentModel := c.appConfig.Agents.Defaults.Model
+
+	var buttons []telego.InlineKeyboardButton
+	for _, m := range models {
+		label := m
+		if m == currentModel {
+			label = "\u2705 " + m
+		}
+		buttons = append(buttons, tu.InlineKeyboardButton(label).WithCallbackData("model:"+m))
+	}
+
+	keyboard := tu.InlineKeyboardGrid(tu.InlineKeyboardCols(2, buttons...))
+	msg := tu.Message(tu.ID(chatID), "Elegí un modelo:")
+	msg.ReplyMarkup = keyboard
+
+	if _, err := c.bot.SendMessage(ctx, msg); err != nil {
+		logger.ErrorCF("telegram", "Failed to send model menu", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+}
+
+func (c *TelegramChannel) handleCallbackQuery(ctx context.Context, update telego.Update) {
+	query := update.CallbackQuery
+	if query == nil || !strings.HasPrefix(query.Data, "model:") {
+		return
+	}
+
+	modelName := strings.TrimPrefix(query.Data, "model:")
+
+	// Answer the callback to dismiss the spinner
+	_ = c.bot.AnswerCallbackQuery(ctx, tu.CallbackQuery(query.ID).WithText("Cambiando a "+modelName+"..."))
+
+	// Edit original message to show selection, remove buttons
+	if query.Message != nil {
+		editParams := &telego.EditMessageTextParams{
+			ChatID:    tu.ID(query.Message.GetChat().ID),
+			MessageID: query.Message.GetMessageID(),
+			Text:      "\u2705 Modelo: " + modelName,
+		}
+		_, _ = c.bot.EditMessageText(ctx, editParams)
+	}
+
+	// Publish to bus so AgentLoop handles the actual model change
+	userID := fmt.Sprintf("%d", query.From.ID)
+	senderID := userID
+	if query.From.Username != "" {
+		senderID = fmt.Sprintf("%s|%s", userID, query.From.Username)
+	}
+	chatIDStr := ""
+	if query.Message != nil {
+		chatIDStr = fmt.Sprintf("%d", query.Message.GetChat().ID)
+	}
+
+	c.HandleMessage(senderID, chatIDStr, "/model "+modelName, nil, map[string]string{
+		"user_id":  userID,
+		"username": query.From.Username,
+	})
 }
 
 func parseChatID(chatIDStr string) (int64, error) {

@@ -207,10 +207,32 @@ func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary str
 
 	messages = append(messages, history...)
 
-	messages = append(messages, providers.Message{
+	// Build user message — multimodal if media is present
+	userMsg := providers.Message{
 		Role:    "user",
 		Content: currentMessage,
-	})
+	}
+
+	if len(media) > 0 {
+		// Build multimodal content parts
+		parts := []providers.ContentPart{
+			{Type: "text", Text: currentMessage},
+		}
+		for _, dataURI := range media {
+			if strings.HasPrefix(dataURI, "data:image/") {
+				parts = append(parts, providers.ContentPart{
+					Type: "image_url",
+					ImageURL: &providers.ImageURL{
+						URL:    dataURI,
+						Detail: "auto",
+					},
+				})
+			}
+		}
+		userMsg.Parts = parts
+	}
+
+	messages = append(messages, userMsg)
 
 	return messages
 }

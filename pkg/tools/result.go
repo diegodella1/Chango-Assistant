@@ -27,6 +27,10 @@ type ToolResult struct {
 	// When true, the tool will complete later and notify via callback.
 	Async bool `json:"async"`
 
+	// Media holds URLs to be sent as inline media (e.g. photos) in the channel.
+	// When set, the channel should send these as images/photos instead of text links.
+	Media []string `json:"media,omitempty"`
+
 	// Err is the underlying error (not JSON serialized).
 	// Used for internal error handling and logging.
 	Err error `json:"-"`
@@ -117,6 +121,17 @@ func UserResult(content string) *ToolResult {
 		Silent:  false,
 		IsError: false,
 		Async:   false,
+	}
+}
+
+// MediaResult creates a ToolResult with media URLs for inline display.
+// The forLLM content goes to the LLM, media URLs are propagated to the channel
+// for sending as photos/images instead of text links.
+func MediaResult(forLLM string, mediaURLs []string) *ToolResult {
+	return &ToolResult{
+		ForLLM: forLLM,
+		Media:  mediaURLs,
+		Silent: true,
 	}
 }
 
