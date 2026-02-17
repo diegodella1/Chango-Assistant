@@ -36,5 +36,19 @@ services:
       - picoclaw-workspace:/root/.picoclaw/workspace
     command: ["gateway"]
 
+  # ─────────────────────────────────────────────
+  # PicoClaw Gateway — Diego's Pi deployment
+  #   docker compose up -d picoclaw
+  # ─────────────────────────────────────────────
+  picoclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: picoclaw
+    restart: unless-stopped
+    volumes:
+      - /home/diego/.picoclaw:/root/.picoclaw
+    command: ["gateway"]
+
 volumes:
   picoclaw-workspace:

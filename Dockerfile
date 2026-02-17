@@ -3,7 +3,7 @@
 # ============================================================
 FROM golang:1.26.0-alpine AS builder
 
-RUN apk add --no-cache git make
+RUN apk add --no-cache git
 
 WORKDIR /src
 
@@ -13,20 +13,21 @@ RUN go mod download
 
 # Copy source and build
 COPY . .
-RUN make build
+RUN CGO_ENABLED=0 go build -o /picoclaw ./cmd/picoclaw/
 
 # ============================================================
-# Stage 2: Minimal runtime image
+# Stage 2: Runtime with Python/ffmpeg for TTS
 # ============================================================
-FROM alpine:3.23
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      python3 python3-pip ffmpeg ca-certificates tzdata curl && \
+    pip3 install edge-tts --break-system-packages && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy binary
-COPY --from=builder /src/build/picoclaw /usr/local/bin/picoclaw
-
-# Create picoclaw home directory
-RUN /usr/local/bin/picoclaw onboard
+COPY --from=builder /picoclaw /usr/local/bin/picoclaw
 
 ENTRYPOINT ["picoclaw"]
 CMD ["gateway"]
