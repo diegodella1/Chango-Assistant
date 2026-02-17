@@ -3,7 +3,7 @@
 # ============================================================
 FROM golang:1.26.0-alpine AS builder
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git make
 
 WORKDIR /src
 
@@ -13,7 +13,7 @@ RUN go mod download
 
 # Copy source and build
 COPY . .
-RUN CGO_ENABLED=0 go build -o /picoclaw ./cmd/picoclaw/
+RUN go generate ./... && CGO_ENABLED=0 go build -o /picoclaw ./cmd/picoclaw/
 
 # ============================================================
 # Stage 2: Runtime with Python/ffmpeg for TTS

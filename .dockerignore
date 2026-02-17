@@ -5,6 +5,7 @@ build/
 config/
 .env
 .env.example
-*.md
 LICENSE
 assets/
+*.md
+!workspace/**/*.md
