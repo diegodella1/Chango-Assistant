@@ -106,6 +106,9 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	reminderTool.StartPendingReminders()
 	registry.Register(reminderTool)
 
+	// Tasks - persistent task/goal tracking
+	registry.Register(tools.NewTasksTool(workspace))
+
 	// Snippets
 	registry.Register(tools.NewSnippetTool(workspace))
 
@@ -159,6 +162,9 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	// Create context builder and set tools registry
 	contextBuilder := NewContextBuilder(workspace)
 	contextBuilder.SetToolsRegistry(toolsRegistry)
+
+	// Wire system prompt builder so subagents inherit the main agent's personality
+	subagentManager.SetSystemPromptBuilder(contextBuilder.BuildSystemPrompt)
 
 	return &AgentLoop{
 		bus:            msgBus,

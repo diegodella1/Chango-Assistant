@@ -21,16 +21,20 @@ type SubagentTask struct {
 	Created       int64
 }
 
+// SystemPromptBuilder is a function that builds the system prompt dynamically.
+type SystemPromptBuilder func() string
+
 type SubagentManager struct {
-	tasks         map[string]*SubagentTask
-	mu            sync.RWMutex
-	provider      providers.LLMProvider
-	defaultModel  string
-	bus           *bus.MessageBus
-	workspace     string
-	tools         *ToolRegistry
-	maxIterations int
-	nextID        int
+	tasks              map[string]*SubagentTask
+	mu                 sync.RWMutex
+	provider           providers.LLMProvider
+	defaultModel       string
+	bus                *bus.MessageBus
+	workspace          string
+	tools              *ToolRegistry
+	maxIterations      int
+	nextID             int
+	systemPromptBuilder SystemPromptBuilder
 }
 
 func NewSubagentManager(provider providers.LLMProvider, defaultModel, workspace string, bus *bus.MessageBus) *SubagentManager {
@@ -44,6 +48,28 @@ func NewSubagentManager(provider providers.LLMProvider, defaultModel, workspace 
 		maxIterations: 10,
 		nextID:        1,
 	}
+}
+
+// SetSystemPromptBuilder sets a function that builds the system prompt dynamically.
+// This allows subagents to inherit the main agent's personality and context.
+func (sm *SubagentManager) SetSystemPromptBuilder(fn SystemPromptBuilder) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.systemPromptBuilder = fn
+}
+
+// buildSystemPrompt builds the system prompt for subagent execution.
+// If a SystemPromptBuilder is set, it uses the main agent's prompt with a subagent suffix.
+// Otherwise, it falls back to a generic subagent prompt.
+func (sm *SubagentManager) buildSystemPrompt() string {
+	sm.mu.RLock()
+	builder := sm.systemPromptBuilder
+	sm.mu.RUnlock()
+	if builder != nil {
+		base := builder()
+		return base + "\n\n---\n\nYou are running as a subagent. Complete the given task independently and report the result. Use tools as needed. Provide a clear summary when done."
+	}
+	return "You are a subagent. Complete the given task independently and report the result.\nYou have access to tools - use them as needed to complete your task.\nAfter completing the task, provide a clear summary of what was done."
 }
 
 // SetTools sets the tool registry for subagent execution.
@@ -92,10 +118,8 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 	task.Status = "running"
 	task.Created = time.Now().UnixMilli()
 
-	// Build system prompt for subagent
-	systemPrompt := `You are a subagent. Complete the given task independently and report the result.
-You have access to tools - use them as needed to complete your task.
-After completing the task, provide a clear summary of what was done.`
+	// Build system prompt for subagent (inherits main agent personality if configured)
+	systemPrompt := sm.buildSystemPrompt()
 
 	messages := []providers.Message{
 		{
@@ -264,11 +288,11 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult("Subagent manager not configured").WithError(fmt.Errorf("manager is nil"))
 	}
 
-	// Build messages for subagent
+	// Build messages for subagent (inherits main agent personality if configured)
 	messages := []providers.Message{
 		{
 			Role:    "system",
-			Content: "You are a subagent. Complete the given task independently and provide a clear, concise result.",
+			Content: t.manager.buildSystemPrompt(),
 		},
 		{
 			Role:    "user",
