@@ -1,23 +1,48 @@
 <div align="center">
   <img src="assets/logo.jpg" alt="PicoClaw" width="512">
 
-  <h1>PicoClaw: Ultra-Efficient AI Assistant in Go</h1>
+  <h1>Chango: Autonomous Personal AI Agent</h1>
 
-  <h3>$10 Hardware · 10MB RAM · 1s Boot · 皮皮虾，我们走！</h3>
+  <h3>Personality · Proactive · Task Tracking · Webhooks · Voice · Multi-day Planning</h3>
 
   <p>
     <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go&logoColor=white" alt="Go">
     <img src="https://img.shields.io/badge/Arch-x86__64%2C%20ARM64%2C%20RISC--V-blue" alt="Hardware">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
     <br>
-    <a href="https://picoclaw.io"><img src="https://img.shields.io/badge/Website-picoclaw.io-blue?style=flat&logo=google-chrome&logoColor=white" alt="Website"></a>
-    <a href="https://x.com/SipeedIO"><img src="https://img.shields.io/badge/X_(Twitter)-SipeedIO-black?style=flat&logo=x&logoColor=white" alt="Twitter"></a>
+    <a href="https://picoclaw.io"><img src="https://img.shields.io/badge/Upstream-picoclaw.io-blue?style=flat&logo=google-chrome&logoColor=white" alt="Website"></a>
   </p>
 
  [中文](README.zh.md) | [日本語](README.ja.md) | **English**
 </div>
 
 ---
+
+**Chango** is an autonomous AI agent with real personality that runs on a Raspberry Pi (or any Linux box). Built on [PicoClaw](https://github.com/sipeed/picoclaw), it goes beyond a chatbot: it initiates conversations, tracks your goals across days, receives external events, and delegates work to sub-agents that share its personality.
+
+> Think of it as your personal AI co-pilot that actually *cares* — sharp, witty, proactive, and always shipping.
+
+### What makes this fork different
+
+| Feature | Vanilla PicoClaw | Chango (this fork) |
+|---------|-----------------|-------------------|
+| **Personality** | Generic assistant | Rich persona with mentor DNA (Thiel, Jobs, Musk, Rubin, Gladwell, Godin) |
+| **Proactive messaging** | Basic heartbeat | 5 heartbeat tasks: morning briefing, random check-ins, smart follow-ups, daily task review, proactive nudges |
+| **Task/Goal tracking** | None | Persistent `tasks` tool with priorities, due dates, overdue detection, goal linking |
+| **Sub-agent personality** | Generic prompt | Sub-agents inherit the full system prompt (personality, skills, memory) |
+| **External events** | None | Webhook channel — receive GitHub pushes, CI notifications, or any HTTP event |
+| **Voice** | None | TTS (Edge TTS) + speech-to-text (Groq Whisper) via Telegram |
+| **Image generation** | None | Pollinations.ai integration with retry logic |
+| **Multi-day planning** | None | Heartbeat-driven daily reviews + nudges using the tasks tool |
+| **Workspace config** | Minimal | Full bootstrap files: SOUL.md, IDENTITY.md, USER.md, AGENTS.md, HEARTBEAT.md |
+
+### 20+ built-in tools
+
+`tasks` · `memory` · `reminder` · `image_gen` · `web_search` · `web_fetch` · `translate` · `weather` · `youtube` · `snippet` · `read_file` · `write_file` · `edit_file` · `append_file` · `list_dir` · `exec` · `subagent` · `spawn` · `message` · `i2c` · `spi`
+
+---
+
+### Upstream
 
 🦐 PicoClaw is an ultra-lightweight personal AI Assistant inspired by [nanobot](https://github.com/HKUDS/nanobot), refactored from the ground up in Go through a self-bootstrapping process, where the AI agent itself drove the entire architectural migration and code optimization.
 
