@@ -23,6 +23,10 @@ type MemberResponse struct {
 	Response string
 }
 
+// MemberRunner executes a member's LLM call, optionally with tools.
+// It receives context, model name, and messages, and returns the final text response.
+type MemberRunner func(ctx context.Context, model string, msgs []providers.Message) (string, error)
+
 // Member represents a single council advisor with its own Telegram bot.
 type Member struct {
 	Name        string
@@ -33,10 +37,11 @@ type Member struct {
 
 // Council orchestrates deliberation among multiple AI advisors.
 type Council struct {
-	members     []Member
-	groupChatID int64
-	provider    providers.LLMProvider
+	members      []Member
+	groupChatID  int64
+	provider     providers.LLMProvider
 	defaultModel string
+	runner       MemberRunner // when set, used instead of direct provider.Chat
 }
 
 // NewCouncil creates a Council from config. Each member gets a send-only Telegram bot.
@@ -59,7 +64,6 @@ func NewCouncil(cfg config.CouncilConfig, provider providers.LLMProvider, defaul
 		personalityPath := filepath.Join(workspace, "council", mc.Personality+".md")
 		data, err := os.ReadFile(personalityPath)
 		if err != nil {
-			// Try embedded fallback — caller should ensure files exist
 			logger.ErrorCF("council", "Failed to load personality",
 				map[string]interface{}{"name": mc.Name, "path": personalityPath, "error": err.Error()})
 			continue
@@ -90,11 +94,17 @@ func NewCouncil(cfg config.CouncilConfig, provider providers.LLMProvider, defaul
 	}, nil
 }
 
+// SetRunner sets a custom runner for member deliberation (e.g. one that uses tools).
+// When not set, falls back to direct provider.Chat without tools.
+func (c *Council) SetRunner(runner MemberRunner) {
+	c.runner = runner
+}
+
 // Deliberate runs a sequential deliberation: each member sees prior responses.
 // Returns all responses in order.
 func (c *Council) Deliberate(ctx context.Context, question string) ([]MemberResponse, error) {
-	// Own timeout: 3 LLM calls + posting = up to 4 minutes
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+	// Own timeout: 3 LLM calls with tools = up to 5 minutes
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
 	var responses []MemberResponse
@@ -111,7 +121,9 @@ func (c *Council) Deliberate(ctx context.Context, question string) ([]MemberResp
 			"INSTRUCCIONES DE DELIBERACIÓN:\n" +
 			"- Respondé en español argentino, máximo 200 palabras.\n" +
 			"- Sé directo y conciso. No repitas lo que ya dijeron otros.\n" +
-			"- Aportá tu perspectiva única según tu rol."
+			"- Aportá tu perspectiva única según tu rol.\n" +
+			"- Si necesitás buscar información para dar mejor consejo, usá las herramientas disponibles.\n" +
+			"- Tu respuesta final (sin tool calls) es lo que se postea en el grupo."
 
 		userContent := fmt.Sprintf("PREGUNTA: %s", question)
 		if len(responses) > 0 {
@@ -126,9 +138,9 @@ func (c *Council) Deliberate(ctx context.Context, question string) ([]MemberResp
 			{Role: "user", Content: userContent},
 		}
 
-		resp, err := c.provider.Chat(ctx, msgs, nil, member.Model, nil)
+		response, err := c.runMember(ctx, member, msgs)
 		if err != nil {
-			logger.ErrorCF("council", "LLM call failed for member",
+			logger.ErrorCF("council", "Member deliberation failed",
 				map[string]interface{}{"name": member.Name, "error": err.Error()})
 			responses = append(responses, MemberResponse{
 				Name:     member.Name,
@@ -137,7 +149,6 @@ func (c *Council) Deliberate(ctx context.Context, question string) ([]MemberResp
 			continue
 		}
 
-		response := strings.TrimSpace(resp.Content)
 		responses = append(responses, MemberResponse{
 			Name:     member.Name,
 			Response: response,
@@ -148,6 +159,21 @@ func (c *Council) Deliberate(ctx context.Context, question string) ([]MemberResp
 	}
 
 	return responses, nil
+}
+
+// runMember executes a single member's deliberation.
+// Uses custom runner when set, falls back to direct provider.Chat.
+func (c *Council) runMember(ctx context.Context, member Member, msgs []providers.Message) (string, error) {
+	if c.runner != nil {
+		return c.runner(ctx, member.Model, msgs)
+	}
+
+	// Fallback: direct LLM call without tools
+	resp, err := c.provider.Chat(ctx, msgs, nil, member.Model, nil)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(resp.Content), nil
 }
 
 // postToGroup sends a member's response to the Telegram group.

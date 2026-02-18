@@ -573,6 +573,37 @@ func gatewayCmd() {
 		if err != nil {
 			fmt.Printf("⚠ Council init failed: %v\n", err)
 		} else {
+			// Give council members access to research tools via runner
+			councilTools := tools.NewToolRegistry()
+			if searchTool := tools.NewWebSearchTool(tools.WebSearchToolOptions{
+				BraveAPIKey:          cfg.Tools.Web.Brave.APIKey,
+				BraveMaxResults:      cfg.Tools.Web.Brave.MaxResults,
+				BraveEnabled:         cfg.Tools.Web.Brave.Enabled,
+				DuckDuckGoMaxResults: cfg.Tools.Web.DuckDuckGo.MaxResults,
+				DuckDuckGoEnabled:    cfg.Tools.Web.DuckDuckGo.Enabled,
+			}); searchTool != nil {
+				councilTools.Register(searchTool)
+			}
+			councilTools.Register(tools.NewWebFetchTool(50000))
+			councilTools.Register(tools.NewMemoryTool(cfg.WorkspacePath()))
+
+			councilInstance.SetRunner(func(ctx context.Context, model string, msgs []providers.Message) (string, error) {
+				result, err := tools.RunToolLoop(ctx, tools.ToolLoopConfig{
+					Provider:      provider,
+					Model:         model,
+					Tools:         councilTools,
+					MaxIterations: 5,
+					LLMOptions: map[string]any{
+						"max_tokens":  2048,
+						"temperature": 0.7,
+					},
+				}, msgs, "", "")
+				if err != nil {
+					return "", err
+				}
+				return strings.TrimSpace(result.Content), nil
+			})
+
 			councilTool := tools.NewCouncilTool(councilInstance)
 			councilTool.SetSendCallback(func(channel, chatID, content string) error {
 				msgBus.PublishOutbound(bus.OutboundMessage{
@@ -583,7 +614,7 @@ func gatewayCmd() {
 				return nil
 			})
 			agentLoop.RegisterTool(councilTool)
-			fmt.Printf("✓ Council enabled with %d members\n", len(cfg.Council.Members))
+			fmt.Printf("✓ Council enabled with %d members, tools: %d\n", len(cfg.Council.Members), councilTools.Count())
 		}
 	}
 
