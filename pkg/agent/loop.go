@@ -547,7 +547,22 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 					"iteration": iteration,
 					"error":     err.Error(),
 				})
-			return "", iteration, nil, fmt.Errorf("LLM call failed: %w", err)
+			// Return a user-friendly error message instead of raw error
+			errMsg := err.Error()
+			var userMsg string
+			switch {
+			case strings.Contains(errMsg, "429") || strings.Contains(errMsg, "rate"):
+				userMsg = "La API está saturada (rate limit). Intentá de nuevo en unos segundos."
+			case strings.Contains(errMsg, "500") || strings.Contains(errMsg, "502") || strings.Contains(errMsg, "503"):
+				userMsg = "El servidor de la API está con problemas. Intentá de nuevo en un rato."
+			case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline"):
+				userMsg = "La API tardó demasiado en responder (timeout). Intentá con un mensaje más corto o cambiá de modelo con /model."
+			case strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403"):
+				userMsg = "Error de autenticación con la API. Revisá la API key en config.json."
+			default:
+				userMsg = fmt.Sprintf("Error al comunicarme con la API: %s", errMsg)
+			}
+			return userMsg, iteration, nil, fmt.Errorf("LLM call failed: %w", err)
 		}
 
 		// Check if no tool calls - we're done

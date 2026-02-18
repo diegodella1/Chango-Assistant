@@ -232,18 +232,23 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 		}
 	}
 
-	// Send as text
+	// Send as text, splitting if necessary (Telegram limit: 4096 chars)
 	htmlContent := markdownToTelegramHTML(msg.Content)
-	tgMsg := tu.Message(tu.ID(chatID), htmlContent)
-	tgMsg.ParseMode = telego.ModeHTML
+	chunks := splitMessage(htmlContent, 4096)
 
-	if _, err = c.bot.SendMessage(ctx, tgMsg); err != nil {
-		logger.ErrorCF("telegram", "HTML parse failed, falling back to plain text", map[string]interface{}{
-			"error": err.Error(),
-		})
-		tgMsg.ParseMode = ""
-		_, err = c.bot.SendMessage(ctx, tgMsg)
-		return err
+	for _, chunk := range chunks {
+		tgMsg := tu.Message(tu.ID(chatID), chunk)
+		tgMsg.ParseMode = telego.ModeHTML
+
+		if _, err = c.bot.SendMessage(ctx, tgMsg); err != nil {
+			logger.ErrorCF("telegram", "HTML parse failed, falling back to plain text", map[string]interface{}{
+				"error": err.Error(),
+			})
+			tgMsg.ParseMode = ""
+			if _, err = c.bot.SendMessage(ctx, tgMsg); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -593,6 +598,40 @@ func (c *TelegramChannel) handleCallbackQuery(ctx context.Context, update telego
 		"user_id":  userID,
 		"username": query.From.Username,
 	})
+}
+
+// splitMessage splits a message into chunks that fit within Telegram's character limit.
+// It tries to split at paragraph boundaries (\n\n), then at line breaks (\n),
+// and as a last resort at the exact limit.
+func splitMessage(text string, maxLen int) []string {
+	if len(text) <= maxLen {
+		return []string{text}
+	}
+
+	var chunks []string
+	for len(text) > 0 {
+		if len(text) <= maxLen {
+			chunks = append(chunks, text)
+			break
+		}
+
+		// Try to split at paragraph boundary
+		chunk := text[:maxLen]
+		splitAt := strings.LastIndex(chunk, "\n\n")
+		if splitAt < maxLen/2 {
+			// Try line break
+			splitAt = strings.LastIndex(chunk, "\n")
+		}
+		if splitAt < maxLen/4 {
+			// Hard split
+			splitAt = maxLen
+		}
+
+		chunks = append(chunks, strings.TrimSpace(text[:splitAt]))
+		text = strings.TrimSpace(text[splitAt:])
+	}
+
+	return chunks
 }
 
 // isImageURL returns true if the URL points to a known image format or is a data URI image.

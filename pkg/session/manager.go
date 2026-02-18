@@ -34,6 +34,20 @@ func NewSessionManager(storage string) *SessionManager {
 	if storage != "" {
 		os.MkdirAll(storage, 0755)
 		sm.loadSessions()
+
+		// Periodic cleanup: remove sessions older than 30 days, check every 6 hours
+		go func() {
+			// Initial cleanup on startup
+			if removed := sm.CleanupOldSessions(30); removed > 0 {
+				// Log silently via file since logger might not be available here
+				_ = removed
+			}
+			ticker := time.NewTicker(6 * time.Hour)
+			defer ticker.Stop()
+			for range ticker.C {
+				sm.CleanupOldSessions(30)
+			}
+		}()
 	}
 
 	return sm
@@ -231,6 +245,31 @@ func (sm *SessionManager) Save(key string) error {
 	}
 	cleanup = false
 	return nil
+}
+
+// CleanupOldSessions removes sessions that haven't been updated in the given number of days.
+// Returns the number of sessions removed.
+func (sm *SessionManager) CleanupOldSessions(maxAgeDays int) int {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	cutoff := time.Now().AddDate(0, 0, -maxAgeDays)
+	removed := 0
+
+	for key, session := range sm.sessions {
+		if session.Updated.Before(cutoff) {
+			delete(sm.sessions, key)
+			// Remove the file on disk
+			if sm.storage != "" {
+				filename := sanitizeFilename(key)
+				sessionPath := filepath.Join(sm.storage, filename+".json")
+				os.Remove(sessionPath)
+			}
+			removed++
+		}
+	}
+
+	return removed
 }
 
 func (sm *SessionManager) loadSessions() error {

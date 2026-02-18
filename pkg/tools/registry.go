@@ -71,8 +71,25 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 			})
 	}
 
+	// Global timeout safety net: prevent any tool from hanging forever.
+	// Tools with their own timeout (like exec) will finish before this.
+	const toolTimeout = 120 * time.Second
+	toolCtx, toolCancel := context.WithTimeout(ctx, toolTimeout)
+	defer toolCancel()
+
 	start := time.Now()
-	result := tool.Execute(ctx, args)
+	resultCh := make(chan *ToolResult, 1)
+	go func() {
+		resultCh <- tool.Execute(toolCtx, args)
+	}()
+
+	var result *ToolResult
+	select {
+	case result = <-resultCh:
+		// Tool completed normally
+	case <-toolCtx.Done():
+		result = ErrorResult(fmt.Sprintf("tool %q timed out after %v", name, toolTimeout))
+	}
 	duration := time.Since(start)
 
 	// Log based on result type

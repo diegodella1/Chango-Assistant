@@ -11,8 +11,10 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"encoding/json"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -516,6 +518,8 @@ func simpleInteractiveMode(agentLoop *agent.AgentLoop, sessionKey string) {
 }
 
 func gatewayCmd() {
+	startTime := time.Now()
+
 	// Check for --debug flag
 	args := os.Args[2:]
 	for _, arg := range args {
@@ -658,6 +662,26 @@ func gatewayCmd() {
 		fmt.Printf("Error starting channels: %v\n", err)
 	}
 
+	// Health check HTTP server
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		status := map[string]interface{}{
+			"status":  "ok",
+			"version": formatVersion(),
+			"uptime":  time.Since(startTime).String(),
+		}
+		json.NewEncoder(w).Encode(status)
+	})
+	healthAddr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
+	healthServer := &http.Server{Addr: healthAddr, Handler: healthMux}
+	go func() {
+		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.ErrorCF("gateway", "Health server error", map[string]interface{}{"error": err.Error()})
+		}
+	}()
+	fmt.Printf("✓ Health endpoint: http://%s/health\n", healthAddr)
+
 	go agentLoop.Run(ctx)
 
 	sigChan := make(chan os.Signal, 1)
@@ -666,12 +690,14 @@ func gatewayCmd() {
 
 	fmt.Println("\nShutting down...")
 	cancel()
+	healthServer.Close()
 	deviceService.Stop()
 	heartbeatService.Stop()
 	cronService.Stop()
 	agentLoop.Stop()
 	channelManager.StopAll(ctx)
 	fmt.Println("✓ Gateway stopped")
+	_ = startTime // used by health endpoint
 }
 
 func statusCmd() {
