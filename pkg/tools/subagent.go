@@ -198,6 +198,14 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		}
 	}
 
+	// Prune completed/failed tasks older than 1 hour to prevent memory leak
+	cutoff := time.Now().Add(-1 * time.Hour).UnixMilli()
+	for id, t := range sm.tasks {
+		if t.ID != task.ID && (t.Status == "completed" || t.Status == "failed" || t.Status == "cancelled") && t.Created < cutoff {
+			delete(sm.tasks, id)
+		}
+	}
+
 	// Send announce message back to main agent
 	if sm.bus != nil {
 		announceContent := fmt.Sprintf("Task '%s' completed.\n\nResult:\n%s", task.Label, task.Result)

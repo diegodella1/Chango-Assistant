@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 type reminder struct {
@@ -265,13 +266,37 @@ func (t *ReminderTool) loadRemindersLocked() []reminder {
 		return nil
 	}
 	var reminders []reminder
-	json.Unmarshal(data, &reminders)
+	if err := json.Unmarshal(data, &reminders); err != nil {
+		logger.ErrorCF("reminder", "Failed to parse reminders file", map[string]interface{}{
+			"error": err.Error(),
+			"path":  t.filePath,
+		})
+		return nil
+	}
 	return reminders
 }
 
 func (t *ReminderTool) saveRemindersLocked(reminders []reminder) {
-	data, _ := json.MarshalIndent(reminders, "", "  ")
-	os.WriteFile(t.filePath, data, 0644)
+	data, err := json.MarshalIndent(reminders, "", "  ")
+	if err != nil {
+		logger.ErrorCF("reminder", "Failed to marshal reminders", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+	// Atomic write
+	tmpPath := t.filePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		logger.ErrorCF("reminder", "Failed to write reminders file", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+	if err := os.Rename(tmpPath, t.filePath); err != nil {
+		logger.ErrorCF("reminder", "Failed to rename reminders file", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
 }
 
 // parseDuration parses duration strings like "30m", "2h", "1d", "1h30m"

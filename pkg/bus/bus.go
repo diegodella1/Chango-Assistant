@@ -3,6 +3,9 @@ package bus
 import (
 	"context"
 	"sync"
+	"time"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 type MessageBus struct {
@@ -21,7 +24,14 @@ func NewMessageBus() *MessageBus {
 }
 
 func (mb *MessageBus) PublishInbound(msg InboundMessage) {
-	mb.inbound <- msg
+	select {
+	case mb.inbound <- msg:
+	case <-time.After(10 * time.Second):
+		logger.ErrorCF("bus", "PublishInbound timed out, message dropped", map[string]interface{}{
+			"channel":   msg.Channel,
+			"sender_id": msg.SenderID,
+		})
+	}
 }
 
 func (mb *MessageBus) ConsumeInbound(ctx context.Context) (InboundMessage, bool) {
@@ -34,7 +44,14 @@ func (mb *MessageBus) ConsumeInbound(ctx context.Context) (InboundMessage, bool)
 }
 
 func (mb *MessageBus) PublishOutbound(msg OutboundMessage) {
-	mb.outbound <- msg
+	select {
+	case mb.outbound <- msg:
+	case <-time.After(10 * time.Second):
+		logger.ErrorCF("bus", "PublishOutbound timed out, message dropped", map[string]interface{}{
+			"channel": msg.Channel,
+			"chat_id": msg.ChatID,
+		})
+	}
 }
 
 func (mb *MessageBus) SubscribeOutbound(ctx context.Context) (OutboundMessage, bool) {
@@ -59,7 +76,28 @@ func (mb *MessageBus) GetHandler(channel string) (MessageHandler, bool) {
 	return handler, ok
 }
 
+// Drain discards remaining messages from both channels before closing.
+// Call this during graceful shutdown to unblock any goroutines waiting to send.
+func (mb *MessageBus) Drain() {
+	for {
+		select {
+		case <-mb.inbound:
+		default:
+			goto drainOutbound
+		}
+	}
+drainOutbound:
+	for {
+		select {
+		case <-mb.outbound:
+		default:
+			return
+		}
+	}
+}
+
 func (mb *MessageBus) Close() {
+	mb.Drain()
 	close(mb.inbound)
 	close(mb.outbound)
 }

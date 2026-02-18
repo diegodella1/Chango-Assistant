@@ -102,6 +102,14 @@ func (c *TelegramChannel) SetTranscriber(transcriber *voice.GroqTranscriber) {
 func (c *TelegramChannel) Start(ctx context.Context) error {
 	logger.InfoC("telegram", "Starting Telegram bot (polling mode)...")
 
+	if err := c.startPolling(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *TelegramChannel) startPolling(ctx context.Context) error {
 	updates, err := c.bot.UpdatesViaLongPolling(ctx, &telego.GetUpdatesParams{
 		Timeout:        30,
 		AllowedUpdates: []string{"message", "callback_query"},
@@ -122,7 +130,9 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 				return
 			case update, ok := <-updates:
 				if !ok {
-					logger.InfoC("telegram", "Updates channel closed, reconnecting...")
+					logger.WarnC("telegram", "Updates channel closed, attempting reconnect...")
+					c.setRunning(false)
+					c.reconnectPolling(ctx)
 					return
 				}
 				if update.CallbackQuery != nil {
@@ -135,6 +145,35 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 	}()
 
 	return nil
+}
+
+func (c *TelegramChannel) reconnectPolling(ctx context.Context) {
+	backoff := 2 * time.Second
+	maxBackoff := 5 * time.Minute
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+
+		logger.InfoCF("telegram", "Reconnecting polling", map[string]interface{}{
+			"backoff": backoff.String(),
+		})
+
+		if err := c.startPolling(ctx); err != nil {
+			logger.ErrorCF("telegram", "Reconnect failed", map[string]interface{}{
+				"error": err.Error(),
+			})
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+		return
+	}
 }
 
 func (c *TelegramChannel) Stop(ctx context.Context) error {
@@ -256,16 +295,21 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 
 // sendVoice converts text to speech and sends as a Telegram voice message.
 func (c *TelegramChannel) sendVoice(ctx context.Context, chatID int64, text string) error {
-	home, _ := os.UserHomeDir()
-	pythonPath := filepath.Join(home, ".picoclaw", "workspace", "scripts", "google", "venv", "bin", "python")
-	ttsScript := filepath.Join(home, ".picoclaw", "workspace", "scripts", "tts.py")
-
+	tmpMP3 := filepath.Join(os.TempDir(), fmt.Sprintf("chango_tts_%d.mp3", time.Now().UnixNano()))
 	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("chango_tts_%d.ogg", time.Now().UnixNano()))
+	defer os.Remove(tmpMP3)
 	defer os.Remove(tmpFile)
 
-	cmd := exec.CommandContext(ctx, pythonPath, ttsScript, text, tmpFile)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("tts failed: %w: %s", err, string(output))
+	// Use edge-tts CLI directly (installed via pip in container)
+	ttsCmd := exec.CommandContext(ctx, "edge-tts", "--voice", "es-AR-TomasNeural", "--text", text, "--write-media", tmpMP3)
+	if output, err := ttsCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("edge-tts failed: %w: %s", err, string(output))
+	}
+
+	// Convert MP3 to OGG for Telegram voice
+	ffCmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-i", tmpMP3, "-c:a", "libopus", "-b:a", "64k", tmpFile)
+	if output, err := ffCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("ffmpeg failed: %w: %s", err, string(output))
 	}
 
 	voiceFile, err := os.Open(tmpFile)

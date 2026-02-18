@@ -696,6 +696,7 @@ func gatewayCmd() {
 	cronService.Stop()
 	agentLoop.Stop()
 	channelManager.StopAll(ctx)
+	msgBus.Close()
 	fmt.Println("✓ Gateway stopped")
 	_ = startTime // used by health endpoint
 }

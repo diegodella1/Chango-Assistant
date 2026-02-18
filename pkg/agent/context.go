@@ -237,44 +237,6 @@ func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary str
 	return messages
 }
 
-func (cb *ContextBuilder) AddToolResult(messages []providers.Message, toolCallID, toolName, result string) []providers.Message {
-	messages = append(messages, providers.Message{
-		Role:       "tool",
-		Content:    result,
-		ToolCallID: toolCallID,
-	})
-	return messages
-}
-
-func (cb *ContextBuilder) AddAssistantMessage(messages []providers.Message, content string, toolCalls []map[string]interface{}) []providers.Message {
-	msg := providers.Message{
-		Role:    "assistant",
-		Content: content,
-	}
-	// Always add assistant message, whether or not it has tool calls
-	messages = append(messages, msg)
-	return messages
-}
-
-func (cb *ContextBuilder) loadSkills() string {
-	allSkills := cb.skillsLoader.ListSkills()
-	if len(allSkills) == 0 {
-		return ""
-	}
-
-	var skillNames []string
-	for _, s := range allSkills {
-		skillNames = append(skillNames, s.Name)
-	}
-
-	content := cb.skillsLoader.LoadSkillsForContext(skillNames)
-	if content == "" {
-		return ""
-	}
-
-	return "# Skill Definitions\n\n" + content
-}
-
 // GetSkillsInfo returns information about loaded skills.
 func (cb *ContextBuilder) GetSkillsInfo() map[string]interface{} {
 	allSkills := cb.skillsLoader.ListSkills()
@@ -283,8 +245,7 @@ func (cb *ContextBuilder) GetSkillsInfo() map[string]interface{} {
 		skillNames = append(skillNames, s.Name)
 	}
 	return map[string]interface{}{
-		"total":     len(allSkills),
-		"available": len(allSkills),
-		"names":     skillNames,
+		"total": len(allSkills),
+		"names": skillNames,
 	}
 }

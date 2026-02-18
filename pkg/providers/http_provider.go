@@ -157,9 +157,10 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 		break
 	}
 
-	_ = lastErr // suppress unused warning; used only in retry loop
-
 	if resp.StatusCode != http.StatusOK {
+		if lastErr != nil {
+			return nil, fmt.Errorf("API request failed after retries:\n  Status: %d\n  Last error: %v\n  Body:   %s", resp.StatusCode, lastErr, string(body))
+		}
 		return nil, fmt.Errorf("API request failed:\n  Status: %d\n  Body:   %s", resp.StatusCode, string(body))
 	}
 
