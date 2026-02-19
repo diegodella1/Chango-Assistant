@@ -119,9 +119,10 @@ func (c *Council) Deliberate(ctx context.Context, question string) ([]MemberResp
 		// Build messages for this member
 		systemPrompt := member.Personality + "\n\n" +
 			"INSTRUCCIONES DE DELIBERACIÓN:\n" +
-			"- Respondé en español argentino, máximo 200 palabras.\n" +
-			"- Sé directo y conciso. No repitas lo que ya dijeron otros.\n" +
-			"- Aportá tu perspectiva única según tu rol.\n" +
+			"- Respondé en español argentino.\n" +
+			"- Máximo 500 palabras. Usá lo que necesites para que sea excelente, pero ni una palabra de más.\n" +
+			"- NO repitas lo que dijeron otros. Construí sobre sus respuestas, elevá el nivel.\n" +
+			"- Aportá tu perspectiva única según tu rol. Si no tenés algo valioso que agregar, decilo en 2 líneas.\n" +
 			"- Si necesitás buscar información para dar mejor consejo, usá las herramientas disponibles.\n" +
 			"- Tu respuesta final (sin tool calls) es lo que se postea en el grupo."
 
