@@ -485,11 +485,36 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 		docPath := c.downloadFile(ctx, message.Document.FileID, "")
 		if docPath != "" {
 			localFiles = append(localFiles, docPath)
-			mediaPaths = append(mediaPaths, docPath)
-			if content != "" {
-				content += "\n"
+			mimeType := ""
+			if message.Document.MimeType != "" {
+				mimeType = message.Document.MimeType
 			}
-			content += fmt.Sprintf("[file]")
+			fileName := ""
+			if message.Document.FileName != "" {
+				fileName = message.Document.FileName
+			}
+
+			// Extract text from PDFs using pdftotext
+			if mimeType == "application/pdf" || strings.HasSuffix(strings.ToLower(fileName), ".pdf") {
+				pdfText := c.extractPDFText(docPath)
+				if pdfText != "" {
+					if content != "" {
+						content += "\n"
+					}
+					content += fmt.Sprintf("[PDF: %s]\n%s", fileName, pdfText)
+				} else {
+					if content != "" {
+						content += "\n"
+					}
+					content += fmt.Sprintf("[PDF: %s - no se pudo extraer texto]", fileName)
+				}
+			} else {
+				mediaPaths = append(mediaPaths, docPath)
+				if content != "" {
+					content += "\n"
+				}
+				content += fmt.Sprintf("[file: %s]", fileName)
+			}
 		}
 	}
 
@@ -577,6 +602,31 @@ func (c *TelegramChannel) downloadFile(ctx context.Context, fileID, ext string) 
 	}
 
 	return c.downloadFileWithInfo(file, ext)
+}
+
+// extractPDFText uses pdftotext to extract text from a PDF file.
+// Returns extracted text (truncated to 15000 chars to avoid context overflow).
+func (c *TelegramChannel) extractPDFText(pdfPath string) string {
+	cmd := exec.Command("pdftotext", "-layout", pdfPath, "-")
+	output, err := cmd.Output()
+	if err != nil {
+		logger.ErrorCF("telegram", "Failed to extract PDF text", map[string]interface{}{
+			"path":  pdfPath,
+			"error": err.Error(),
+		})
+		return ""
+	}
+
+	text := strings.TrimSpace(string(output))
+	if len(text) > 15000 {
+		text = text[:15000] + "\n\n[... texto truncado, PDF muy largo ...]"
+	}
+
+	logger.InfoCF("telegram", "PDF text extracted", map[string]interface{}{
+		"path":  pdfPath,
+		"chars": len(text),
+	})
+	return text
 }
 
 func (c *TelegramChannel) sendModelMenu(ctx context.Context, chatID int64) {
