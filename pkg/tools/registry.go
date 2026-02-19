@@ -73,7 +73,11 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 
 	// Global timeout safety net: prevent any tool from hanging forever.
 	// Tools with their own timeout (like exec) will finish before this.
-	const toolTimeout = 120 * time.Second
+	// Council needs more time: 3 sequential LLM calls with tools.
+	toolTimeout := 120 * time.Second
+	if name == "council" {
+		toolTimeout = 6 * time.Minute
+	}
 	toolCtx, toolCancel := context.WithTimeout(ctx, toolTimeout)
 	defer toolCancel()
 

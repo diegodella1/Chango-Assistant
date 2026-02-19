@@ -26,9 +26,9 @@ func (t *CouncilTool) Name() string {
 }
 
 func (t *CouncilTool) Description() string {
-	return "Convene the advisory council (3 AI advisors: Skeptic, Creative, Pragmatic) to deliberate on a complex question. " +
-		"Each advisor responds sequentially in a Telegram group, seeing previous responses. " +
-		"Use this when the user asks '/consejo <question>' or needs multiple perspectives on a decision."
+	return "Convene the LinkedIn PR council (El Redactor, El Estratega, El Editor) to create a professional LinkedIn post. " +
+		"Each member responds sequentially in a Telegram group, building on the previous member's work. " +
+		"Use this when the user asks '/consejo' or wants to create/improve a LinkedIn post."
 }
 
 func (t *CouncilTool) Parameters() map[string]interface{} {
