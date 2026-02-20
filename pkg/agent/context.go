@@ -189,16 +189,9 @@ func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary str
 		systemPrompt += "\n\n## Summary of Previous Conversation\n\n" + summary
 	}
 
-	//This fix prevents the session memory from LLM failure due to elimination of toolu_IDs required from LLM
-	// --- INICIO DEL FIX ---
-	//Diegox-17
-	for len(history) > 0 && (history[0].Role == "tool") {
-		logger.DebugCF("agent", "Removing orphaned tool message from history to prevent LLM error",
-			map[string]interface{}{"role": history[0].Role})
-		history = history[1:]
-	}
-	//Diegox-17
-	// --- FIN DEL FIX ---
+	// Sanitize history: ensure every assistant with tool_calls has matching tool responses,
+	// and every tool message follows its corresponding assistant message.
+	history = sanitizeHistory(history)
 
 	messages = append(messages, providers.Message{
 		Role:    "system",
@@ -248,4 +241,77 @@ func (cb *ContextBuilder) GetSkillsInfo() map[string]interface{} {
 		"total": len(allSkills),
 		"names": skillNames,
 	}
+}
+
+// sanitizeHistory ensures the message history is valid for OpenAI-compatible APIs:
+// 1. Every assistant message with tool_calls must be followed by tool messages for ALL tool_call IDs
+// 2. Every tool message must follow an assistant message that requested it
+// 3. No orphaned tool messages at the start or middle of history
+func sanitizeHistory(history []providers.Message) []providers.Message {
+	if len(history) == 0 {
+		return history
+	}
+
+	result := make([]providers.Message, 0, len(history))
+	i := 0
+
+	for i < len(history) {
+		msg := history[i]
+
+		// Skip orphaned tool messages (no preceding assistant with matching tool_calls)
+		if msg.Role == "tool" {
+			logger.DebugCF("agent", "Removing orphaned tool message from history",
+				map[string]interface{}{"tool_call_id": msg.ToolCallID, "index": i})
+			i++
+			continue
+		}
+
+		// For assistant messages with tool_calls, validate the complete block
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			// Collect expected tool_call IDs
+			expectedIDs := make(map[string]bool)
+			for _, tc := range msg.ToolCalls {
+				expectedIDs[tc.ID] = false // false = not yet found
+			}
+
+			// Look ahead for matching tool response messages
+			j := i + 1
+			for j < len(history) && history[j].Role == "tool" {
+				if _, ok := expectedIDs[history[j].ToolCallID]; ok {
+					expectedIDs[history[j].ToolCallID] = true // mark as found
+				}
+				j++
+			}
+
+			// Check if ALL tool_calls have responses
+			allFound := true
+			for _, found := range expectedIDs {
+				if !found {
+					allFound = false
+					break
+				}
+			}
+
+			if allFound {
+				// Valid block: add assistant + all tool responses
+				result = append(result, msg)
+				for k := i + 1; k < j; k++ {
+					result = append(result, history[k])
+				}
+				i = j
+			} else {
+				// Incomplete block: skip assistant and its tool responses entirely
+				logger.DebugCF("agent", "Removing incomplete tool call block from history",
+					map[string]interface{}{"tool_calls": len(msg.ToolCalls), "index": i})
+				i = j
+			}
+			continue
+		}
+
+		// Normal user/assistant message without tool_calls: keep as-is
+		result = append(result, msg)
+		i++
+	}
+
+	return result
 }

@@ -321,6 +321,10 @@ func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, cha
 		}
 	}
 
+	// Clear heartbeat session to prevent unbounded growth
+	// (NoHistory=true means we never load it, so messages just accumulate)
+	al.sessions.TruncateHistory("heartbeat", 0)
+
 	return response, err
 }
 

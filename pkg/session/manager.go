@@ -155,7 +155,23 @@ func (sm *SessionManager) TruncateHistory(key string, keepLast int) {
 		return
 	}
 
-	session.Messages = session.Messages[len(session.Messages)-keepLast:]
+	// Start at the intended cut point
+	cutIdx := len(session.Messages) - keepLast
+
+	// Adjust forward if we'd cut in the middle of a tool call block:
+	// - Don't start on a "tool" message (orphaned from its assistant)
+	// - Don't start right after an assistant with tool_calls (need the tool responses too)
+	for cutIdx < len(session.Messages) {
+		msg := session.Messages[cutIdx]
+		if msg.Role == "tool" {
+			// Skip past orphaned tool messages
+			cutIdx++
+			continue
+		}
+		break
+	}
+
+	session.Messages = session.Messages[cutIdx:]
 	session.Updated = time.Now()
 }
 
