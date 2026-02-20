@@ -229,7 +229,14 @@ type DuckDuckGoConfig struct {
 	MaxResults int  `json:"max_results" env:"PICOCLAW_TOOLS_WEB_DUCKDUCKGO_MAX_RESULTS"`
 }
 
+type SerperConfig struct {
+	Enabled    bool   `json:"enabled" env:"PICOCLAW_TOOLS_WEB_SERPER_ENABLED"`
+	APIKey     string `json:"api_key" env:"PICOCLAW_TOOLS_WEB_SERPER_API_KEY"`
+	MaxResults int    `json:"max_results" env:"PICOCLAW_TOOLS_WEB_SERPER_MAX_RESULTS"`
+}
+
 type WebToolsConfig struct {
+	Serper     SerperConfig     `json:"serper"`
 	Brave      BraveConfig      `json:"brave"`
 	DuckDuckGo DuckDuckGoConfig `json:"duckduckgo"`
 }
@@ -348,6 +355,11 @@ func DefaultConfig() *Config {
 		},
 		Tools: ToolsConfig{
 			Web: WebToolsConfig{
+				Serper: SerperConfig{
+					Enabled:    false,
+					APIKey:     "",
+					MaxResults: 5,
+				},
 				Brave: BraveConfig{
 					Enabled:    false,
 					APIKey:     "",

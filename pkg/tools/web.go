@@ -82,6 +82,68 @@ func (p *BraveSearchProvider) Search(ctx context.Context, query string, count in
 	return strings.Join(lines, "\n"), nil
 }
 
+type SerperSearchProvider struct {
+	apiKey string
+}
+
+func (p *SerperSearchProvider) Search(ctx context.Context, query string, count int) (string, error) {
+	payload := fmt.Sprintf(`{"q":%q,"num":%d}`, query, count)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://google.serper.dev/search", strings.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("X-API-KEY", p.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("Serper API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var searchResp struct {
+		Organic []struct {
+			Title   string `json:"title"`
+			Link    string `json:"link"`
+			Snippet string `json:"snippet"`
+		} `json:"organic"`
+	}
+
+	if err := json.Unmarshal(body, &searchResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if len(searchResp.Organic) == 0 {
+		return fmt.Sprintf("No results for: %s", query), nil
+	}
+
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Results for: %s (via Google/Serper)", query))
+	for i, item := range searchResp.Organic {
+		if i >= count {
+			break
+		}
+		lines = append(lines, fmt.Sprintf("%d. %s\n   %s", i+1, item.Title, item.Link))
+		if item.Snippet != "" {
+			lines = append(lines, fmt.Sprintf("   %s", item.Snippet))
+		}
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
 type DuckDuckGoSearchProvider struct{}
 
 func (p *DuckDuckGoSearchProvider) Search(ctx context.Context, query string, count int) (string, error) {
@@ -180,6 +242,9 @@ type WebSearchTool struct {
 }
 
 type WebSearchToolOptions struct {
+	SerperAPIKey         string
+	SerperMaxResults     int
+	SerperEnabled        bool
 	BraveAPIKey          string
 	BraveMaxResults      int
 	BraveEnabled         bool
@@ -191,8 +256,13 @@ func NewWebSearchTool(opts WebSearchToolOptions) *WebSearchTool {
 	var provider SearchProvider
 	maxResults := 5
 
-	// Priority: Brave > DuckDuckGo
-	if opts.BraveEnabled && opts.BraveAPIKey != "" {
+	// Priority: Serper (Google) > Brave > DuckDuckGo
+	if opts.SerperEnabled && opts.SerperAPIKey != "" {
+		provider = &SerperSearchProvider{apiKey: opts.SerperAPIKey}
+		if opts.SerperMaxResults > 0 {
+			maxResults = opts.SerperMaxResults
+		}
+	} else if opts.BraveEnabled && opts.BraveAPIKey != "" {
 		provider = &BraveSearchProvider{apiKey: opts.BraveAPIKey}
 		if opts.BraveMaxResults > 0 {
 			maxResults = opts.BraveMaxResults
