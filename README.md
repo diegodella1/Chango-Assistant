@@ -1,122 +1,212 @@
-# picoclaw-comite (🦞 + 🏛️)
+<p align="center">
+  <img src="https://em-content.zobj.net/source/apple/391/lobster_1f99e.png" width="120" alt="Chango">
+</p>
 
-Este repositorio es un fork de **picoclaw**, el asistente autónomo de ejecución.
+<h1 align="center">Chango Assistant</h1>
 
-## Créditos y Referencias
-- **Proyecto Original:** [picoclaw](https://github.com/picoclaw/picoclaw)
-- **Autores Originales:** Agradecimiento a los creadores de la arquitectura base de picoclaw por la infraestructura de agentes y herramientas.
-- **Este Fork:** Optimizado para el ecosistema de **desarrollo de productos** y la asistencia personal de **quien lo use**.
+<p align="center">
+  <strong>AI-powered personal assistant running on a Raspberry Pi 5</strong>
+</p>
 
----
+<p align="center">
+  <em>Fork of <a href="https://github.com/picoclaw/picoclaw">picoclaw</a> — optimized for product development workflows and personal automation</em>
+</p>
 
-## 🚀 Superpoderes de picoclaw-comite
-
-Copiloto de ejecución autónoma diseñado para reducir el tiempo entre la idea y el resultado embarcado (*shipped*).
-
-### 1. Gestión de Contexto y Memoria
-- **Memoria de Largo Plazo:** Registro decisiones estratégicas, planes de producto y hitos operativos en `/memory` (local).
-- **Protocolo de Privacidad:** Memoria e interacciones privadas son estrictamente locales. Solo se sube código e infraestructura.
-
-### 2. Integración de Infraestructura
-Herramientas de sistema integradas:
-- **Google Workspace:** Gmail, Drive y Calendar vía service account.
-- **GitHub:** Operación completa de repositorios (`gh cli`).
-- **Coolify & Supabase:** Despliegue de aplicaciones y gestión de datos.
-- **Telegram:** Interfaz de control, envío de archivos y notificaciones.
-
-### 3. Búsqueda Web
-- **Serper (Google Search):** Resultados de Google vía API, provider prioritario.
-- **Brave Search:** API de búsqueda como fallback.
-- **DuckDuckGo:** Scraping HTML como último recurso.
-
-### 4. Consejo de Expertos (`/consejo`)
-- **Comité de PR de LinkedIn** (El Redactor, El Estratega, El Editor) para transformar ideas técnicas en contenido profesional de alto impacto.
-
-### 5. Producción de Entregables
-- PRDs, SOPs, Runbooks de Live Ops y reportes de investigación en formatos listos para usar (.md).
-
-### 6. Generación de Imágenes
-- Generación de imágenes vía Pollinations.ai con validación HTTP y reintentos.
-
-### 7. Voice & TTS
-- **Transcripción:** Groq speech-to-text para mensajes de voz entrantes.
-- **TTS:** Edge TTS (es-AR-TomasNeural) para respuestas de voz.
-
-### 8. Hardware & IoT
-- Interacción con buses **I2C y SPI** para control de periféricos.
-- **Host exec:** Acceso al host Raspberry Pi vía nsenter desde el container.
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/Platform-Raspberry%20Pi%205-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white" alt="Raspberry Pi">
+  <img src="https://img.shields.io/badge/Channel-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram">
+  <img src="https://img.shields.io/badge/LLM-OpenRouter-8B5CF6?style=flat-square" alt="OpenRouter">
+  <img src="https://img.shields.io/badge/Deploy-Coolify-6C47FF?style=flat-square" alt="Coolify">
+</p>
 
 ---
 
-## 🛠 Herramientas disponibles
+## What is Chango?
 
-| Tool | Descripción |
-|------|-------------|
-| `web_search` | Búsqueda web (Serper/Brave/DuckDuckGo) |
-| `web_fetch` | Fetch de URLs con extracción de texto |
-| `calendar` | Google Calendar (list, create, update, delete) |
-| `gmail` | Gmail (read, search, send, reply) |
-| `gdrive` | Google Drive (list, search, read) |
-| `image_gen` | Generación de imágenes (Pollinations.ai) |
-| `memory` | Notas persistentes key-value |
-| `reminder` | Recordatorios programados |
-| `tasks` | Tracking de tareas y objetivos |
-| `snippet` | Code snippets guardados |
-| `translate` | Traducción de texto |
-| `weather` | Clima actual |
-| `youtube` | Transcripciones de YouTube |
-| `exec` | Ejecución de comandos en el container |
-| `host_exec` | Ejecución en el host via nsenter |
-| `read_file` / `write_file` / `edit_file` / `append_file` / `list_dir` | Operaciones de filesystem |
-| `message` | Envío de mensajes al usuario |
-| `spawn` / `subagent` | Subagentes para tareas paralelas |
-| `http_request` | Requests HTTP arbitrarios |
-| `i2c` / `spi` | Hardware buses |
+Chango is an autonomous execution copilot that lives on a Raspberry Pi 5 and communicates via Telegram. It can search the web, manage your Google Calendar, generate images, transcribe voice messages, run shell commands on the host, and much more — all through natural conversation.
+
+Built in Go, containerized with Docker, and deployed via Coolify. Zero cloud dependencies beyond the LLM API.
 
 ---
 
-## 🏗️ Arquitectura
+## Features
+
+### Conversation & Intelligence
+- **Multi-model support** — Switch between 9+ LLMs on-the-fly via `/model` command (GPT-4o, Claude, Gemini, DeepSeek, etc.)
+- **Persistent memory** — Key-value store for long-term context across sessions
+- **Session summarization** — Automatic context compression to stay within token limits
+- **Subagent system** — Spawn parallel agents for complex multi-step tasks
+
+### Web & Search
+- **Google Search (Serper)** — Priority search provider with Google-quality results
+- **Brave Search** — API-based fallback
+- **DuckDuckGo** — HTML scraping as last resort
+- **Web Fetch** — Extract readable content from any URL
+
+### Google Workspace
+- **Calendar** — Read events, create appointments, manage multiple calendars via service account
+- **Gmail** — Read, search, send, and reply to emails
+- **Drive** — List, search, and read documents
+
+### Voice & Media
+- **Voice transcription** — Groq-powered speech-to-text for incoming voice messages
+- **Text-to-speech** — Edge TTS with Argentine Spanish voice (es-AR-TomasNeural)
+- **Image generation** — Pollinations.ai with HTTP validation and automatic retries
+- **YouTube** — Extract transcripts from YouTube videos
+
+### Automation & Productivity
+- **Reminders** — Schedule notifications delivered via Telegram
+- **Tasks** — Persistent goal and task tracking
+- **Snippets** — Save and retrieve code snippets
+- **Cron jobs** — Scheduled background tasks (JSON-configured)
+- **Heartbeat** — Periodic check-ins with proactive notifications
+
+### Infrastructure & Hardware
+- **Shell execution** — Run commands inside the container
+- **Host access** — Execute commands on the Raspberry Pi host via `nsenter`
+- **I2C / SPI** — Direct hardware bus interaction for IoT peripherals
+- **HTTP requests** — Arbitrary API calls to external services
+
+### Council of Experts
+- **LinkedIn PR Committee** — Three specialized AI personas (Writer, Strategist, Editor) collaborate in a Telegram group to craft professional content
+
+---
+
+## Architecture
 
 ```
-Telegram (polling) ──► MessageBus ──► AgentLoop ──► LLM (OpenRouter)
-                                         │
-                                    ToolRegistry
-                                    ├── web_search (Serper > Brave > DDG)
-                                    ├── calendar / gmail / gdrive
-                                    ├── memory / tasks / reminder
-                                    ├── exec / host_exec
-                                    ├── image_gen / youtube / weather
-                                    └── spawn / subagent
+                    ┌─────────────────────────────────────────┐
+                    │            Raspberry Pi 5               │
+                    │                                         │
+  Telegram ────────►│  ┌──────────┐    ┌──────────────────┐  │
+  (polling)         │  │ Telegram  │───►│    MessageBus    │  │
+                    │  │ Channel   │◄───│                  │  │
+                    │  └──────────┘    └────────┬─────────┘  │
+                    │                           │             │
+                    │                  ┌────────▼─────────┐  │
+                    │                  │    AgentLoop      │  │
+                    │                  │  ┌─────────────┐  │  │
+                    │                  │  │ContextBuilder│  │  │
+                    │                  │  │  + Skills    │  │  │
+                    │                  │  │  + Memory    │  │  │
+                    │                  │  └─────────────┘  │  │
+                    │                  └────────┬─────────┘  │
+                    │                           │             │
+                    │              ┌────────────▼──────────┐  │
+                    │              │     ToolRegistry      │  │
+                    │              │  26 tools available   │  │
+                    │              └───────────────────────┘  │
+                    │                                         │
+                    │  LLM: OpenRouter ──► GPT-4o / Claude /  │
+                    │                      Gemini / DeepSeek   │
+                    └─────────────────────────────────────────┘
 ```
 
-- **Container:** Dockerfile multi-stage (Go build + Debian bookworm + python3/edge-tts/ffmpeg)
-- **Config:** `~/.picoclaw/config.json` (gitignored, con API keys)
-- **Workspace:** `~/.picoclaw/workspace/` (memoria, sesiones, skills)
-- **Deploy:** Push a GitHub → trigger Coolify restart via API
+### Key Components
+
+| Component | Path | Purpose |
+|-----------|------|---------|
+| Agent Loop | `pkg/agent/loop.go` | Core message processing, LLM iteration, tool execution |
+| Context Builder | `pkg/agent/context.go` | System prompt assembly (identity + skills + memory) |
+| Telegram Channel | `pkg/channels/telegram.go` | Polling, TTS, voice transcription, inline keyboards |
+| Tool Registry | `pkg/tools/` | 26 tools — web, calendar, exec, memory, media, etc. |
+| Config | `pkg/config/config.go` | JSON config with env var overrides |
+| Session Manager | `pkg/session/` | Conversation history, summarization, persistence |
+
+### Search Provider Priority
+
+```
+Serper (Google) ──► Brave Search ──► DuckDuckGo (HTML scraping)
+   (preferred)       (fallback)        (last resort)
+```
 
 ---
 
-## 🔧 Setup
+## Quick Start
 
-1. Copiar `config/config.example.json` a `~/.picoclaw/config.json`
-2. Completar API keys (OpenRouter, Telegram, Groq, Serper, etc.)
-3. Build y deploy via Coolify o `go build ./...` local
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/diegodella1/Chango-Assistant.git
+cd Chango-Assistant
+cp config/config.example.json ~/.picoclaw/config.json
+```
+
+### 2. Fill in your API keys
+
+Edit `~/.picoclaw/config.json`:
+
+```jsonc
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "YOUR_TELEGRAM_BOT_TOKEN",
+      "allow_from": ["YOUR_TELEGRAM_USER_ID"]
+    }
+  },
+  "providers": {
+    "openrouter": {
+      "api_key": "sk-or-v1-..."
+    }
+  },
+  "tools": {
+    "web": {
+      "serper": {
+        "enabled": true,
+        "api_key": "YOUR_SERPER_API_KEY"
+      }
+    }
+  }
+}
+```
+
+### 3. Build and run
+
+```bash
+# Local
+go build -o picoclaw . && ./picoclaw gateway
+
+# Docker
+docker build -t chango . && docker run -v ~/.picoclaw:/root/.picoclaw chango
+```
 
 ---
 
-## 🛠 Registro de Cambios Recientes
+## Personality & Customization
 
-### 2026-02-20
-- **Serper Search:** Integración de Serper.dev como provider prioritario de búsqueda web (Google results via API).
-- **Google Calendar:** Soporte multi-calendario (personal + trabajo) con service account.
+Chango's behavior is defined by markdown files in the workspace:
 
-### 2026-02-19
-- **Protocolo de Autolearning:** Auto-resumen y anclaje de contexto.
-- **Soporte de Modelos:** Teclado inline para cambio dinámico de LLMs con persistencia local.
+| File | Purpose |
+|------|---------|
+| `IDENTITY.md` | Core personality and communication style |
+| `SOUL.md` | Deep behavioral rules and decision-making framework |
+| `USER.md` | User profile, preferences, and account information |
+| `AGENTS.md` | Agent capabilities and autonomous behavior rules |
 
-### 2026-02-18
-- **Voice Responses:** Optimización de respuestas de voz para Telegram.
-- **Integración de Infraestructura:** Scripts de despliegue automático.
+These files are loaded into the system prompt at startup. Edit them to customize Chango's personality.
 
 ---
-*Built with picoclaw*
+
+## Deployment
+
+Chango runs as a Docker container deployed via [Coolify](https://coolify.io/) on a Raspberry Pi 5:
+
+1. Push to GitHub
+2. Trigger Coolify restart via API
+3. Multi-stage Dockerfile: Go build + Debian bookworm runtime (python3 + edge-tts + ffmpeg)
+4. Volume mount: `~/.picoclaw` for config, workspace, and persistent data
+
+---
+
+## Credits
+
+- **Original project:** [picoclaw](https://github.com/picoclaw/picoclaw) by the picoclaw contributors
+- **This fork:** Optimized for product development and personal automation
+
+---
+
+<p align="center">
+  <em>Built on a Raspberry Pi 5 with Go, deployed with Coolify, powered by OpenRouter</em>
+</p>
