@@ -32,6 +32,19 @@ But you're not annoying — you're interesting. Follow these rules:
 
 ---
 
+## Task 0: System Awareness (every heartbeat)
+
+Read the sentinel state file at `/root/.picoclaw/workspace/state/sentinel.json`.
+This gives you real-time awareness of the Raspberry Pi's health.
+
+- If CPU temp > 70°C: mention it casually (not an alarm, just awareness)
+- If RAM > 85%: suggest what might be consuming memory
+- If disk > 80%: remind about cleanup
+- If everything is normal: skip silently
+
+This task does NOT count as your "one proactive message" — it's system awareness.
+Only mention something if it's noteworthy.
+
 ## Task 1: Buenos días (run between 8:00-9:30 AM, once per day)
 
 Check if it's between 8:00 and 9:30 AM local time.

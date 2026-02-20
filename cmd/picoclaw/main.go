@@ -31,6 +31,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/council"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/devices"
+	"github.com/sipeed/picoclaw/pkg/sentinel"
 	"github.com/sipeed/picoclaw/pkg/heartbeat"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/migrate"
@@ -710,6 +711,18 @@ func gatewayCmd() {
 		fmt.Println("✓ Device event service started")
 	}
 
+	sentinelService := sentinel.NewService(sentinel.Config{
+		Enabled:         cfg.Sentinel.Enabled,
+		IntervalSeconds: cfg.Sentinel.IntervalSeconds,
+		Workspace:       cfg.WorkspacePath(),
+	}, stateManager)
+	sentinelService.SetBus(msgBus)
+	if err := sentinelService.Start(ctx); err != nil {
+		fmt.Printf("Error starting sentinel: %v\n", err)
+	} else if cfg.Sentinel.Enabled {
+		fmt.Println("✓ Sentinel service started")
+	}
+
 	if err := channelManager.StartAll(ctx); err != nil {
 		fmt.Printf("Error starting channels: %v\n", err)
 	}
@@ -743,6 +756,7 @@ func gatewayCmd() {
 	fmt.Println("\nShutting down...")
 	cancel()
 	healthServer.Close()
+	sentinelService.Stop()
 	deviceService.Stop()
 	heartbeatService.Stop()
 	cronService.Stop()

@@ -51,6 +51,7 @@ type Config struct {
 	Tools     ToolsConfig     `json:"tools"`
 	Heartbeat HeartbeatConfig `json:"heartbeat"`
 	Devices   DevicesConfig   `json:"devices"`
+	Sentinel  SentinelConfig  `json:"sentinel"`
 	Council   CouncilConfig   `json:"council"`
 	mu        sync.RWMutex
 }
@@ -175,6 +176,11 @@ type HeartbeatConfig struct {
 type DevicesConfig struct {
 	Enabled    bool `json:"enabled" env:"PICOCLAW_DEVICES_ENABLED"`
 	MonitorUSB bool `json:"monitor_usb" env:"PICOCLAW_DEVICES_MONITOR_USB"`
+}
+
+type SentinelConfig struct {
+	Enabled         bool `json:"enabled" env:"PICOCLAW_SENTINEL_ENABLED"`
+	IntervalSeconds int  `json:"interval_seconds" env:"PICOCLAW_SENTINEL_INTERVAL_SECONDS"`
 }
 
 type CouncilMemberConfig struct {
@@ -378,6 +384,10 @@ func DefaultConfig() *Config {
 		Devices: DevicesConfig{
 			Enabled:    false,
 			MonitorUSB: true,
+		},
+		Sentinel: SentinelConfig{
+			Enabled:         true,
+			IntervalSeconds: 120,
 		},
 		Council: CouncilConfig{
 			Enabled: false,
