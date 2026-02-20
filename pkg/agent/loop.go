@@ -287,6 +287,8 @@ func (al *AgentLoop) ProcessDirectWithChannel(ctx context.Context, content, sess
 
 // ProcessHeartbeat processes a heartbeat request without session history.
 // Each heartbeat is independent and doesn't accumulate context.
+// If the heartbeat sends a proactive message to the user, that message is
+// injected into the user's real session so follow-up conversations have context.
 func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, chatID string) (string, error) {
 	response, _, err := al.runAgentLoop(ctx, processOptions{
 		SessionKey:      "heartbeat",
@@ -298,6 +300,24 @@ func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, cha
 		SendResponse:    false,
 		NoHistory:       true, // Don't load session history for heartbeat
 	})
+
+	// If the heartbeat sent a message to the user, inject it into the real session
+	// so follow-up conversations have context about what was said.
+	if tool, ok := al.tools.Get("message"); ok {
+		if mt, ok := tool.(*tools.MessageTool); ok && mt.HasSentInRound() {
+			if sent := mt.LastSentContent(); sent != "" {
+				realSession := fmt.Sprintf("%s:%s", channel, chatID)
+				al.sessions.AddMessage(realSession, "assistant", sent)
+				al.sessions.Save(realSession)
+				logger.DebugCF("agent", "Heartbeat message injected into real session",
+					map[string]interface{}{
+						"session": realSession,
+						"length":  len(sent),
+					})
+			}
+		}
+	}
+
 	return response, err
 }
 

@@ -11,7 +11,8 @@ type MessageTool struct {
 	sendCallback   SendCallback
 	defaultChannel string
 	defaultChatID  string
-	sentInRound    bool // Tracks whether a message was sent in the current processing round
+	sentInRound    bool   // Tracks whether a message was sent in the current processing round
+	lastSentContent string // Content of the last message sent in this round
 }
 
 func NewMessageTool() *MessageTool {
@@ -51,11 +52,17 @@ func (t *MessageTool) SetContext(channel, chatID string) {
 	t.defaultChannel = channel
 	t.defaultChatID = chatID
 	t.sentInRound = false // Reset send tracking for new processing round
+	t.lastSentContent = ""
 }
 
 // HasSentInRound returns true if the message tool sent a message during the current round.
 func (t *MessageTool) HasSentInRound() bool {
 	return t.sentInRound
+}
+
+// LastSentContent returns the content of the last message sent in this round.
+func (t *MessageTool) LastSentContent() string {
+	return t.lastSentContent
 }
 
 func (t *MessageTool) SetSendCallback(callback SendCallback) {
@@ -95,6 +102,7 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]interface{}) 
 	}
 
 	t.sentInRound = true
+	t.lastSentContent = content
 	// Silent: user already received the message directly
 	return &ToolResult{
 		ForLLM: fmt.Sprintf("Message sent to %s:%s", channel, chatID),
