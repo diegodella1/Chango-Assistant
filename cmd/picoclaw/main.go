@@ -31,13 +31,14 @@ import (
 	"github.com/sipeed/picoclaw/pkg/council"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/devices"
-	"github.com/sipeed/picoclaw/pkg/sentinel"
 	"github.com/sipeed/picoclaw/pkg/heartbeat"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/migrate"
 	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/picoclaw/pkg/sentinel"
 	"github.com/sipeed/picoclaw/pkg/skills"
 	"github.com/sipeed/picoclaw/pkg/state"
+	"github.com/sipeed/picoclaw/pkg/telemetry"
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/voice"
 )
@@ -565,6 +566,16 @@ func gatewayCmd() {
 			"skills_available": skillsInfo["available"],
 		})
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Setup telemetry tracker
+	tracker := telemetry.NewTracker(cfg.WorkspacePath())
+	tracker.Start(ctx)
+	agentLoop.SetTracker(tracker)
+	agentLoop.RegisterTool(tools.NewTelemetryTool(tracker))
+	fmt.Println("✓ Telemetry tracker started")
+
 	// Setup cron tool and service
 	cronService := setupCronTool(agentLoop, msgBus, cfg.WorkspacePath())
 
@@ -686,9 +697,6 @@ func gatewayCmd() {
 	fmt.Printf("✓ Gateway started on %s:%d\n", cfg.Gateway.Host, cfg.Gateway.Port)
 	fmt.Println("Press Ctrl+C to stop")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	if err := cronService.Start(); err != nil {
 		fmt.Printf("Error starting cron service: %v\n", err)
 	}
@@ -756,6 +764,7 @@ func gatewayCmd() {
 	fmt.Println("\nShutting down...")
 	cancel()
 	healthServer.Close()
+	tracker.Stop()
 	sentinelService.Stop()
 	deviceService.Stop()
 	heartbeatService.Stop()

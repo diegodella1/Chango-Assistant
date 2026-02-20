@@ -25,6 +25,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/session"
 	"github.com/sipeed/picoclaw/pkg/state"
+	"github.com/sipeed/picoclaw/pkg/telemetry"
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/utils"
 )
@@ -44,6 +45,7 @@ type AgentLoop struct {
 	summarizing    sync.Map // Tracks which sessions are currently being summarized
 	cfg            *config.Config // Reference to config for runtime updates
 	configPath     string         // Path to config.json for persistence
+	tracker        *telemetry.Tracker
 }
 
 // processOptions configures how a message is processed
@@ -57,6 +59,7 @@ type processOptions struct {
 	EnableSummary   bool     // Whether to trigger summarization
 	SendResponse    bool     // Whether to send response via bus
 	NoHistory       bool     // If true, don't load session history (for heartbeat)
+	Feature         string   // Telemetry feature label (chat, heartbeat, cron, summarize)
 }
 
 // createToolRegistry creates a tool registry with common tools.
@@ -259,6 +262,11 @@ func (al *AgentLoop) RegisterTool(tool tools.Tool) {
 	al.tools.Register(tool)
 }
 
+// SetTracker sets the telemetry tracker for recording token usage.
+func (al *AgentLoop) SetTracker(t *telemetry.Tracker) {
+	al.tracker = t
+}
+
 // RecordLastChannel records the last active channel for this workspace.
 // This uses the atomic state save mechanism to prevent data loss on crash.
 func (al *AgentLoop) RecordLastChannel(channel string) error {
@@ -302,6 +310,7 @@ func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, cha
 		EnableSummary:   false,
 		SendResponse:    false,
 		NoHistory:       true, // Don't load session history for heartbeat
+		Feature:         telemetry.FeatureHeartbeat,
 	})
 
 	// If the heartbeat sent a message to the user, inject it into the real session
@@ -355,6 +364,12 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		return response, nil, nil
 	}
 
+	// Detect feature: cron jobs have SenderID "cron"
+	feature := telemetry.FeatureChat
+	if msg.SenderID == "cron" {
+		feature = telemetry.FeatureCron
+	}
+
 	// Process as user message
 	return al.runAgentLoop(ctx, processOptions{
 		SessionKey:      msg.SessionKey,
@@ -365,6 +380,7 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		DefaultResponse: "I've completed processing but have no response to give.",
 		EnableSummary:   true,
 		SendResponse:    false,
+		Feature:         feature,
 	})
 }
 
@@ -585,6 +601,11 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			"max_tokens":  8192,
 			"temperature": 0.7,
 		})
+
+		// Record token usage
+		if response != nil && response.Usage != nil && al.tracker != nil {
+			al.tracker.Record(opts.Feature, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
+		}
 
 		if err != nil {
 			logger.ErrorCF("agent", "LLM call failed",
@@ -888,6 +909,9 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 			"max_tokens":  1024,
 			"temperature": 0.3,
 		})
+		if resp != nil && resp.Usage != nil && al.tracker != nil {
+			al.tracker.Record(telemetry.FeatureSummarize, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
+		}
 		if err == nil {
 			finalSummary = resp.Content
 		} else {
@@ -923,6 +947,9 @@ func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Messa
 		"max_tokens":  1024,
 		"temperature": 0.3,
 	})
+	if response != nil && response.Usage != nil && al.tracker != nil {
+		al.tracker.Record(telemetry.FeatureSummarize, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
+	}
 	if err != nil {
 		return "", err
 	}

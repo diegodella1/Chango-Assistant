@@ -379,7 +379,7 @@ func DefaultConfig() *Config {
 		},
 		Heartbeat: HeartbeatConfig{
 			Enabled:  true,
-			Interval: 30, // default 30 minutes
+			Interval: 45, // default 45 minutes
 		},
 		Devices: DevicesConfig{
 			Enabled:    false,
