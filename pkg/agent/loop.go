@@ -588,13 +588,15 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				"system_prompt_len": len(messages[0].Content),
 			})
 
-		// Log full messages (detailed)
-		logger.DebugCF("agent", "Full LLM request",
-			map[string]interface{}{
-				"iteration":     iteration,
-				"messages_json": formatMessagesForLog(messages),
-				"tools_json":    formatToolsForLog(providerToolDefs),
-			})
+		// Log full messages (detailed) — only build strings if debug level is active
+		if logger.GetLevel() <= logger.DEBUG {
+			logger.DebugCF("agent", "Full LLM request",
+				map[string]interface{}{
+					"iteration":     iteration,
+					"messages_json": formatMessagesForLog(messages),
+					"tools_json":    formatToolsForLog(providerToolDefs),
+				})
+		}
 
 		// Call LLM
 		response, err := al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
@@ -803,36 +805,35 @@ func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
 	return info
 }
 
-// formatMessagesForLog formats messages for logging
+// formatMessagesForLog formats messages for logging using strings.Builder.
 func formatMessagesForLog(messages []providers.Message) string {
 	if len(messages) == 0 {
 		return "[]"
 	}
 
-	var result string
-	result += "[\n"
+	var b strings.Builder
+	b.WriteString("[\n")
 	for i, msg := range messages {
-		result += fmt.Sprintf("  [%d] Role: %s\n", i, msg.Role)
-		if msg.ToolCalls != nil && len(msg.ToolCalls) > 0 {
-			result += "  ToolCalls:\n"
+		fmt.Fprintf(&b, "  [%d] Role: %s\n", i, msg.Role)
+		if len(msg.ToolCalls) > 0 {
+			b.WriteString("  ToolCalls:\n")
 			for _, tc := range msg.ToolCalls {
-				result += fmt.Sprintf("    - ID: %s, Type: %s, Name: %s\n", tc.ID, tc.Type, tc.Name)
+				fmt.Fprintf(&b, "    - ID: %s, Type: %s, Name: %s\n", tc.ID, tc.Type, tc.Name)
 				if tc.Function != nil {
-					result += fmt.Sprintf("      Arguments: %s\n", utils.Truncate(tc.Function.Arguments, 200))
+					fmt.Fprintf(&b, "      Arguments: %s\n", utils.Truncate(tc.Function.Arguments, 200))
 				}
 			}
 		}
 		if msg.Content != "" {
-			content := utils.Truncate(msg.Content, 200)
-			result += fmt.Sprintf("  Content: %s\n", content)
+			fmt.Fprintf(&b, "  Content: %s\n", utils.Truncate(msg.Content, 200))
 		}
 		if msg.ToolCallID != "" {
-			result += fmt.Sprintf("  ToolCallID: %s\n", msg.ToolCallID)
+			fmt.Fprintf(&b, "  ToolCallID: %s\n", msg.ToolCallID)
 		}
-		result += "\n"
+		b.WriteByte('\n')
 	}
-	result += "]"
-	return result
+	b.WriteByte(']')
+	return b.String()
 }
 
 // formatToolsForLog formats tool definitions for logging
@@ -900,8 +901,15 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 		part1 := validMessages[:mid]
 		part2 := validMessages[mid:]
 
-		s1, _ := al.summarizeBatch(ctx, part1, "")
-		s2, _ := al.summarizeBatch(ctx, part2, "")
+		s1, err1 := al.summarizeBatch(ctx, part1, "")
+		s2, err2 := al.summarizeBatch(ctx, part2, "")
+
+		if err1 != nil && err2 != nil {
+			logger.WarnCF("agent", "Both summarize batches failed", map[string]interface{}{
+				"err1": err1.Error(), "err2": err2.Error(),
+			})
+			return
+		}
 
 		// Merge them
 		mergePrompt := fmt.Sprintf("Merge these two conversation summaries into one cohesive summary:\n\n1: %s\n\n2: %s", s1, s2)

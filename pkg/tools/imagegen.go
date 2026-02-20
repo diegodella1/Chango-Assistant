@@ -67,7 +67,11 @@ func (t *ImageGenTool) Execute(ctx context.Context, args map[string]interface{})
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if attempt > 1 {
-			time.Sleep(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				return ErrorResult(fmt.Sprintf("Image generation cancelled: %v", ctx.Err()))
+			case <-time.After(5 * time.Second):
+			}
 		}
 
 		resp, err := client.Get(imageURL)

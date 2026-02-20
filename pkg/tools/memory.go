@@ -136,7 +136,9 @@ func (t *MemoryTool) save(args map[string]interface{}) *ToolResult {
 	var notes []memoryNote
 	data, err := os.ReadFile(t.filePath)
 	if err == nil {
-		json.Unmarshal(data, &notes)
+		if err := json.Unmarshal(data, &notes); err != nil {
+			return ErrorResult(fmt.Sprintf("corrupted memory file: %v", err))
+		}
 	}
 
 	now := time.Now().Format(time.RFC3339)
@@ -255,7 +257,9 @@ func (t *MemoryTool) del(args map[string]interface{}) *ToolResult {
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to load notes: %v", err))
 	}
-	json.Unmarshal(data, &notes)
+	if err := json.Unmarshal(data, &notes); err != nil {
+		return ErrorResult(fmt.Sprintf("corrupted memory file: %v", err))
+	}
 
 	found := false
 	var filtered []memoryNote

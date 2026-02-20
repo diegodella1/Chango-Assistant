@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// Pre-compiled regex for path extraction in command safety guard
+var rePathPattern = regexp.MustCompile(`[A-Za-z]:\\[^\\\"']+|/[^\s\"']+`)
+
 type ExecTool struct {
 	workingDir          string
 	timeout             time.Duration
@@ -205,8 +208,7 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 			return ""
 		}
 
-		pathPattern := regexp.MustCompile(`[A-Za-z]:\\[^\\\"']+|/[^\s\"']+`)
-		matches := pathPattern.FindAllString(cmd, -1)
+		matches := rePathPattern.FindAllString(cmd, -1)
 
 		for _, raw := range matches {
 			p, err := filepath.Abs(raw)

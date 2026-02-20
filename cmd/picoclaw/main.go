@@ -773,7 +773,6 @@ func gatewayCmd() {
 	channelManager.StopAll(ctx)
 	msgBus.Close()
 	fmt.Println("✓ Gateway stopped")
-	_ = startTime // used by health endpoint
 }
 
 func statusCmd() {
