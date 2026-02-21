@@ -162,8 +162,11 @@ func buildCodexParams(messages []Message, tools []ToolDefinition, model string, 
 		params.MaxOutputTokens = openai.Opt(int64(maxTokens))
 	}
 
-	if temp, ok := options["temperature"].(float64); ok {
-		params.Temperature = openai.Opt(temp)
+	// Reasoning models (o-series, gpt-5+) don't support temperature
+	if !isReasoningModel(model) {
+		if temp, ok := options["temperature"].(float64); ok {
+			params.Temperature = openai.Opt(temp)
+		}
 	}
 
 	if len(tools) > 0 {
@@ -237,6 +240,11 @@ func parseCodexResponse(resp *responses.Response) *LLMResponse {
 		FinishReason: finishReason,
 		Usage:        usage,
 	}
+}
+
+func isReasoningModel(model string) bool {
+	m := strings.ToLower(model)
+	return strings.HasPrefix(m, "o1") || strings.HasPrefix(m, "o3") || strings.HasPrefix(m, "o4") || strings.HasPrefix(m, "gpt-5")
 }
 
 func createCodexTokenSource() func() (string, string, error) {
