@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/openai/openai-go/v3"
@@ -57,11 +56,6 @@ func (p *CodexProvider) Chat(ctx context.Context, messages []Message, tools []To
 
 	params := buildCodexParams(messages, tools, model, options)
 
-	// Debug: log the serialized params
-	if debugJSON, err := json.Marshal(params); err == nil {
-		log.Printf("[DEBUG] Codex request params: %s", string(debugJSON))
-	}
-
 	// ChatGPT backend requires streaming — collect events until response.completed
 	stream := p.client.Responses.NewStreaming(ctx, params, opts...)
 	defer stream.Close()
@@ -84,7 +78,7 @@ func (p *CodexProvider) Chat(ctx context.Context, messages []Message, tools []To
 }
 
 func (p *CodexProvider) GetDefaultModel() string {
-	return "gpt-5"
+	return "gpt-5.2-codex"
 }
 
 func buildCodexParams(messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) responses.ResponseNewParams {
@@ -122,12 +116,23 @@ func buildCodexParams(messages []Message, tools []ToolDefinition, model string, 
 					})
 				}
 				for _, tc := range msg.ToolCalls {
-					argsJSON, _ := json.Marshal(tc.Arguments)
+					tcName := tc.Name
+					tcArgs := ""
+					if tc.Function != nil {
+						if tcName == "" {
+							tcName = tc.Function.Name
+						}
+						tcArgs = tc.Function.Arguments
+					}
+					if tcArgs == "" {
+						raw, _ := json.Marshal(tc.Arguments)
+						tcArgs = string(raw)
+					}
 					inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
 						OfFunctionCall: &responses.ResponseFunctionToolCallParam{
 							CallID:    tc.ID,
-							Name:      tc.Name,
-							Arguments: string(argsJSON),
+							Name:      tcName,
+							Arguments: tcArgs,
 						},
 					})
 				}
@@ -202,7 +207,6 @@ func parseCodexResponse(resp *responses.Response) *LLMResponse {
 	var toolCalls []ToolCall
 
 	for _, item := range resp.Output {
-		log.Printf("[DEBUG] parseCodexResponse item: type=%s name=%q callID=%q args_len=%d", item.Type, item.Name, item.CallID, len(item.Arguments))
 		switch item.Type {
 		case "message":
 			for _, c := range item.Content {
@@ -250,7 +254,8 @@ func parseCodexResponse(resp *responses.Response) *LLMResponse {
 
 func isReasoningModel(model string) bool {
 	m := strings.ToLower(model)
-	return strings.HasPrefix(m, "o1") || strings.HasPrefix(m, "o3") || strings.HasPrefix(m, "o4") || strings.HasPrefix(m, "gpt-5")
+	return strings.HasPrefix(m, "o1") || strings.HasPrefix(m, "o3") || strings.HasPrefix(m, "o4") ||
+		strings.HasPrefix(m, "gpt-5") || strings.Contains(m, "codex")
 }
 
 func createCodexTokenSource() func() (string, string, error) {
