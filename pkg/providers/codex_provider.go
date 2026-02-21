@@ -158,12 +158,11 @@ func buildCodexParams(messages []Message, tools []ToolDefinition, model string, 
 		params.Instructions = openai.Opt(defaultCodexInstructions)
 	}
 
-	if maxTokens, ok := options["max_tokens"].(int); ok {
-		params.MaxOutputTokens = openai.Opt(int64(maxTokens))
-	}
-
-	// Reasoning models (o-series, gpt-5+) don't support temperature
+	// ChatGPT backend doesn't support max_output_tokens or temperature for reasoning models
 	if !isReasoningModel(model) {
+		if maxTokens, ok := options["max_tokens"].(int); ok {
+			params.MaxOutputTokens = openai.Opt(int64(maxTokens))
+		}
 		if temp, ok := options["temperature"].(float64); ok {
 			params.Temperature = openai.Opt(temp)
 		}
