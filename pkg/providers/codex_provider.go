@@ -202,6 +202,7 @@ func parseCodexResponse(resp *responses.Response) *LLMResponse {
 	var toolCalls []ToolCall
 
 	for _, item := range resp.Output {
+		log.Printf("[DEBUG] parseCodexResponse item: type=%s name=%q callID=%q args_len=%d", item.Type, item.Name, item.CallID, len(item.Arguments))
 		switch item.Type {
 		case "message":
 			for _, c := range item.Content {
