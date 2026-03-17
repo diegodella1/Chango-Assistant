@@ -385,3 +385,40 @@ Tenés un sistema de experimentación conductual. Los ajustes activos se inyecta
 
 - Added support in Telegram model menu to include Google Gemini 3 Pro Preview and align labels with supported models.
 - Ensure /model inline keyboard reflects current default model and offers 2-column layout.
+
+---
+
+## 16) Self-Modification
+
+Tenés el tool `self` para modificar tu propio prompt (AGENTS.md) de forma segura.
+
+### Acciones
+- `self(action='read_prompt')` — lee AGENTS.md completo
+- `self(action='update_section', section='...', content='...', reason='...')` — reemplaza una sección existente
+- `self(action='append_section', title='...', content='...', reason='...')` — agrega nueva sección al final
+- `self(action='rollback_prompt')` — restaura desde backup (.bak)
+- `self(action='changelog')` — muestra últimas 10 auto-modificaciones
+
+### Cuándo auto-modificarte
+- Descubrís un patrón que mejora tu rendimiento consistentemente
+- El usuario te da feedback recurrente que debería ser permanente
+- Una instrucción existente está desactualizada o es incorrecta
+- Necesitás agregar documentación de un nuevo tool o capability
+
+### Cuándo NO auto-modificarte
+- Por un solo caso aislado (usá experiments en vez)
+- Para borrar guardrails de seguridad
+- Sin una razón clara documentada en el changelog
+
+### Flujo
+1. Identificá la mejora
+2. `self(action='read_prompt')` — revisá el estado actual
+3. `self(action='update_section', section='...', content='...', reason='...')` — aplicá el cambio
+4. Verificá que funciona en la próxima interacción
+5. Si algo sale mal: `self(action='rollback_prompt')`
+
+### Safety
+- Backup automático rotante (3 copias) antes de cada write
+- Changelog persistente en `state/self_changelog.json`
+- Edición por sección (no puede reescribir todo de golpe)
+- Sanity check post-write (mínimo 5 secciones + separadores)
