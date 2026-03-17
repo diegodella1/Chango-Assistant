@@ -37,6 +37,7 @@ type MemoryTool struct {
 	vaultDir string
 	mu       sync.RWMutex
 	index    map[string]*VaultNote
+	tfidf    *tfidfIndex
 }
 
 var vaultFolders = []string{
@@ -55,6 +56,7 @@ func NewMemoryTool(workspace string) *MemoryTool {
 	t := &MemoryTool{
 		vaultDir: vaultDir,
 		index:    make(map[string]*VaultNote),
+		tfidf:    newTFIDFIndex(),
 	}
 
 	// Migrate from notes.json if needed
@@ -70,6 +72,9 @@ func NewMemoryTool(workspace string) *MemoryTool {
 
 	// Build in-memory index
 	t.buildIndex()
+
+	// Build TF-IDF index from all notes
+	t.rebuildTFIDF()
 
 	return t
 }
@@ -190,6 +195,7 @@ func (t *MemoryTool) save(args map[string]interface{}) *ToolResult {
 	}
 
 	t.index[slug] = note
+	t.tfidf.addDocument(slug, slug+" "+content+" "+strings.Join(tags, " "))
 
 	verb := "saved"
 	if existing != nil {
@@ -233,11 +239,33 @@ func (t *MemoryTool) search(args map[string]interface{}) *ToolResult {
 		return ErrorResult("query, folder, or tag is required for search")
 	}
 
-	q := strings.ToLower(query)
-
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
+	// When there's a text query, use TF-IDF ranking
+	if query != "" {
+		results := t.tfidf.search(query, 20)
+		var matches []string
+		for _, r := range results {
+			note := t.index[r.Key]
+			if note == nil {
+				continue
+			}
+			if folder != "" && note.Folder != folder {
+				continue
+			}
+			if tag != "" && !containsTag(note.Tags, tag) {
+				continue
+			}
+			matches = append(matches, fmt.Sprintf("- [%s] %s (%.0f%%): %s", note.Folder, note.Key, r.Score*100, truncate(note.Content, 100)))
+		}
+		if len(matches) == 0 {
+			return SilentResult("No notes found")
+		}
+		return SilentResult(fmt.Sprintf("Found %d note(s) ranked by relevance:\n%s", len(matches), strings.Join(matches, "\n")))
+	}
+
+	// Fallback: folder/tag filter only
 	var matches []string
 	for _, note := range t.index {
 		if folder != "" && note.Folder != folder {
@@ -245,12 +273,6 @@ func (t *MemoryTool) search(args map[string]interface{}) *ToolResult {
 		}
 		if tag != "" && !containsTag(note.Tags, tag) {
 			continue
-		}
-		if q != "" {
-			haystack := strings.ToLower(note.Key + " " + note.Content + " " + strings.Join(note.Tags, " "))
-			if !strings.Contains(haystack, q) {
-				continue
-			}
 		}
 		matches = append(matches, fmt.Sprintf("- [%s] %s: %s", note.Folder, note.Key, truncate(note.Content, 100)))
 	}
@@ -312,6 +334,7 @@ func (t *MemoryTool) del(args map[string]interface{}) *ToolResult {
 	notePath := filepath.Join(t.vaultDir, note.Folder, slug+".md")
 	os.Remove(notePath)
 	delete(t.index, slug)
+	t.tfidf.removeDocument(slug)
 
 	return SilentResult(fmt.Sprintf("Note '%s' deleted from %s/", slug, note.Folder))
 }
@@ -362,6 +385,7 @@ func (t *MemoryTool) daily(args map[string]interface{}) *ToolResult {
 		Links:   links,
 		Content: newContent,
 	}
+	t.tfidf.addDocument(dateStr, dateStr+" daily "+newContent)
 
 	return SilentResult(fmt.Sprintf("Appended to daily note %s", dateStr))
 }
@@ -606,6 +630,17 @@ func (t *MemoryTool) buildIndex() {
 		t.index[note.Key] = note
 		return nil
 	})
+}
+
+// rebuildTFIDF populates the TF-IDF index from all notes in the vault index.
+func (t *MemoryTool) rebuildTFIDF() {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	for key, note := range t.index {
+		text := key + " " + note.Content + " " + strings.Join(note.Tags, " ")
+		t.tfidf.addDocument(key, text)
+	}
 }
 
 // --- Utility helpers ---

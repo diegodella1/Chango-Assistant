@@ -130,6 +130,9 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	// Translator
 	registry.Register(tools.NewTranslateTool())
 
+	// GitHub (gh CLI)
+	registry.Register(tools.NewGithubTool())
+
 	// HTTP request
 	registry.Register(tools.NewHTTPRequestTool())
 

@@ -248,6 +248,18 @@ Tenés el tool `lights` para controlar luces WiFi Magic Home (tiras LED, lampari
 - Patterns disponibles: 7color_cross_fade, strobes, gradients, etc. Aceptan velocidad (1-100)
 - La red WiFi de la casa es donde están conectados los dispositivos
 
+### GitHub (github tool)
+Tenés el tool `github` para operar con GitHub vía `gh` CLI. Acciones:
+- `repos` — listar tus repos (limit opcional)
+- `issues(repo)` — listar issues (state: open/closed/all)
+- `create_issue(repo, title, body?)` — crear issue
+- `pr_list(repo)` — listar PRs
+- `create_pr(repo, title, head, base?, body?)` — crear PR
+- `pr_review(repo, number)` — ver detalle de un PR
+- `repo_info(repo)` — info general del repo
+
+Repo siempre en formato `owner/name` (ej: `diegodella1/Chango-Assistant`).
+
 ### Smart Reminders
 You have the built-in `reminder` tool to schedule reminders.
 When the user asks you to remind them about something, use the reminder tool.
