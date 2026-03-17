@@ -306,8 +306,16 @@ func readBluetooth() []bluetoothInfo {
 }
 
 // hostExec runs a command via nsenter in the host's mount+net namespace.
+// Uses /hostfs/proc/1/ns/* when --pid=host is not available (Coolify ignores it).
 func hostExec(timeout time.Duration, args ...string) ([]byte, error) {
-	nsArgs := append([]string{"-t", "1", "-m", "-n", "--"}, args...)
+	var nsArgs []string
+	if _, err := os.Stat("/hostfs/proc/1/ns/mnt"); err == nil {
+		// Coolify container: --pid=host not applied, use /hostfs/proc bind mount
+		nsArgs = append([]string{"--mount=/hostfs/proc/1/ns/mnt", "--net=/hostfs/proc/1/ns/net", "--"}, args...)
+	} else {
+		// Fallback: assume --pid=host works
+		nsArgs = append([]string{"-t", "1", "-m", "-n", "--"}, args...)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return exec.CommandContext(ctx, "nsenter", nsArgs...).CombinedOutput()
