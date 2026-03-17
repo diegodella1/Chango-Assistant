@@ -15,6 +15,7 @@ var migrateableFiles = []string{
 
 var migrateableDirs = []string{
 	"memory",
+	"obsidian",
 	"skills",
 }
 

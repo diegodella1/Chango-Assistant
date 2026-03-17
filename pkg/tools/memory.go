@@ -2,15 +2,17 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
+// memoryNote is the legacy JSON note format, kept for migration.
 type memoryNote struct {
 	Key       string   `json:"key"`
 	Content   string   `json:"content"`
@@ -19,23 +21,63 @@ type memoryNote struct {
 	UpdatedAt string   `json:"updated_at"`
 }
 
+// VaultNote represents a markdown note in the obsidian vault.
+type VaultNote struct {
+	Key     string
+	Tags    []string
+	Folder  string
+	Created string
+	Updated string
+	Links   []string
+	Content string
+}
+
+// MemoryTool implements the memory tool backed by an obsidian-style vault.
 type MemoryTool struct {
-	filePath string
-	mu       sync.Mutex
+	vaultDir string
+	mu       sync.RWMutex
+	index    map[string]*VaultNote
+}
+
+var vaultFolders = []string{
+	"daily", "people", "preferences", "insights",
+	"decisions", "projects", "blog", "state", "inbox",
 }
 
 func NewMemoryTool(workspace string) *MemoryTool {
-	dir := filepath.Join(workspace, "memory")
-	os.MkdirAll(dir, 0755)
-	return &MemoryTool{
-		filePath: filepath.Join(dir, "notes.json"),
+	vaultDir := filepath.Join(workspace, "obsidian")
+
+	// Create vault directories
+	for _, f := range vaultFolders {
+		os.MkdirAll(filepath.Join(vaultDir, f), 0755)
 	}
+
+	t := &MemoryTool{
+		vaultDir: vaultDir,
+		index:    make(map[string]*VaultNote),
+	}
+
+	// Migrate from notes.json if needed
+	migrated := filepath.Join(vaultDir, ".migrated")
+	notesJSON := filepath.Join(workspace, "memory", "notes.json")
+	if _, err := os.Stat(migrated); os.IsNotExist(err) {
+		if _, err := os.Stat(notesJSON); err == nil {
+			if err := migrateNotesToVault(workspace, vaultDir); err != nil {
+				fmt.Fprintf(os.Stderr, "memory migration error: %v\n", err)
+			}
+		}
+	}
+
+	// Build in-memory index
+	t.buildIndex()
+
+	return t
 }
 
 func (t *MemoryTool) Name() string { return "memory" }
 
 func (t *MemoryTool) Description() string {
-	return "Persistent notes storage. Save, recall, search, list, or delete notes by key. Use this to remember things for the user across conversations."
+	return "Obsidian-style knowledge vault. Actions: save (create/update note), recall (read by key), search (full-text + folder/tag filter), list (filter by folder/tag), delete, daily (append to today's daily note), link (find backlinks). Notes are markdown with YAML frontmatter, organized in folders: daily, people, preferences, insights, decisions, projects, blog, state, inbox."
 }
 
 func (t *MemoryTool) Parameters() map[string]interface{} {
@@ -44,25 +86,33 @@ func (t *MemoryTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"action": map[string]interface{}{
 				"type":        "string",
-				"enum":        []string{"save", "recall", "search", "list", "delete"},
+				"enum":        []string{"save", "recall", "search", "list", "delete", "daily", "link"},
 				"description": "Action to perform",
 			},
 			"key": map[string]interface{}{
 				"type":        "string",
-				"description": "Note key (required for save, recall, delete)",
+				"description": "Note key/slug (required for save, recall, delete, link)",
 			},
 			"content": map[string]interface{}{
 				"type":        "string",
-				"description": "Note content (required for save)",
+				"description": "Note content (required for save and daily)",
 			},
 			"tags": map[string]interface{}{
 				"type":        "array",
 				"items":       map[string]interface{}{"type": "string"},
-				"description": "Optional tags for the note",
+				"description": "Tags for the note (for save, or filter for search/list)",
+			},
+			"folder": map[string]interface{}{
+				"type":        "string",
+				"description": "Folder (people, preferences, insights, decisions, projects, blog, state, inbox, daily). Auto-inferred from key if omitted.",
 			},
 			"query": map[string]interface{}{
 				"type":        "string",
-				"description": "Search query (for search action, searches in key+content+tags)",
+				"description": "Search query (for search action, full-text in key+content+tags)",
+			},
+			"tag": map[string]interface{}{
+				"type":        "string",
+				"description": "Filter by single tag (for search/list)",
 			},
 		},
 		"required": []string{"action"},
@@ -79,40 +129,19 @@ func (t *MemoryTool) Execute(ctx context.Context, args map[string]interface{}) *
 	case "search":
 		return t.search(args)
 	case "list":
-		return t.list()
+		return t.list(args)
 	case "delete":
 		return t.del(args)
+	case "daily":
+		return t.daily(args)
+	case "link":
+		return t.link(args)
 	default:
 		return ErrorResult(fmt.Sprintf("unknown action: %s", action))
 	}
 }
 
-func (t *MemoryTool) loadNotes() ([]memoryNote, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	data, err := os.ReadFile(t.filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var notes []memoryNote
-	if err := json.Unmarshal(data, &notes); err != nil {
-		return nil, err
-	}
-	return notes, nil
-}
-
-func (t *MemoryTool) saveNotes(notes []memoryNote) error {
-	// Caller must hold t.mu if needed, but we already hold it in loadNotes
-	// For save operations, we handle locking at the action level
-	data, err := json.MarshalIndent(notes, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(t.filePath, data, 0644)
-}
+// --- Actions ---
 
 func (t *MemoryTool) save(args map[string]interface{}) *ToolResult {
 	key, _ := args["key"].(string)
@@ -121,56 +150,52 @@ func (t *MemoryTool) save(args map[string]interface{}) *ToolResult {
 		return ErrorResult("key and content are required for save")
 	}
 
-	var tags []string
-	if rawTags, ok := args["tags"].([]interface{}); ok {
-		for _, rt := range rawTags {
-			if s, ok := rt.(string); ok {
-				tags = append(tags, s)
-			}
-		}
+	slug := vaultSlugify(key)
+	tags := extractStringSlice(args, "tags")
+	folder, _ := args["folder"].(string)
+	if folder == "" {
+		folder = inferFolder(slug, tags)
 	}
+
+	now := time.Now().Format(time.RFC3339)
+	links := extractWikilinks(content)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var notes []memoryNote
-	data, err := os.ReadFile(t.filePath)
-	if err == nil {
-		if err := json.Unmarshal(data, &notes); err != nil {
-			return ErrorResult(fmt.Sprintf("corrupted memory file: %v", err))
-		}
+	existing := t.index[slug]
+	created := now
+	if existing != nil {
+		created = existing.Created
 	}
 
-	now := time.Now().Format(time.RFC3339)
-	found := false
-	for i, n := range notes {
-		if n.Key == key {
-			notes[i].Content = content
-			notes[i].Tags = tags
-			notes[i].UpdatedAt = now
-			found = true
-			break
-		}
-	}
-	if !found {
-		notes = append(notes, memoryNote{
-			Key:       key,
-			Content:   content,
-			Tags:      tags,
-			CreatedAt: now,
-			UpdatedAt: now,
-		})
+	note := &VaultNote{
+		Key:     slug,
+		Tags:    tags,
+		Folder:  folder,
+		Created: created,
+		Updated: now,
+		Links:   links,
+		Content: content,
 	}
 
-	d, _ := json.MarshalIndent(notes, "", "  ")
-	if err := os.WriteFile(t.filePath, d, 0644); err != nil {
+	if err := writeVaultNote(t.vaultDir, note); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to save: %v", err))
 	}
 
-	if found {
-		return SilentResult(fmt.Sprintf("Note '%s' updated", key))
+	// If folder changed, remove old file
+	if existing != nil && existing.Folder != folder {
+		oldPath := filepath.Join(t.vaultDir, existing.Folder, slug+".md")
+		os.Remove(oldPath)
 	}
-	return SilentResult(fmt.Sprintf("Note '%s' saved", key))
+
+	t.index[slug] = note
+
+	verb := "saved"
+	if existing != nil {
+		verb = "updated"
+	}
+	return SilentResult(fmt.Sprintf("Note '%s' %s in %s/", slug, verb, folder))
 }
 
 func (t *MemoryTool) recall(args map[string]interface{}) *ToolResult {
@@ -179,68 +204,93 @@ func (t *MemoryTool) recall(args map[string]interface{}) *ToolResult {
 		return ErrorResult("key is required for recall")
 	}
 
-	notes, err := t.loadNotes()
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to load notes: %v", err))
+	slug := vaultSlugify(key)
+
+	t.mu.RLock()
+	note := t.index[slug]
+	t.mu.RUnlock()
+
+	if note == nil {
+		return SilentResult(fmt.Sprintf("No note found with key '%s'", slug))
 	}
 
-	for _, n := range notes {
-		if n.Key == key {
-			result := fmt.Sprintf("Key: %s\nContent: %s", n.Key, n.Content)
-			if len(n.Tags) > 0 {
-				result += fmt.Sprintf("\nTags: %s", strings.Join(n.Tags, ", "))
-			}
-			return SilentResult(result)
-		}
+	result := fmt.Sprintf("Key: %s\nFolder: %s\nContent: %s", note.Key, note.Folder, note.Content)
+	if len(note.Tags) > 0 {
+		result += fmt.Sprintf("\nTags: %s", strings.Join(note.Tags, ", "))
 	}
-	return SilentResult(fmt.Sprintf("No note found with key '%s'", key))
+	if len(note.Links) > 0 {
+		result += fmt.Sprintf("\nLinks: %s", strings.Join(note.Links, ", "))
+	}
+	return SilentResult(result)
 }
 
 func (t *MemoryTool) search(args map[string]interface{}) *ToolResult {
 	query, _ := args["query"].(string)
-	if query == "" {
-		return ErrorResult("query is required for search")
-	}
+	folder, _ := args["folder"].(string)
+	tag, _ := args["tag"].(string)
 
-	notes, err := t.loadNotes()
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to load notes: %v", err))
+	if query == "" && folder == "" && tag == "" {
+		return ErrorResult("query, folder, or tag is required for search")
 	}
 
 	q := strings.ToLower(query)
+
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
 	var matches []string
-	for _, n := range notes {
-		haystack := strings.ToLower(n.Key + " " + n.Content + " " + strings.Join(n.Tags, " "))
-		if strings.Contains(haystack, q) {
-			matches = append(matches, fmt.Sprintf("- %s: %s", n.Key, n.Content))
+	for _, note := range t.index {
+		if folder != "" && note.Folder != folder {
+			continue
 		}
+		if tag != "" && !containsTag(note.Tags, tag) {
+			continue
+		}
+		if q != "" {
+			haystack := strings.ToLower(note.Key + " " + note.Content + " " + strings.Join(note.Tags, " "))
+			if !strings.Contains(haystack, q) {
+				continue
+			}
+		}
+		matches = append(matches, fmt.Sprintf("- [%s] %s: %s", note.Folder, note.Key, truncate(note.Content, 100)))
 	}
 
+	sort.Strings(matches)
+
 	if len(matches) == 0 {
-		return SilentResult(fmt.Sprintf("No notes matching '%s'", query))
+		return SilentResult("No notes found")
 	}
 	return SilentResult(fmt.Sprintf("Found %d note(s):\n%s", len(matches), strings.Join(matches, "\n")))
 }
 
-func (t *MemoryTool) list() *ToolResult {
-	notes, err := t.loadNotes()
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to load notes: %v", err))
-	}
+func (t *MemoryTool) list(args map[string]interface{}) *ToolResult {
+	folder, _ := args["folder"].(string)
+	tag, _ := args["tag"].(string)
 
-	if len(notes) == 0 {
-		return SilentResult("No notes saved")
-	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	var lines []string
-	for _, n := range notes {
-		line := fmt.Sprintf("- %s", n.Key)
-		if len(n.Tags) > 0 {
-			line += fmt.Sprintf(" [%s]", strings.Join(n.Tags, ", "))
+	for _, note := range t.index {
+		if folder != "" && note.Folder != folder {
+			continue
+		}
+		if tag != "" && !containsTag(note.Tags, tag) {
+			continue
+		}
+		line := fmt.Sprintf("- [%s] %s", note.Folder, note.Key)
+		if len(note.Tags) > 0 {
+			line += fmt.Sprintf(" [%s]", strings.Join(note.Tags, ", "))
 		}
 		lines = append(lines, line)
 	}
-	return SilentResult(fmt.Sprintf("%d note(s):\n%s", len(notes), strings.Join(lines, "\n")))
+
+	sort.Strings(lines)
+
+	if len(lines) == 0 {
+		return SilentResult("No notes found")
+	}
+	return SilentResult(fmt.Sprintf("%d note(s):\n%s", len(lines), strings.Join(lines, "\n")))
 }
 
 func (t *MemoryTool) del(args map[string]interface{}) *ToolResult {
@@ -249,33 +299,362 @@ func (t *MemoryTool) del(args map[string]interface{}) *ToolResult {
 		return ErrorResult("key is required for delete")
 	}
 
+	slug := vaultSlugify(key)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var notes []memoryNote
-	data, err := os.ReadFile(t.filePath)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to load notes: %v", err))
-	}
-	if err := json.Unmarshal(data, &notes); err != nil {
-		return ErrorResult(fmt.Sprintf("corrupted memory file: %v", err))
+	note := t.index[slug]
+	if note == nil {
+		return SilentResult(fmt.Sprintf("No note found with key '%s'", slug))
 	}
 
-	found := false
-	var filtered []memoryNote
-	for _, n := range notes {
-		if n.Key == key {
-			found = true
+	notePath := filepath.Join(t.vaultDir, note.Folder, slug+".md")
+	os.Remove(notePath)
+	delete(t.index, slug)
+
+	return SilentResult(fmt.Sprintf("Note '%s' deleted from %s/", slug, note.Folder))
+}
+
+func (t *MemoryTool) daily(args map[string]interface{}) *ToolResult {
+	content, _ := args["content"].(string)
+	if content == "" {
+		return ErrorResult("content is required for daily")
+	}
+
+	now := time.Now()
+	dateStr := now.Format("2006-01-02")
+	dailyPath := filepath.Join(t.vaultDir, "daily", dateStr+".md")
+	timeHeader := fmt.Sprintf("## %s", now.Format("15:04"))
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	existing, _ := os.ReadFile(dailyPath)
+
+	var newContent string
+	if len(existing) == 0 {
+		// New daily note
+		newContent = fmt.Sprintf("---\nkey: %s\ntags: [daily]\nfolder: daily\ncreated: %s\nupdated: %s\nlinks: []\n---\n\n# %s\n\n%s\n%s\n",
+			dateStr, now.Format(time.RFC3339), now.Format(time.RFC3339), dateStr, timeHeader, content)
+	} else {
+		// Append with time header
+		newContent = string(existing) + fmt.Sprintf("\n%s\n%s\n", timeHeader, content)
+	}
+
+	tmpPath := dailyPath + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte(newContent), 0644); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to write daily: %v", err))
+	}
+	if err := os.Rename(tmpPath, dailyPath); err != nil {
+		os.Remove(tmpPath)
+		return ErrorResult(fmt.Sprintf("failed to save daily: %v", err))
+	}
+
+	// Update index
+	links := extractWikilinks(newContent)
+	t.index[dateStr] = &VaultNote{
+		Key:     dateStr,
+		Tags:    []string{"daily"},
+		Folder:  "daily",
+		Created: now.Format(time.RFC3339),
+		Updated: now.Format(time.RFC3339),
+		Links:   links,
+		Content: newContent,
+	}
+
+	return SilentResult(fmt.Sprintf("Appended to daily note %s", dateStr))
+}
+
+func (t *MemoryTool) link(args map[string]interface{}) *ToolResult {
+	key, _ := args["key"].(string)
+	if key == "" {
+		return ErrorResult("key is required for link")
+	}
+
+	slug := vaultSlugify(key)
+
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if t.index[slug] == nil {
+		return SilentResult(fmt.Sprintf("No note found with key '%s'", slug))
+	}
+
+	var backlinks []string
+	for _, note := range t.index {
+		for _, link := range note.Links {
+			if link == slug {
+				backlinks = append(backlinks, fmt.Sprintf("- [%s] %s", note.Folder, note.Key))
+				break
+			}
+		}
+	}
+
+	sort.Strings(backlinks)
+
+	if len(backlinks) == 0 {
+		return SilentResult(fmt.Sprintf("No backlinks to '%s'", slug))
+	}
+	return SilentResult(fmt.Sprintf("%d backlink(s) to '%s':\n%s", len(backlinks), slug, strings.Join(backlinks, "\n")))
+}
+
+// --- Vault helpers ---
+
+var (
+	reNonAlnum  = regexp.MustCompile(`[^a-z0-9-]+`)
+	reMultiDash = regexp.MustCompile(`-{2,}`)
+	reWikilink  = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+)
+
+// vaultSlugify normalizes a key to a filesystem-safe slug.
+func vaultSlugify(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	replacer := strings.NewReplacer(
+		"á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u",
+		"ñ", "n", "ü", "u",
+		"_", "-", ".", "-", ":", "-", " ", "-",
+	)
+	s = replacer.Replace(s)
+	s = reNonAlnum.ReplaceAllString(s, "-")
+	s = reMultiDash.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		s = "untitled"
+	}
+	return s
+}
+
+// inferFolder auto-routes a key to the appropriate vault folder.
+func inferFolder(key string, tags []string) string {
+	prefixes := []struct {
+		patterns []string
+		folder   string
+	}{
+		{[]string{"person-", "person_", "friends-", "friends_"}, "people"},
+		{[]string{"preference", "prefs-", "prefs_", "style-", "style_"}, "preferences"},
+		{[]string{"insight-", "insight_"}, "insights"},
+		{[]string{"decision-", "decision_", "pattern-", "pattern_"}, "decisions"},
+		{[]string{"blog-", "blog_", "editorial-", "editorial_", "post-", "post_", "svs-", "svs_"}, "blog"},
+		{[]string{"last-", "last_", "heartbeat"}, "state"},
+		{[]string{"project-", "project_"}, "projects"},
+		{[]string{"daily-", "daily_", "eod-", "eod_", "morning-context"}, "daily"},
+	}
+
+	for _, p := range prefixes {
+		for _, prefix := range p.patterns {
+			if strings.HasPrefix(key, prefix) {
+				return p.folder
+			}
+		}
+	}
+
+	// Check tags for hints
+	tagSet := make(map[string]bool)
+	for _, t := range tags {
+		tagSet[strings.ToLower(t)] = true
+	}
+	if tagSet["preference"] || tagSet["correction"] {
+		return "preferences"
+	}
+	if tagSet["pattern"] {
+		return "decisions"
+	}
+	if tagSet["technical"] {
+		return "insights"
+	}
+	if tagSet["network"] || tagSet["friends"] || tagSet["people"] {
+		return "people"
+	}
+
+	return "inbox"
+}
+
+// extractWikilinks returns all [[wikilink]] targets from content.
+func extractWikilinks(content string) []string {
+	matches := reWikilink.FindAllStringSubmatch(content, -1)
+	var links []string
+	seen := make(map[string]bool)
+	for _, m := range matches {
+		slug := vaultSlugify(m[1])
+		if !seen[slug] {
+			links = append(links, slug)
+			seen[slug] = true
+		}
+	}
+	return links
+}
+
+// writeVaultNote writes a note as a markdown file with frontmatter (atomic write).
+func writeVaultNote(vaultDir string, note *VaultNote) error {
+	dir := filepath.Join(vaultDir, note.Folder)
+	os.MkdirAll(dir, 0755)
+
+	notePath := filepath.Join(dir, note.Key+".md")
+	tmpPath := notePath + ".tmp"
+
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString(fmt.Sprintf("key: %s\n", note.Key))
+	b.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(note.Tags, ", ")))
+	b.WriteString(fmt.Sprintf("folder: %s\n", note.Folder))
+	b.WriteString(fmt.Sprintf("created: %s\n", note.Created))
+	b.WriteString(fmt.Sprintf("updated: %s\n", note.Updated))
+	if len(note.Links) > 0 {
+		b.WriteString(fmt.Sprintf("links: [%s]\n", strings.Join(note.Links, ", ")))
+	} else {
+		b.WriteString("links: []\n")
+	}
+	b.WriteString("---\n\n")
+	b.WriteString(note.Content)
+	if !strings.HasSuffix(note.Content, "\n") {
+		b.WriteString("\n")
+	}
+
+	if err := os.WriteFile(tmpPath, []byte(b.String()), 0644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, notePath); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
+}
+
+// parseVaultNote reads and parses a markdown file with frontmatter.
+func parseVaultNote(path string) (*VaultNote, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	content := string(data)
+
+	// Split by frontmatter delimiters
+	if !strings.HasPrefix(content, "---\n") {
+		// No frontmatter, treat whole thing as content
+		base := strings.TrimSuffix(filepath.Base(path), ".md")
+		return &VaultNote{
+			Key:     base,
+			Folder:  filepath.Base(filepath.Dir(path)),
+			Content: content,
+		}, nil
+	}
+
+	rest := content[4:] // skip opening "---\n"
+	endIdx := strings.Index(rest, "\n---\n")
+	if endIdx == -1 {
+		return nil, fmt.Errorf("malformed frontmatter in %s", path)
+	}
+
+	frontmatter := rest[:endIdx]
+	body := strings.TrimSpace(rest[endIdx+5:]) // skip "\n---\n"
+
+	note := &VaultNote{
+		Content: body,
+		Folder:  filepath.Base(filepath.Dir(path)),
+	}
+
+	// Parse frontmatter lines
+	for _, line := range strings.Split(frontmatter, "\n") {
+		line = strings.TrimSpace(line)
+		colonIdx := strings.Index(line, ": ")
+		if colonIdx == -1 {
 			continue
 		}
-		filtered = append(filtered, n)
+		field := line[:colonIdx]
+		value := line[colonIdx+2:]
+
+		switch field {
+		case "key":
+			note.Key = value
+		case "tags":
+			note.Tags = parseBracketList(value)
+		case "folder":
+			note.Folder = value
+		case "created":
+			note.Created = value
+		case "updated":
+			note.Updated = value
+		case "links":
+			note.Links = parseBracketList(value)
+		}
 	}
 
-	if !found {
-		return SilentResult(fmt.Sprintf("No note found with key '%s'", key))
+	if note.Key == "" {
+		note.Key = strings.TrimSuffix(filepath.Base(path), ".md")
 	}
 
-	d, _ := json.MarshalIndent(filtered, "", "  ")
-	os.WriteFile(t.filePath, d, 0644)
-	return SilentResult(fmt.Sprintf("Note '%s' deleted", key))
+	return note, nil
+}
+
+// buildIndex walks the vault and populates the in-memory index.
+func (t *MemoryTool) buildIndex() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	filepath.Walk(t.vaultDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+			return nil
+		}
+
+		note, err := parseVaultNote(path)
+		if err != nil {
+			return nil
+		}
+
+		t.index[note.Key] = note
+		return nil
+	})
+}
+
+// --- Utility helpers ---
+
+func parseBracketList(s string) []string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimSuffix(s, "]")
+	if s == "" {
+		return nil
+	}
+	var items []string
+	for _, item := range strings.Split(s, ",") {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func extractStringSlice(args map[string]interface{}, key string) []string {
+	raw, ok := args[key].([]interface{})
+	if !ok {
+		return nil
+	}
+	var result []string
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+func containsTag(tags []string, tag string) bool {
+	tag = strings.ToLower(tag)
+	for _, t := range tags {
+		if strings.ToLower(t) == tag {
+			return true
+		}
+	}
+	return false
+}
+
+func truncate(s string, max int) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }

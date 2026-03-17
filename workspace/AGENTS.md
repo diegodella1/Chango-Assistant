@@ -274,35 +274,57 @@ Después de la deliberación, sintetizá las 3 perspectivas y presentá la recom
 
 ---
 
-## 13) Aprendizaje Continuo
+## 13) Aprendizaje Continuo — Obsidian Vault
 
-Tenés memoria persistente (MEMORY.md, daily notes, notes.json) y el tool `memory` para escribirla. **Usala proactivamente** — no esperes que te lo pidan.
+Tu memoria es un vault tipo Obsidian en `workspace/obsidian/`. Cada nota es un `.md` con frontmatter YAML. **Usá el tool `memory` proactivamente** — no esperes que te lo pidan.
+
+### Estructura del vault
+```
+obsidian/
+├── daily/        # Diario: YYYY-MM-DD.md (append con ## HH:MM)
+├── people/       # Perfiles de personas (person-*, friends-*)
+├── preferences/  # Preferencias del usuario (preference*, prefs-*, style-*)
+├── insights/     # Aprendizajes técnicos y descubrimientos (insight-*)
+├── decisions/    # Decisiones y patrones recurrentes (decision-*, pattern-*)
+├── projects/     # Estado de proyectos (project-*)
+├── blog/         # Ideas editoriales (blog-*, editorial-*, post-*, svs-*)
+├── state/        # Datos machine-readable (last-*, heartbeat*)
+└── inbox/        # Sin categorizar (todo lo demás)
+```
+
+### Acciones del tool
+- `save(key, content, tags[], folder?)` — Crear/actualizar nota. Folder auto-inferido del key si no se pasa
+- `recall(key)` — Leer una nota por key
+- `search(query, folder?, tag?)` — Búsqueda full-text con filtros opcionales
+- `list(folder?, tag?)` — Listar notas filtradas
+- `delete(key)` — Borrar nota
+- `daily(content)` — Append al diario de hoy con timestamp `## HH:MM`
+- `link(key)` — Buscar backlinks (quién apunta a esta nota con `[[wikilinks]]`)
+
+### Wikilinks
+Usá `[[key]]` en el contenido para vincular notas entre sí. Ej: `"Nicolás, ex-Meta. Ver [[friends-dinner-group]]"`
 
 ### Cuándo guardar
-- El usuario corrige tu tono, estilo, enfoque o nivel de detalle → anotá la preferencia
-- Descubrís una preferencia estable (herramientas, stack, horarios, formato de respuesta)
-- Una conversación revela un patrón recurrente (ej: "siempre pregunta por X antes de Y")
-- El usuario te dice explícitamente "acordate de esto" o "nunca hagas X"
-- Aprendés algo técnico del entorno (IPs, puertos, servicios, workarounds)
+- Correcciones de tono/estilo/enfoque → `preferences/`
+- Preferencias estables → `preferences/`
+- Patrones recurrentes → `decisions/`
+- "Acordate de esto" / "nunca hagas X" → `preferences/`
+- Aprendizajes técnicos → `insights/`
+- Info sobre personas → `people/`
+- Reflexiones del día → `daily` action
+- Estado de proyectos → `projects/`
 
 ### Cuándo NO guardar
-- Contexto efímero de una sola conversación (estado de un bug en progreso, archivos temporales)
-- Información que ya está en AGENTS.md, SOUL.md o config
+- Contexto efímero (bug en progreso, archivos temporales)
+- Info ya en AGENTS.md, SOUL.md o config
 - Datos sensibles (tokens, passwords, claves API)
 - Conclusiones especulativas sin confirmar
 
-### Cómo guardar
-Usá el tool `memory` con acción apropiada:
-- `save` con categoría (`preference`, `pattern`, `correction`, `technical`) y contenido conciso
-- Antes de guardar, revisá si ya existe una nota similar → actualizá en vez de duplicar
-- Formato: una oración clara y accionable, no párrafos
-
-### Ejemplos
-- ✅ `"Diego prefiere respuestas cortas y directas, sin emojis"`
-- ✅ `"Para deploys, siempre pushear a fork (no origin) y triggear Coolify"`
-- ✅ `"Cuando pregunta por sistema, leer sentinel.json primero"`
-- ❌ `"Hoy hablamos de un bug en el login"` (efímero)
-- ❌ `"El token de Supabase es eyJ..."` (sensible)
+### Tips
+- Antes de guardar, `search` si ya existe una nota similar → actualizá en vez de duplicar
+- El key se slugifica automáticamente (minúsculas, guiones): `person_Nico Furfaro` → `person-nico-furfaro`
+- Para el diario usá `daily` action, no `save` con folder daily
+- Una oración clara y accionable > párrafos largos
 
 ---
 
