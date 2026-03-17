@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
@@ -38,12 +39,16 @@ var allowedFiles = []string{
 type Handler struct {
 	workspacePath string
 	token         string
+	configPath    string
+	config        *config.Config
 }
 
-func New(workspacePath, token string) *Handler {
+func New(workspacePath, token, configPath string, cfg *config.Config) *Handler {
 	return &Handler{
 		workspacePath: workspacePath,
 		token:         token,
+		configPath:    configPath,
+		config:        cfg,
 	}
 }
 
@@ -58,6 +63,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/vault", h.withAuth(h.vaultOverview))
 	mux.HandleFunc("/api/vault/notes", h.withAuth(h.vaultNotes))
 	mux.HandleFunc("/api/vault/note/", h.withAuth(h.vaultNote))
+	// Settings endpoints
+	mux.HandleFunc("/api/settings/providers", h.withAuth(h.settingsProviders))
+	mux.HandleFunc("/api/settings/channels", h.withAuth(h.settingsChannels))
+	mux.HandleFunc("/api/settings/tools", h.withAuth(h.settingsTools))
+	mux.HandleFunc("/api/settings/services", h.withAuth(h.settingsServices))
+	mux.HandleFunc("/api/settings/agent", h.withAuth(h.settingsAgent))
+	mux.HandleFunc("/api/settings/upload/google-sa", h.withAuth(h.uploadGoogleSA))
+	mux.HandleFunc("/api/settings/test/provider", h.withAuth(h.testProvider))
 }
 
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {

@@ -534,7 +534,8 @@ func gatewayCmd() {
 		}
 	}
 
-	cfg, err := loadConfig()
+	configPath := getConfigPath()
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
@@ -765,7 +766,7 @@ func gatewayCmd() {
 	})
 	// Admin panel
 	if cfg.Admin.Enabled {
-		adminHandler := admin.New(cfg.WorkspacePath(), cfg.Admin.Token)
+		adminHandler := admin.New(cfg.WorkspacePath(), cfg.Admin.Token, configPath, cfg)
 		adminHandler.Register(healthMux)
 		fmt.Println("✓ Admin panel enabled at /admin")
 	}

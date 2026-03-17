@@ -332,10 +332,94 @@
     color: var(--text-muted);
   }
 
+  /* Settings styles */
+  .settings-panel { flex: 1; padding: 24px; overflow-y: auto; }
+  .settings-panel h2 { font-size: 16px; margin-bottom: 16px; font-weight: 600; }
+  .settings-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+  }
+  .settings-tab {
+    padding: 8px 16px; font-size: 13px; cursor: pointer;
+    color: var(--text-muted); border-bottom: 2px solid transparent;
+    background: none; border-top: none; border-left: none; border-right: none;
+    transition: all 0.15s;
+  }
+  .settings-tab:hover { color: var(--text); }
+  .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .settings-section { display: none; }
+  .settings-section.active { display: block; }
+  .settings-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .settings-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .settings-row {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+  }
+  .settings-row label {
+    font-size: 13px; color: var(--text-muted); min-width: 120px; flex-shrink: 0;
+  }
+  .settings-row input[type="text"],
+  .settings-row input[type="password"],
+  .settings-row input[type="number"] {
+    flex: 1; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 13px;
+    font-family: 'SF Mono', monospace; outline: none;
+  }
+  .settings-row input:focus { border-color: var(--accent); }
+  .settings-row input[type="number"] { max-width: 100px; }
+  .settings-toggle {
+    position: relative; width: 36px; height: 20px; flex-shrink: 0;
+  }
+  .settings-toggle input { opacity: 0; width: 0; height: 0; }
+  .settings-toggle .slider {
+    position: absolute; inset: 0; background: var(--border);
+    border-radius: 10px; cursor: pointer; transition: 0.2s;
+  }
+  .settings-toggle .slider:before {
+    content: ''; position: absolute; width: 16px; height: 16px;
+    left: 2px; bottom: 2px; background: var(--text-muted);
+    border-radius: 50%; transition: 0.2s;
+  }
+  .settings-toggle input:checked + .slider { background: var(--accent); }
+  .settings-toggle input:checked + .slider:before {
+    transform: translateX(16px); background: #fff;
+  }
+  .settings-actions {
+    display: flex; gap: 10px; margin-top: 16px; align-items: center;
+  }
+  .settings-toast {
+    font-size: 13px; padding: 6px 12px; border-radius: 6px;
+    display: none; animation: fadeIn 0.2s;
+  }
+  .settings-toast.ok { display: inline-block; background: rgba(63,185,80,0.15); color: var(--success); }
+  .settings-toast.err { display: inline-block; background: rgba(248,81,73,0.15); color: var(--error); }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .restart-banner {
+    background: rgba(210,153,34,0.15); border: 1px solid rgba(210,153,34,0.3);
+    border-radius: 6px; padding: 10px 14px; margin-bottom: 16px;
+    font-size: 13px; color: #d29922; display: none;
+  }
+  .btn-test {
+    padding: 4px 10px; font-size: 12px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-muted); cursor: pointer; flex-shrink: 0;
+  }
+  .btn-test:hover { border-color: var(--accent); color: var(--accent); }
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 16px; text-align: center; color: var(--text-muted);
+    font-size: 13px; cursor: pointer; transition: all 0.15s;
+  }
+  .upload-zone:hover { border-color: var(--accent); color: var(--text); }
+  .upload-zone input { display: none; }
+
   @media (max-width: 640px) {
     .sidebar { width: 160px; }
     .sidebar li { padding: 8px 12px; font-size: 13px; }
     .health-grid { grid-template-columns: 1fr; }
+    .settings-row { flex-direction: column; align-items: stretch; }
+    .settings-row label { min-width: auto; }
   }
 </style>
 </head>
@@ -361,6 +445,8 @@
     <ul><li id="healthNav" onclick="showHealth()">Raspberry Pi</li></ul>
     <div class="section-label">Memoria</div>
     <ul><li id="vaultNav" onclick="showVault()">Obsidian Vault</li></ul>
+    <div class="section-label">Config</div>
+    <ul><li id="settingsNav" onclick="showSettings()">Ajustes</li></ul>
     <div class="section-label">Archivos</div>
     <ul id="fileList"></ul>
   </nav>
@@ -368,6 +454,7 @@
     <div class="empty-state" id="emptyState">Selecciona un archivo</div>
     <div class="health-panel" id="healthPanel" style="display:none"></div>
     <div class="vault-panel" id="vaultPanel" style="display:none"></div>
+    <div class="settings-panel" id="settingsPanel" style="display:none"></div>
     <div style="display:none;flex-direction:column;flex:1;overflow:hidden" id="editorPanel">
       <div class="editor-toolbar">
         <span class="filename" id="currentFile"></span>
@@ -534,6 +621,7 @@ function showHealth() {
 function hideHealth() {
   document.getElementById('healthPanel').style.display = 'none';
   document.getElementById('vaultPanel').style.display = 'none';
+  document.getElementById('settingsPanel').style.display = 'none';
   if (healthInterval) { clearInterval(healthInterval); healthInterval = null; }
 }
 
@@ -876,6 +964,390 @@ function deleteVaultNote(folder, key) {
       const status = document.getElementById('vaultStatus');
       if (status) { status.textContent = 'Error: ' + e.message; status.className = 'status err'; }
     });
+}
+
+// --- Settings ---
+let settingsNeedsRestart = false;
+let currentSettingsTab = 'providers';
+
+function showSettings() {
+  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  dirty = false;
+  currentFile = null;
+
+  document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
+  document.getElementById('settingsNav').classList.add('active');
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('editorPanel').style.display = 'none';
+  hideHealth();
+  document.getElementById('vaultPanel').style.display = 'none';
+  document.getElementById('settingsPanel').style.display = 'block';
+
+  renderSettingsShell();
+  switchSettingsTab(currentSettingsTab);
+}
+
+function hideSettings() {
+  document.getElementById('settingsPanel').style.display = 'none';
+}
+
+function renderSettingsShell() {
+  const tabs = [
+    { id: 'providers', label: 'Providers' },
+    { id: 'channels', label: 'Canales' },
+    { id: 'tools', label: 'Tools' },
+    { id: 'services', label: 'Servicios' },
+    { id: 'agent', label: 'Agente' },
+  ];
+  let html = '<h2>Ajustes</h2>';
+  html += '<div class="restart-banner" id="restartBanner">Los cambios requieren reinicio para tomar efecto.</div>';
+  html += '<div class="settings-tabs">';
+  tabs.forEach(t => {
+    html += '<button class="settings-tab' + (t.id === currentSettingsTab ? ' active' : '') + '" onclick="switchSettingsTab(\'' + t.id + '\')">' + t.label + '</button>';
+  });
+  html += '</div>';
+  tabs.forEach(t => {
+    html += '<div class="settings-section" id="settingsSection_' + t.id + '"></div>';
+  });
+  document.getElementById('settingsPanel').innerHTML = html;
+  if (settingsNeedsRestart) document.getElementById('restartBanner').style.display = 'block';
+}
+
+function switchSettingsTab(tabId) {
+  currentSettingsTab = tabId;
+  document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+  const tabBtn = document.querySelector('.settings-tab[onclick*="' + tabId + '"]');
+  if (tabBtn) tabBtn.classList.add('active');
+  const section = document.getElementById('settingsSection_' + tabId);
+  if (section) section.classList.add('active');
+
+  // Load data for the tab
+  const loaders = { providers: loadProviders, channels: loadChannels, tools: loadTools, services: loadServices, agent: loadAgent };
+  if (loaders[tabId]) loaders[tabId]();
+}
+
+function toggle(id, checked) {
+  return '<label class="settings-toggle"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="slider"></span></label>';
+}
+
+function settingsToast(sectionId, msg, ok) {
+  const el = document.getElementById('toast_' + sectionId);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'settings-toast ' + (ok ? 'ok' : 'err');
+  setTimeout(() => { el.className = 'settings-toast'; }, 3000);
+}
+
+function markRestart() {
+  settingsNeedsRestart = true;
+  const b = document.getElementById('restartBanner');
+  if (b) b.style.display = 'block';
+}
+
+// Providers
+function loadProviders() {
+  const el = document.getElementById('settingsSection_providers');
+  el.innerHTML = '<div class="spinner"></div> Cargando...';
+  fetch(API + '/api/settings/providers', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderProviders(data))
+    .catch(e => { el.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderProviders(data) {
+  const providers = ['openrouter','anthropic','openai','groq','gemini','deepseek','zhipu','vllm','nvidia','moonshot','shengsuanyun','github_copilot'];
+  let html = '';
+  providers.forEach(p => {
+    const d = data[p] || {};
+    const label = p.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+    html += '<div class="settings-card"><h3>' + label + '</h3>';
+    html += '<div class="settings-row"><label>API Key</label>';
+    html += '<input type="password" id="prov_' + p + '_key" value="' + esc(d.api_key || '') + '" placeholder="sk-...">';
+    html += '<button class="btn-test" onclick="testProvider(\'' + p + '\')">Test</button></div>';
+    html += '<div class="settings-row"><label>API Base</label>';
+    html += '<input type="text" id="prov_' + p + '_base" value="' + esc(d.api_base || '') + '" placeholder="(default)"></div>';
+    html += '</div>';
+  });
+  html += '<div class="settings-actions">';
+  html += '<button class="btn btn-primary" onclick="saveProviders()">Guardar</button>';
+  html += '<span class="settings-toast" id="toast_providers"></span></div>';
+  document.getElementById('settingsSection_providers').innerHTML = html;
+}
+
+function saveProviders() {
+  const providers = ['openrouter','anthropic','openai','groq','gemini','deepseek','zhipu','vllm','nvidia','moonshot','shengsuanyun','github_copilot'];
+  const body = {};
+  providers.forEach(p => {
+    body[p] = {
+      api_key: document.getElementById('prov_' + p + '_key').value,
+      api_base: document.getElementById('prov_' + p + '_base').value,
+    };
+  });
+  fetch(API + '/api/settings/providers', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { settingsToast('providers', 'Guardado', true); markRestart(); })
+    .catch(e => settingsToast('providers', 'Error: ' + e.message, false));
+}
+
+function testProvider(name) {
+  fetch(API + '/api/settings/test/provider', {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ provider: name })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        settingsToast('providers', name + ': OK (' + data.status_code + ')', true);
+      } else {
+        settingsToast('providers', name + ': ' + (data.error || 'failed'), false);
+      }
+    })
+    .catch(e => settingsToast('providers', 'Error: ' + e.message, false));
+}
+
+// Channels
+function loadChannels() {
+  const el = document.getElementById('settingsSection_channels');
+  el.innerHTML = '<div class="spinner"></div> Cargando...';
+  fetch(API + '/api/settings/channels', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderChannels(data))
+    .catch(e => { el.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderChannels(data) {
+  let html = '';
+  // Telegram
+  const tg = data.telegram || {};
+  html += '<div class="settings-card"><h3>Telegram</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_telegram_enabled', tg.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Token</label><input type="password" id="ch_telegram_token" value="' + esc(tg.token || '') + '"></div>';
+  html += '<div class="settings-row"><label>Allow From</label><input type="text" id="ch_telegram_allow" value="' + esc((tg.allow_from || []).join(', ')) + '" placeholder="user_id1, user_id2"></div>';
+  html += '</div>';
+  // Discord
+  const dc = data.discord || {};
+  html += '<div class="settings-card"><h3>Discord</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_discord_enabled', dc.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Token</label><input type="password" id="ch_discord_token" value="' + esc(dc.token || '') + '"></div>';
+  html += '</div>';
+  // Slack
+  const sl = data.slack || {};
+  html += '<div class="settings-card"><h3>Slack</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_slack_enabled', sl.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Bot Token</label><input type="password" id="ch_slack_token" value="' + esc(sl.token || '') + '"></div>';
+  html += '</div>';
+  // Webhook
+  const wh = data.webhook || {};
+  html += '<div class="settings-card"><h3>Webhook</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_webhook_enabled', wh.enabled) + '</div>';
+  html += '</div>';
+
+  html += '<div class="settings-actions">';
+  html += '<button class="btn btn-primary" onclick="saveChannels()">Guardar</button>';
+  html += '<span class="settings-toast" id="toast_channels"></span></div>';
+  document.getElementById('settingsSection_channels').innerHTML = html;
+}
+
+function saveChannels() {
+  const allowStr = document.getElementById('ch_telegram_allow').value;
+  const allowFrom = allowStr ? allowStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const body = {
+    telegram: {
+      enabled: document.getElementById('ch_telegram_enabled').checked,
+      token: document.getElementById('ch_telegram_token').value,
+      allow_from: allowFrom,
+    },
+    discord: {
+      enabled: document.getElementById('ch_discord_enabled').checked,
+      token: document.getElementById('ch_discord_token').value,
+    },
+    slack: {
+      enabled: document.getElementById('ch_slack_enabled').checked,
+      token: document.getElementById('ch_slack_token').value,
+    },
+    webhook: {
+      enabled: document.getElementById('ch_webhook_enabled').checked,
+    },
+  };
+  fetch(API + '/api/settings/channels', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { settingsToast('channels', 'Guardado', true); markRestart(); })
+    .catch(e => settingsToast('channels', 'Error: ' + e.message, false));
+}
+
+// Tools
+function loadTools() {
+  const el = document.getElementById('settingsSection_tools');
+  el.innerHTML = '<div class="spinner"></div> Cargando...';
+  fetch(API + '/api/settings/tools', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderTools(data))
+    .catch(e => { el.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderTools(data) {
+  const web = data.web || {};
+  const google = data.google || {};
+  let html = '';
+  // DuckDuckGo
+  const ddg = web.duckduckgo || {};
+  html += '<div class="settings-card"><h3>DuckDuckGo</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('tool_ddg_enabled', ddg.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Max Results</label><input type="number" id="tool_ddg_max" value="' + (ddg.max_results || 5) + '" min="1" max="20"></div>';
+  html += '</div>';
+  // Serper
+  const sp = web.serper || {};
+  html += '<div class="settings-card"><h3>Serper</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('tool_serper_enabled', sp.enabled) + '</div>';
+  html += '<div class="settings-row"><label>API Key</label><input type="password" id="tool_serper_key" value="' + esc(sp.api_key || '') + '"></div>';
+  html += '<div class="settings-row"><label>Max Results</label><input type="number" id="tool_serper_max" value="' + (sp.max_results || 5) + '" min="1" max="20"></div>';
+  html += '</div>';
+  // Brave
+  const bv = web.brave || {};
+  html += '<div class="settings-card"><h3>Brave Search</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('tool_brave_enabled', bv.enabled) + '</div>';
+  html += '<div class="settings-row"><label>API Key</label><input type="password" id="tool_brave_key" value="' + esc(bv.api_key || '') + '"></div>';
+  html += '<div class="settings-row"><label>Max Results</label><input type="number" id="tool_brave_max" value="' + (bv.max_results || 5) + '" min="1" max="20"></div>';
+  html += '</div>';
+  // Google SA
+  html += '<div class="settings-card"><h3>Google Service Account</h3>';
+  html += '<div class="settings-row"><label>SA File</label><span style="font-size:13px;color:var(--text-muted);font-family:monospace">' + esc(google.service_account_file || '(no configurado)') + '</span></div>';
+  html += '<div class="settings-row"><label>Email</label><input type="text" id="tool_google_email" value="' + esc(google.impersonate_email || '') + '" placeholder="user@domain.com"></div>';
+  html += '<div class="upload-zone" onclick="document.getElementById(\'saFileInput\').click()">Subir archivo service account JSON<input type="file" id="saFileInput" accept=".json" onchange="uploadSA(this.files[0])"></div>';
+  html += '<div id="uploadStatus" style="font-size:13px;margin-top:8px"></div>';
+  html += '</div>';
+
+  html += '<div class="settings-actions">';
+  html += '<button class="btn btn-primary" onclick="saveTools()">Guardar</button>';
+  html += '<span class="settings-toast" id="toast_tools"></span></div>';
+  document.getElementById('settingsSection_tools').innerHTML = html;
+}
+
+function saveTools() {
+  const body = {
+    web: {
+      duckduckgo: { enabled: document.getElementById('tool_ddg_enabled').checked, max_results: parseInt(document.getElementById('tool_ddg_max').value) || 5 },
+      serper: { enabled: document.getElementById('tool_serper_enabled').checked, api_key: document.getElementById('tool_serper_key').value, max_results: parseInt(document.getElementById('tool_serper_max').value) || 5 },
+      brave: { enabled: document.getElementById('tool_brave_enabled').checked, api_key: document.getElementById('tool_brave_key').value, max_results: parseInt(document.getElementById('tool_brave_max').value) || 5 },
+    },
+    google: { impersonate_email: document.getElementById('tool_google_email').value },
+  };
+  fetch(API + '/api/settings/tools', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { settingsToast('tools', 'Guardado', true); markRestart(); })
+    .catch(e => settingsToast('tools', 'Error: ' + e.message, false));
+}
+
+function uploadSA(file) {
+  if (!file) return;
+  const status = document.getElementById('uploadStatus');
+  status.innerHTML = '<span class="spinner"></span> Subiendo...';
+  status.style.color = 'var(--text-muted)';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fetch(API + '/api/settings/upload/google-sa', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token },
+    body: fd
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      status.textContent = 'Subido: ' + (data.client_email || '');
+      status.style.color = 'var(--success)';
+      markRestart();
+    })
+    .catch(e => {
+      status.textContent = 'Error: ' + e.message;
+      status.style.color = 'var(--error)';
+    });
+}
+
+// Services
+function loadServices() {
+  const el = document.getElementById('settingsSection_services');
+  el.innerHTML = '<div class="spinner"></div> Cargando...';
+  fetch(API + '/api/settings/services', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderServices(data))
+    .catch(e => { el.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderServices(data) {
+  const hb = data.heartbeat || {};
+  const sn = data.sentinel || {};
+  const dv = data.devices || {};
+  let html = '';
+  html += '<div class="settings-card"><h3>Heartbeat</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_hb_enabled', hb.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Intervalo (min)</label><input type="number" id="svc_hb_interval" value="' + (hb.interval || 45) + '" min="5" max="1440"></div>';
+  html += '</div>';
+  html += '<div class="settings-card"><h3>Sentinel</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_sn_enabled', sn.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Intervalo (seg)</label><input type="number" id="svc_sn_interval" value="' + (sn.interval_seconds || 120) + '" min="30" max="3600"></div>';
+  html += '</div>';
+  html += '<div class="settings-card"><h3>Devices</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_dv_enabled', dv.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Monitor USB</label>' + toggle('svc_dv_usb', dv.monitor_usb) + '</div>';
+  html += '</div>';
+
+  html += '<div class="settings-actions">';
+  html += '<button class="btn btn-primary" onclick="saveServices()">Guardar</button>';
+  html += '<span class="settings-toast" id="toast_services"></span></div>';
+  document.getElementById('settingsSection_services').innerHTML = html;
+}
+
+function saveServices() {
+  const body = {
+    heartbeat: { enabled: document.getElementById('svc_hb_enabled').checked, interval: parseInt(document.getElementById('svc_hb_interval').value) || 45 },
+    sentinel: { enabled: document.getElementById('svc_sn_enabled').checked, interval_seconds: parseInt(document.getElementById('svc_sn_interval').value) || 120 },
+    devices: { enabled: document.getElementById('svc_dv_enabled').checked, monitor_usb: document.getElementById('svc_dv_usb').checked },
+  };
+  fetch(API + '/api/settings/services', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { settingsToast('services', 'Guardado', true); markRestart(); })
+    .catch(e => settingsToast('services', 'Error: ' + e.message, false));
+}
+
+// Agent
+function loadAgent() {
+  const el = document.getElementById('settingsSection_agent');
+  el.innerHTML = '<div class="spinner"></div> Cargando...';
+  fetch(API + '/api/settings/agent', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderAgent(data))
+    .catch(e => { el.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderAgent(data) {
+  let html = '<div class="settings-card"><h3>Agente por defecto</h3>';
+  html += '<div class="settings-row"><label>Provider</label><input type="text" id="agent_provider" value="' + esc(data.provider || '') + '" placeholder="(auto-detect)"></div>';
+  html += '<div class="settings-row"><label>Modelo</label><input type="text" id="agent_model" value="' + esc(data.model || '') + '" placeholder="e.g. gpt-4o"></div>';
+  html += '<div class="settings-row"><label>Temperature</label><input type="number" id="agent_temp" value="' + (data.temperature || 0.7) + '" min="0" max="2" step="0.1"></div>';
+  html += '<div class="settings-row"><label>Max Tokens</label><input type="number" id="agent_tokens" value="' + (data.max_tokens || 8192) + '" min="100" max="128000"></div>';
+  html += '<div class="settings-row"><label>Max Tool Iters</label><input type="number" id="agent_iters" value="' + (data.max_tool_iterations || 20) + '" min="1" max="100"></div>';
+  html += '</div>';
+
+  html += '<div class="settings-actions">';
+  html += '<button class="btn btn-primary" onclick="saveAgent()">Guardar</button>';
+  html += '<span class="settings-toast" id="toast_agent"></span></div>';
+  document.getElementById('settingsSection_agent').innerHTML = html;
+}
+
+function saveAgent() {
+  const body = {
+    provider: document.getElementById('agent_provider').value,
+    model: document.getElementById('agent_model').value,
+    temperature: parseFloat(document.getElementById('agent_temp').value) || 0.7,
+    max_tokens: parseInt(document.getElementById('agent_tokens').value) || 8192,
+    max_tool_iterations: parseInt(document.getElementById('agent_iters').value) || 20,
+  };
+  fetch(API + '/api/settings/agent', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { settingsToast('agent', 'Guardado', true); markRestart(); })
+    .catch(e => settingsToast('agent', 'Error: ' + e.message, false));
 }
 </script>
 </body>
