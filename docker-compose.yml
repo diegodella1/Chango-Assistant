@@ -46,8 +46,15 @@ services:
       dockerfile: Dockerfile
     container_name: picoclaw
     restart: unless-stopped
+    network_mode: host
+    privileged: true
+    pid: host
+    environment:
+      - TZ=America/Argentina/Buenos_Aires
+      - GH_CONFIG_DIR=/hostfs/home/diego/.config/gh
     volumes:
       - /home/diego/.picoclaw:/root/.picoclaw
+      - /:/hostfs:ro
     command: ["gateway"]
 
 volumes:

@@ -53,6 +53,7 @@ type Config struct {
 	Devices   DevicesConfig   `json:"devices"`
 	Sentinel  SentinelConfig  `json:"sentinel"`
 	Council   CouncilConfig   `json:"council"`
+	Admin     AdminConfig     `json:"admin"`
 	mu        sync.RWMutex
 }
 
@@ -194,6 +195,11 @@ type CouncilConfig struct {
 	Enabled bool                  `json:"enabled"`
 	GroupID string                `json:"group_id"` // Telegram group chat ID
 	Members []CouncilMemberConfig `json:"members"`
+}
+
+type AdminConfig struct {
+	Enabled bool   `json:"enabled" env:"PICOCLAW_ADMIN_ENABLED"`
+	Token   string `json:"token" env:"PICOCLAW_ADMIN_TOKEN"`
 }
 
 type ProvidersConfig struct {
@@ -408,6 +414,10 @@ func DefaultConfig() *Config {
 		},
 		Council: CouncilConfig{
 			Enabled: false,
+		},
+		Admin: AdminConfig{
+			Enabled: false,
+			Token:   "",
 		},
 	}
 }

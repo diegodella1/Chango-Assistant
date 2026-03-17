@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/chzyer/readline"
+	"github.com/sipeed/picoclaw/pkg/admin"
 	"github.com/sipeed/picoclaw/pkg/agent"
 	"github.com/sipeed/picoclaw/pkg/auth"
 	"github.com/sipeed/picoclaw/pkg/bus"
@@ -762,6 +763,13 @@ func gatewayCmd() {
 		}
 		json.NewEncoder(w).Encode(status)
 	})
+	// Admin panel
+	if cfg.Admin.Enabled {
+		adminHandler := admin.New(cfg.WorkspacePath(), cfg.Admin.Token)
+		adminHandler.Register(healthMux)
+		fmt.Println("✓ Admin panel enabled at /admin")
+	}
+
 	healthAddr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
 	healthServer := &http.Server{Addr: healthAddr, Handler: healthMux}
 	go func() {
