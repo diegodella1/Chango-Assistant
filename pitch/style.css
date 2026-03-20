@@ -49,6 +49,23 @@ nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+/* Progress bar under nav */
+.nav-progress {
+  width: 100%;
+  height: 3px;
+  background: var(--border);
+  margin-top: 0.5rem;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.nav-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--green));
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
 
 nav .brand {
@@ -104,6 +121,17 @@ nav .arrows a {
 
 nav .arrows a:hover { color: var(--text); background: var(--bg-card); }
 nav .arrows a.disabled { opacity: 0.3; pointer-events: none; }
+
+/* Keyboard hint on arrows */
+nav .arrows a[title]::after {
+  content: attr(title);
+  display: none;
+}
+
+@media (max-width: 600px) {
+  nav .slides a span { display: none; }
+  nav { padding: 0.5rem 1rem; }
+}
 
 /* Main content */
 main {
