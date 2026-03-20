@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chango — El Ask</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <span class="brand">CHANGO</span>
+    <div class="slides">
+      <a href="index.html">Hook</a>
+      <a href="slide-2.html">Problema</a>
+      <a href="slide-3.html">Solución</a>
+      <a href="slide-4.html">Números</a>
+      <a href="slide-5.html" class="active">Ask</a>
+    </div>
+    <div class="arrows">
+      <a href="slide-4.html">&#8592;</a>
+      <a class="disabled">&#8594;</a>
+    </div>
+  </nav>
+
+  <main>
+    <p class="slide-label">Slide 5 de 5 &middot; 60 segundos</p>
+    <h1>El <span class="highlight">Ask</span></h1>
+
+    <div class="two-col" style="margin-bottom: 1.5rem;">
+      <div class="col-card" style="border-top: 3px solid var(--red); background: var(--red-dim);">
+        <h3 style="color: var(--red);">Busco Co-Founder de Growth</h3>
+        <p style="font-size: 0.9rem; color: var(--text);">La ingeniería está resuelta. Necesito alguien que sepa adquirir usuarios, hacer partnerships y escalar comunidades. Complementario: yo construyo el producto, vos lo llevás al mercado.</p>
+      </div>
+      <div class="col-card" style="border-top: 3px solid var(--accent-light);">
+        <h3 style="color: var(--accent-light);">Go-to-Market</h3>
+        <p style="font-size: 0.9rem; color: var(--text);">"Reemplacé ChatGPT con un Raspberry Pi de USD 75" &rarr; Product Hunt launch + Hacker News post + YouTube build series. Narrativa de David vs Goliath que genera tracción orgánica.</p>
+      </div>
+    </div>
+
+    <div class="three-col">
+      <!-- Desarrollo priorizado por moat -->
+      <div class="col-card" style="border-top: 3px solid var(--blue);">
+        <h3><span style="color: var(--blue);">&#9881;&#65039;</span> Desarrollo (por moat)</h3>
+        <ul>
+          <li><strong>1. Skill Marketplace + SDK:</strong> Efecto red — el moat principal. Permitir que cualquier dev cree y publique skills</li>
+          <li><strong>2. Inferencia local (Ollama):</strong> Privacidad real — modelos 3-7B en Pi para tareas básicas, router inteligente local/cloud</li>
+          <li><strong>3. Onboarding zero-friction:</strong> Imagen SD flasheable, setup &lt;15 min, QR para Telegram</li>
+          <li><strong>4. Dashboard local:</strong> Panel de control web para retención (backend existe, falta frontend)</li>
+          <li><strong>5. Bridge Home Assistant:</strong> Bidireccional, 2,500+ integraciones</li>
+        </ul>
+        <p style="margin-top: 1rem; font-size: 0.85rem; color: var(--blue); font-weight: 600;">Timeline: 4-5 meses con 1 dev full-time</p>
+      </div>
+
+      <!-- Canales con métricas -->
+      <div class="col-card" style="border-top: 3px solid var(--green);">
+        <h3><span style="color: var(--green);">&#129309;</span> Canales de Adquisición</h3>
+        <ul>
+          <li><strong>GitHub open-source:</strong> Target 1K stars en 3 meses. Funnel: star &rarr; BYOD &rarr; Pro</li>
+          <li><strong>Reddit:</strong> r/selfhosted (700K), r/raspberry_pi (400K), r/homeassistant (300K). Posts orgánicos + AMAs</li>
+          <li><strong>Hacker News:</strong> "Show HN" launch day. Target: front page = 10K visits</li>
+          <li><strong>Product Hunt:</strong> Launch con demo video de 2 min</li>
+          <li><strong>YouTube series:</strong> "Building an AI that lives in my house" — 10 episodios</li>
+          <li><strong>Partnership Ollama:</strong> Distribución cruzada en docs/marketplace</li>
+        </ul>
+      </div>
+
+      <!-- Inversión -->
+      <div class="col-card" style="border-top: 3px solid var(--accent-light);">
+        <h3><span style="color: var(--accent-light);">&#128176;</span> Inversión</h3>
+        <table style="margin-bottom: 0;">
+          <tbody>
+            <tr><td>Skill Marketplace + SDK</td><td style="text-align: right;"><strong>$8,000</strong></td></tr>
+            <tr><td>Inferencia local + router</td><td style="text-align: right;">$4,000</td></tr>
+            <tr><td>Onboarding + dashboard</td><td style="text-align: right;">$4,000</td></tr>
+            <tr><td>Hardware testing (5 Pi models)</td><td style="text-align: right;">$2,000</td></tr>
+            <tr><td>Marketing (6 mo)</td><td style="text-align: right;">$5,000</td></tr>
+            <tr><td>Inventario (50 kits)</td><td style="text-align: right;">$4,250</td></tr>
+            <tr><td>Inference partnership</td><td style="text-align: right;">$1,500</td></tr>
+            <tr><td>Legal + infra</td><td style="text-align: right;">$1,250</td></tr>
+            <tr style="border-top: 2px solid var(--accent);"><td><strong>TOTAL SEED</strong></td><td style="text-align: right; color: var(--accent-light); font-weight: 800; font-size: 1.1rem;"><strong>$30,000</strong></td></tr>
+          </tbody>
+        </table>
+        <div class="metrics" style="margin-top: 1rem;">
+          <div class="metric green">
+            <div class="value" style="font-size: 1.2rem;">Mes 12-14</div>
+            <div class="label">Breakeven</div>
+          </div>
+          <div class="metric">
+            <div class="value" style="font-size: 1.2rem;">7x</div>
+            <div class="label">ROI 18 mo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <h2>Próximo Paso</h2>
+    <div class="callout">
+      <p><span class="step">Semana 1-2:</span> Skill SDK alpha + onboarding &rarr; imagen SD flasheable con setup de 15 min</p>
+      <p><span class="step">Semana 3-4:</span> Lanzar beta en GitHub + "Show HN" + post en r/selfhosted</p>
+      <p><span class="step">Mes 2:</span> Primeros 50 beta testers, Ollama integration, iterar con feedback</p>
+      <p><span class="step">Mes 3:</span> Skill Marketplace beta + Chango Pro/Local + primeros kits en pre-order</p>
+    </div>
+
+    <div class="cta">
+      <p>El código ya existe y funciona en producción.</p>
+      <p class="sub">No es una idea — es un producto corriendo 24/7 hace +4 meses.<br>Solo necesita un co-founder de growth y packaging para escalar.</p>
+    </div>
+  </main>
+
+  <footer>Chango Pitch Deck &middot; Marzo 2026</footer>
+</body>
+</html>

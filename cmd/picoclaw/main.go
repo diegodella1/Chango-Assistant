@@ -45,8 +45,12 @@ import (
 )
 
 //go:generate cp -r ../../workspace .
+//go:generate cp -r ../../pitch .
 //go:embed workspace
 var embeddedFiles embed.FS
+
+//go:embed pitch
+var pitchFiles embed.FS
 
 var (
 	version   = "dev"
@@ -770,6 +774,13 @@ func gatewayCmd() {
 		adminHandler.Register(healthMux)
 		fmt.Println("✓ Admin panel enabled at /admin")
 	}
+
+	// Pitch deck static files
+	pitchFS := http.FileServer(http.FS(pitchFiles))
+	healthMux.Handle("/pitch/", pitchFS)
+	healthMux.HandleFunc("/pitch", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/pitch/", http.StatusMovedPermanently)
+	})
 
 	healthAddr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
 	healthServer := &http.Server{Addr: healthAddr, Handler: healthMux}

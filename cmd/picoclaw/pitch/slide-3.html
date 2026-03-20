@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chango — Solución + Moats</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <span class="brand">CHANGO</span>
+    <div class="slides">
+      <a href="index.html">Hook</a>
+      <a href="slide-2.html">Problema</a>
+      <a href="slide-3.html" class="active">Solución</a>
+      <a href="slide-4.html">Números</a>
+      <a href="slide-5.html">Ask</a>
+    </div>
+    <div class="arrows">
+      <a href="slide-2.html">&#8592;</a>
+      <a href="slide-4.html">&#8594;</a>
+    </div>
+  </nav>
+
+  <main>
+    <p class="slide-label">Slide 3 de 5 &middot; 60 segundos</p>
+    <h1>Solución + <span class="highlight">Moats</span></h1>
+
+    <p class="desc">
+      <strong>Chango es un agente AI autónomo que corre 24/7 en hardware dedicado (Raspberry Pi, USD 75), se comunica por Telegram, y ejecuta tareas reales</strong> — desde controlar luces hasta monitorear servidores, generar contenido y aprender de cada conversación.
+    </p>
+    <p class="desc">
+      <strong>Un solo binario Go de 24MB que reemplaza 5+ herramientas SaaS</strong> con zero dependencia de la nube (excepto el LLM API, intercambiable entre 9+ proveedores).
+    </p>
+
+    <hr class="divider">
+    <h2>4 Moats Defensibles</h2>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-icon">&#127968;</div>
+        <h3>Always-On, Hardware Dedicado</h3>
+        <p>Corre en un Pi de USD 75, 130MB de RAM. No depende de que tu laptop esté prendida. 24/7 real, no "cuando abrís la app".</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128722;</div>
+        <h3>Skill Marketplace (Efecto Red)</h3>
+        <p>Cualquier dev puede crear y compartir skills. Más usuarios = más skills = más usuarios. Comisión 15% en skills premium. Una vez que hay 500+ skills, no podés replicar el ecosistema.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#129504;</div>
+        <h3>Inferencia Local + Cloud Híbrida</h3>
+        <p>Modelos 3-7B corren localmente en el Pi para tareas básicas (clasificación, rutinas, resúmenes). Cloud solo para lo pesado. Privacidad real, no prometida. Router inteligente elige el mejor path.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#129302;</div>
+        <h3>Agente Autónomo con Aprendizaje</h3>
+        <p>Heartbeat, cron jobs, Sentinel, reflexión nocturna. No es un chatbot que responde — es un agente que aprende de vos, anticipa necesidades y actúa solo. Un paradigma, no un feature.</p>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <h2>El Flywheel</h2>
+
+    <div class="flywheel">
+      <div class="flywheel-step">
+        <span class="flywheel-num">1</span>
+        <span>Usuarios comparten skills</span>
+      </div>
+      <div class="flywheel-arrow">&rarr;</div>
+      <div class="flywheel-step">
+        <span class="flywheel-num">2</span>
+        <span>Más skills en marketplace</span>
+      </div>
+      <div class="flywheel-arrow">&rarr;</div>
+      <div class="flywheel-step">
+        <span class="flywheel-num">3</span>
+        <span>Atrae más usuarios</span>
+      </div>
+      <div class="flywheel-arrow">&rarr;</div>
+      <div class="flywheel-step">
+        <span class="flywheel-num">4</span>
+        <span>Mejores datos de routing</span>
+      </div>
+      <div class="flywheel-arrow">&rarr;</div>
+      <div class="flywheel-step">
+        <span class="flywheel-num">5</span>
+        <span>Mejor inferencia local</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <h2>Comparativa Honesta</h2>
+
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>Chango</th>
+            <th>ChatGPT / Claude</th>
+            <th>Home Assistant</th>
+            <th>OpenClaw</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Hardware dedicado (Pi)</td>
+            <td class="yes">&#10003;</td>
+            <td class="no">Cloud</td>
+            <td class="no">Solo domótica</td>
+            <td class="no">Requiere PC</td>
+          </tr>
+          <tr>
+            <td>Always-on 24/7</td>
+            <td class="yes">&#10003;</td>
+            <td class="no">&#10007;</td>
+            <td class="yes">&#10003;</td>
+            <td class="no">&#10007;</td>
+          </tr>
+          <tr>
+            <td>Skill Marketplace</td>
+            <td class="partial">En desarrollo</td>
+            <td class="no">&#10007;</td>
+            <td class="yes">2,500+ integ.</td>
+            <td class="no">&#10007;</td>
+          </tr>
+          <tr>
+            <td>Inferencia local</td>
+            <td class="yes">&#10003; 3-7B en Pi</td>
+            <td class="no">&#10007;</td>
+            <td class="no">&#10007;</td>
+            <td class="yes">&#10003;</td>
+          </tr>
+          <tr>
+            <td>Smart home nativo</td>
+            <td class="partial">Básico (WiFi)</td>
+            <td class="no">&#10007;</td>
+            <td class="yes">&#10003; Líder</td>
+            <td class="no">&#10007;</td>
+          </tr>
+          <tr>
+            <td>Multi-LLM runtime</td>
+            <td class="yes">&#10003; 9+ modelos</td>
+            <td class="no">1 vendor</td>
+            <td class="no">&#10007;</td>
+            <td class="yes">&#10003;</td>
+          </tr>
+          <tr>
+            <td>Agente autónomo</td>
+            <td class="yes">&#10003;</td>
+            <td class="no">&#10007;</td>
+            <td class="partial">Automations</td>
+            <td class="partial">Parcial</td>
+          </tr>
+          <tr>
+            <td>Calidad LLM (GPT-4 class)</td>
+            <td class="yes">&#10003; via cloud</td>
+            <td class="yes">&#10003; Nativo</td>
+            <td class="no">&#10007;</td>
+            <td class="yes">&#10003;</td>
+          </tr>
+          <tr>
+            <td>Ecosistema maduro</td>
+            <td class="no">Nuevo</td>
+            <td class="yes">&#10003;</td>
+            <td class="yes">&#10003;</td>
+            <td class="partial">Creciendo</td>
+          </tr>
+          <tr>
+            <td>Setup time</td>
+            <td class="yes">&lt; 30 min</td>
+            <td class="yes">Instant</td>
+            <td class="no">Horas/días</td>
+            <td class="partial">~1 hora</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="positioning">"El primer AI autónomo que vive en tu casa, no en la nube."</div>
+  </main>
+
+  <footer>Chango Pitch Deck &middot; Marzo 2026</footer>
+</body>
+</html>

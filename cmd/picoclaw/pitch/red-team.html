@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chango — Red Team Analysis</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .investor { margin-bottom: 3rem; }
+    .investor-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .investor-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .investor-header h2 { margin-bottom: 0; }
+    .investor-header .philosophy { font-size: 0.85rem; color: var(--text-muted); font-weight: 400; }
+
+    .concern-box {
+      background: var(--red-dim);
+      border: 1px solid rgba(255,107,107,0.2);
+      border-left: 3px solid var(--red);
+      border-radius: 0 12px 12px 0;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .concern-box strong { color: var(--red); }
+    .concern-box p { margin-bottom: 0; font-size: 0.95rem; }
+
+    .questions { margin-bottom: 1.5rem; }
+    .questions ol { padding-left: 1.25rem; }
+    .questions li {
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .questions li strong { color: var(--text); }
+
+    .want-box {
+      background: var(--yellow-dim);
+      border: 1px solid rgba(255,217,61,0.2);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .want-box h3 { color: var(--yellow); font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .want-box ul { padding-left: 1.25rem; }
+    .want-box li { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.35rem; }
+
+    .like-box {
+      background: var(--green-dim);
+      border: 1px solid rgba(0,210,160,0.2);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .like-box h3 { color: var(--green); font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .like-box p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0; }
+
+    .synthesis-section { margin-bottom: 2.5rem; }
+    .weakness-item, .strength-item, .fix-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .weakness-item { border-left: 3px solid var(--red); }
+    .strength-item { border-left: 3px solid var(--green); }
+    .fix-item { border-left: 3px solid var(--blue); }
+    .weakness-item h3 { color: var(--red); }
+    .strength-item h3 { color: var(--green); }
+    .fix-item h3 { color: var(--blue); }
+    .item-body { font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; }
+    .item-body strong { color: var(--text); }
+
+    .new-positioning {
+      background: linear-gradient(135deg, rgba(108,92,231,0.15), rgba(0,210,160,0.1));
+      border: 1px solid rgba(108,92,231,0.3);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-top: 2rem;
+    }
+    .new-positioning h2 { margin-bottom: 0.5rem; }
+    .new-positioning .tagline-new {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent-light);
+      margin-bottom: 1.5rem;
+    }
+    .new-positioning blockquote {
+      font-size: 0.95rem;
+      color: var(--text);
+      line-height: 1.7;
+      border-left: 3px solid var(--accent);
+      padding-left: 1.25rem;
+      margin: 0;
+    }
+
+    .bottom-line {
+      background: var(--bg-card);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-top: 2.5rem;
+      text-align: center;
+    }
+    .bottom-line p { color: var(--text); font-size: 1rem; margin-bottom: 0.75rem; }
+    .bottom-line p:last-child { margin-bottom: 0; }
+    .bottom-line strong { color: var(--accent-light); }
+  </style>
+</head>
+<body>
+  <nav>
+    <span class="brand">CHANGO</span>
+    <div class="slides">
+      <a href="index.html">Hook</a>
+      <a href="slide-2.html">Problema</a>
+      <a href="slide-3.html">Solución</a>
+      <a href="slide-4.html">Números</a>
+      <a href="slide-5.html">Ask</a>
+      <a href="red-team.html" class="active">Red Team</a>
+    </div>
+    <div class="arrows">
+      <a href="slide-5.html">&#8592;</a>
+      <a class="disabled">&#8594;</a>
+    </div>
+  </nav>
+
+  <main>
+    <p class="slide-label">Anexo &middot; Red Team Analysis</p>
+    <h1>Red Team: <span class="highlight">5 Mentes</span></h1>
+    <p class="desc">Análisis brutal del pitch desde la perspectiva de Musk, Thiel, Bezos, Brin y Page. Cada uno destruye el pitch desde su framework — y eso nos hace más fuertes.</p>
+
+    <!-- ==================== MUSK ==================== -->
+    <hr class="divider">
+    <div class="investor">
+      <div class="investor-header">
+        <div class="investor-avatar" style="background: rgba(255,107,107,0.15); color: var(--red);">EM</div>
+        <div>
+          <h2>Elon Musk</h2>
+          <span class="philosophy">First Principles &middot; 10x Thinking &middot; Integración Vertical</span>
+        </div>
+      </div>
+
+      <div class="concern-box">
+        <strong>Core concern:</strong>
+        <p>Los unit economics no sobreviven un análisis first-principles. Vendés un "remote control" sin el TV: el usuario paga $9/mo a vos + $20-50/mo en API de LLM. ¿Total? $30-60/mo. ChatGPT cuesta $20. ¿Dónde está la ventaja 10x?</p>
+      </div>
+
+      <div class="questions">
+        <h3>Preguntas duras</h3>
+        <ol>
+          <li><strong>"¿Cuál es el costo real por hora de inferencia para el usuario?"</strong> Si paga $20-50/mo a OpenAI encima de tu subscription, ¿por qué no usar ChatGPT directo?</li>
+          <li><strong>"¿Por qué no integración vertical?"</strong> Yo construí mis propios cohetes, baterías y chips. Un wrapper alrededor de OpenRouter no es integración vertical — es dependencia.</li>
+          <li><strong>"¿Puede un Pi 5 correr un modelo local útil?"</strong> Si no, sos un thin client llamando a la nube, lo cual contradice la narrativa de privacidad/edge.</li>
+          <li><strong>"Tu TAM de $56B no tiene sentido."</strong> ¿Cuánta gente (a) tiene un Pi, (b) quiere un agente AI, (c) es técnica para instalarlo, Y (d) va a pagar mensual? Quizás 50,000 personas en el mundo.</li>
+        </ol>
+      </div>
+
+      <div class="want-box">
+        <h3>Qué querría ver</h3>
+        <ul>
+          <li>Inferencia local en el Pi (aunque sea un modelo chico para tareas básicas)</li>
+          <li>Costo del LLM transparente o bundleado — ser dueño del stack completo</li>
+          <li>Un path a reducción 10x del costo vs cloud alternatives</li>
+          <li>Probar que funciona para usuarios no-técnicos, o admitir que es nicho developer</li>
+        </ul>
+      </div>
+
+      <div class="like-box">
+        <h3>Lo que le gusta</h3>
+        <p>La eficiencia de ingeniería: un binario Go de 24MB haciendo agent loops, TTS, smart home, cron y sentinel monitoring a 130MB de RAM. "Buena ingeniería, modelo de negocio equivocado."</p>
+      </div>
+    </div>
+
+    <!-- ==================== THIEL ==================== -->
+    <div class="investor">
+      <div class="investor-header">
+        <div class="investor-avatar" style="background: rgba(108,92,231,0.15); color: var(--accent-light);">PT</div>
+        <div>
+          <h2>Peter Thiel</h2>
+          <span class="philosophy">Zero to One &middot; Monopolio &middot; Secretos</span>
+        </div>
+      </div>
+
+      <div class="concern-box">
+        <strong>Core concern:</strong>
+        <p>Falla la Pregunta del Monopolio. Tu "mercado chico" (agentes AI self-hosted en Pi) ya tiene a OpenClaw con 247K stars. Estás compitiendo, no monopolizando. Y la competencia, según Thiel, es para losers.</p>
+      </div>
+
+      <div class="questions">
+        <h3>Las 7 Preguntas de Thiel</h3>
+        <ol>
+          <li><strong>Engineering:</strong> "¿Es 10x mejor que la alternativa, o solo marginalmente diferente?" Correr en un Pi es una restricción de hardware, no un breakthrough tecnológico.</li>
+          <li><strong>Secret:</strong> "¿Qué sabés que nadie más sabe?" Que los AI agents deberían correr en hardware barato no es un secreto — las 247K stars de OpenClaw lo prueban.</li>
+          <li><strong>People:</strong> "Founder solo, background de CPO, no es un ML engineer. ¿Dónde está el moat técnico?"</li>
+          <li><strong>Durability:</strong> "En 10 años, ¿existirán los edge devices, o 6G hará irrelevante la latencia cloud?"</li>
+          <li><strong>Distribution:</strong> "¿Cómo llegás a tus primeros 1,000 pagantes? 'Telegram bot' no es una estrategia de distribución."</li>
+        </ol>
+      </div>
+
+      <div class="want-box">
+        <h3>Qué querría ver</h3>
+        <ul>
+          <li>Un verdadero "secreto" — algo no-obvio sobre cómo debería funcionar la AI personal</li>
+          <li>Un nicho más chico y dominarlo totalmente (ej: "AI agents para smart home en español/LATAM")</li>
+          <li>Un moat defendible: datos propietarios, fine-tune único, partnership de hardware, o efecto red</li>
+          <li>Articular por qué OpenClaw (247K stars, MIT, gratis) no te come</li>
+        </ul>
+      </div>
+
+      <div class="like-box">
+        <h3>Lo que le gusta</h3>
+        <p>El seed ask de $28K. Thiel valora eficiencia de capital y founders que no persiguen rondas de vanidad. Que un founder construya un producto así de completo por esencialmente $0 demuestra convicción.</p>
+      </div>
+    </div>
+
+    <!-- ==================== BEZOS ==================== -->
+    <div class="investor">
+      <div class="investor-header">
+        <div class="investor-avatar" style="background: rgba(77,171,247,0.15); color: var(--blue);">JB</div>
+        <div>
+          <h2>Jeff Bezos</h2>
+          <span class="philosophy">Customer Obsession &middot; Flywheel &middot; Working Backwards</span>
+        </div>
+      </div>
+
+      <div class="concern-box">
+        <strong>Core concern:</strong>
+        <p>No hay flywheel. ¿Dónde está el ciclo virtuoso? Chango es un binario single-tenant en un Pi. Que el Usuario A se sume no mejora la experiencia del Usuario B. No hay efecto red, no hay learning compartido, no hay marketplace.</p>
+      </div>
+
+      <div class="questions">
+        <h3>Preguntas duras</h3>
+        <ol>
+          <li><strong>"¿Quién es el cliente y qué problema contrata a este producto para resolver?"</strong> "Un AI agent en un Pi" es una descripción técnica, no una necesidad del cliente. Escribí el press release primero.</li>
+          <li><strong>"¿Cuál es el switching cost del cliente?"</strong> Si la inteligencia viene de APIs y la data son archivos markdown, migrar a OpenClaw es trivial. Sin lock-in no hay retención.</li>
+          <li><strong>"Tus proyecciones dicen 200 free users al mes 6. ¿Cómo exactamente?"</strong> Quiero ver funnel específico, costo por lead, conversión free→paid, churn rate.</li>
+          <li><strong>"Decís LTV $365 con CAC &lt;$30. Mostrá la data."</strong> ¿Cuánto retuvieron los paying users? ¿No hay paying users todavía? Entonces son fantasías, no métricas.</li>
+          <li><strong>"¿Cómo es la experiencia en los primeros 5 minutos?"</strong> Si el setup es flashear una SD, SSH, configurar JSON y sacar un token de Telegram — perdiste al 95%.</li>
+        </ol>
+      </div>
+
+      <div class="want-box">
+        <h3>Qué querría ver</h3>
+        <ul>
+          <li>El press release "working backwards": el cliente, el problema, la experiencia mágica</li>
+          <li>Diseñar un flywheel: community skills, configs compartidos, marketplace</li>
+          <li>Data real de retención, aunque sea 10 usuarios en 3 meses</li>
+          <li>First-run zero-friction: sacar el Pi de la caja, enchufar, escanear QR, empezar a chatear</li>
+        </ul>
+      </div>
+
+      <div class="like-box">
+        <h3>Lo que le gusta</h3>
+        <p>El concepto de hardware dedicado always-on. Bezos invirtió temprano en Alexa — un dispositivo dedicado para AI. La idea de que los agentes AI necesitan presencia física persistente en el hogar (no solo un tab del browser) resuena con la tesis Echo/Alexa.</p>
+      </div>
+    </div>
+
+    <!-- ==================== BRIN ==================== -->
+    <div class="investor">
+      <div class="investor-header">
+        <div class="investor-avatar" style="background: rgba(0,210,160,0.15); color: var(--green);">SB</div>
+        <div>
+          <h2>Sergey Brin</h2>
+          <span class="philosophy">Technical Depth &middot; Data Moats &middot; Scalability</span>
+        </div>
+      </div>
+
+      <div class="concern-box">
+        <strong>Core concern:</strong>
+        <p>No hay tecnología propietaria ni ventaja de datos. Chango es una capa de orquestación — well-built, pero fundamentalmente pegamento entre modelos ajenos (OpenRouter), APIs ajenas (Telegram) y protocolos ajenos (Magic Home). La "inteligencia" es alquilada.</p>
+      </div>
+
+      <div class="questions">
+        <h3>Preguntas duras</h3>
+        <ol>
+          <li><strong>"¿Qué pasa cuando OpenAI o Google lanzan un agente 24/7 a $20/mo que integra todo?"</strong> Gemini, Apple Intelligence, Meta Llama agents — todos van hacia exactamente este producto. ¿Qué sobrevive?</li>
+          <li><strong>"Multi-LLM runtime switching es un feature, no un moat."</strong> Cualquier wrapper de OpenRouter puede hacer eso. ¿Cuál es la innovación técnica real?</li>
+          <li><strong>"¿Dónde está el data loop?"</strong> Google se convirtió en Google porque cada búsqueda mejoraba la siguiente. ¿Chango mejora cuanto más se usa? ¿Cómo? La "memory tool" que guarda en markdown, ¿es ML real o guardar texto en archivos?</li>
+          <li><strong>"El 42% de devs corriendo LLMs locales — ¿cuántos pagarían por un agent en Pi vs correr Ollama en su laptop?"</strong></li>
+        </ol>
+      </div>
+
+      <div class="want-box">
+        <h3>Qué querría ver</h3>
+        <ul>
+          <li>Un moat técnico real: modelo fine-tuneado para agent tasks que corra EN el Pi</li>
+          <li>Ventaja de datos: learnings agregados anónimos, modelos de tool-use entrenados por la comunidad</li>
+          <li>Benchmarks publicados mostrando que Chango agents superan al chat genérico en tareas específicas</li>
+          <li>Open-source el core, monetizar la plataforma/servicios (modelo Google)</li>
+        </ul>
+      </div>
+
+      <div class="like-box">
+        <h3>Lo que le gusta</h3>
+        <p>El approach Go + single binary. Un binario de 24MB que maneja agent loops, pipeline TTS, transcripción de voz, control de dispositivos, cron scheduling y system monitoring. Esa densidad técnica impresiona.</p>
+      </div>
+    </div>
+
+    <!-- ==================== PAGE ==================== -->
+    <div class="investor">
+      <div class="investor-header">
+        <div class="investor-avatar" style="background: rgba(255,217,61,0.15); color: var(--yellow);">LP</div>
+        <div>
+          <h2>Larry Page</h2>
+          <span class="philosophy">10x Improvement &middot; Platform Thinking &middot; Ambitious Scope</span>
+        </div>
+      </div>
+
+      <div class="concern-box">
+        <strong>Core concern:</strong>
+        <p>Esto no es 10x mejor en nada. Vs ChatGPT: no es más inteligente ni más barato. Vs Home Assistant: menos dispositivos, ecosistema menos maduro. Vs OpenClaw: menos features, comunidad más chica. Chango es competente en muchas cosas, pero 10x en ninguna.</p>
+      </div>
+
+      <div class="questions">
+        <h3>Preguntas duras</h3>
+        <ol>
+          <li><strong>"¿Cuál es el platform play?"</strong> Android no era un teléfono — era una plataforma para todos los teléfonos. ¿Qué es la plataforma Chango? ¿Un marketplace de skills? ¿Un protocolo agent-to-agent? ¿Un OS para edge AI? Sin tesis de plataforma, es un hobby con precio.</li>
+          <li><strong>"¿Por qué sería una empresa de $1B?"</strong> Tu SOM de $50-200M significa que aunque captures el 100%, serías un small business. El nivel de ambición no matchea lo que estos inversores financian.</li>
+          <li><strong>"¿Qué pasa a escala?"</strong> Con 100,000 usuarios, ¿qué tenés que no tengas con 100? Si la respuesta es "más subscription revenue", es un negocio lineal, no de plataforma.</li>
+          <li><strong>"Home Assistant tiene 80,000+ integraciones y una comunidad masiva. Te llamás 'el Home Assistant de los AI agents'. Pero HA es gratis y tiene 10 años de ventaja. ¿Cuál es tu wedge real?"</strong></li>
+        </ol>
+      </div>
+
+      <div class="want-box">
+        <h3>Qué querría ver</h3>
+        <ul>
+          <li>Definir la capa de plataforma: Chango como OS para AI personal, no una app</li>
+          <li>Extensibilidad: plugin/skill marketplace, ecosistema de developers terceros</li>
+          <li>Apuntar a 10x en UNA dimensión: el más barato ($5/mo all-in), el más privado (full local), o el mejor smart home AI</li>
+          <li>Mostrar un path a 10M usuarios, no 5,000</li>
+        </ul>
+      </div>
+
+      <div class="like-box">
+        <h3>Lo que le gusta</h3>
+        <p>El concepto de "agente autónomo always-on" con heartbeat, cron y sentinel. La mayoría de AI tools son reactivas. Una AI que proactivamente monitorea, agenda, aprende y actúa — eso es un paradigma genuinamente distinto. Si se 10x-ea en una plataforma real, podría ser interesante.</p>
+      </div>
+    </div>
+
+    <!-- ==================== SÍNTESIS ==================== -->
+    <hr class="divider">
+    <h1>Síntesis</h1>
+
+    <!-- DEBILIDADES -->
+    <div class="synthesis-section">
+      <h2 style="color: var(--red);">Top 5 Debilidades (consenso unánime)</h2>
+
+      <div class="weakness-item">
+        <h3>1. Sin moat, sin defensibilidad</h3>
+        <div class="item-body">¿Qué impide que OpenClaw (247K stars, MIT, gratis) agregue soporte Pi mañana? ¿O que Google/Apple lo lancen como feature? Respuesta: nada. No hay tecnología propietaria, no hay efecto red, no hay switching cost, no hay ventaja de datos.</div>
+      </div>
+
+      <div class="weakness-item">
+        <h3>2. Los economics son un espejismo</h3>
+        <div class="item-body">El pitch dice $9/mo pero el usuario paga <strong>$9/mo + $20-50/mo en API LLM</strong>. El "78% de margen" ignora el costo más grande que el cliente absorbe. Los ratios LTV/CAC son proyecciones con <strong>cero paying customers</strong>. Son fantasías, no métricas.</div>
+      </div>
+
+      <div class="weakness-item">
+        <h3>3. Mercado más chico de lo afirmado y ya disputado</h3>
+        <div class="item-body">68M Pis vendidos, pero 70% fueron a clientes industriales. Del 30% hobbyist (~20M), el subset que quiere un AI agent Y va a pagar mensual es diminuto. Mientras tanto, el espacio open-source explota: OpenClaw, LobeHub, AutoGPT, LangBot.</div>
+      </div>
+
+      <div class="weakness-item">
+        <h3>4. Founder solo sin ventaja de distribución</h3>
+        <div class="item-body">CPO background es bueno para producto, pero ¿quién hace ventas, marketing, comunidad y partnerships? No hay estrategia de adquisición creíble. "Telegram" y "GitHub" no son planes de go-to-market.</div>
+      </div>
+
+      <div class="weakness-item">
+        <h3>5. Es un feature, no una empresa</h3>
+        <div class="item-body">Multi-LLM switching, smart home, voice, cron — son features que un dev motivado replica en un fin de semana con OpenClaw + Home Assistant. La integración es conveniente pero no defendible. Cuando BigTech lance sus agentes always-on (y lo harán), Chango se vuelve irrelevante.</div>
+      </div>
+    </div>
+
+    <!-- FORTALEZAS -->
+    <div class="synthesis-section">
+      <h2 style="color: var(--green);">Top 3 Fortalezas (sobrevivieron el red team)</h2>
+
+      <div class="strength-item">
+        <h3>1. Producto real con calidad de ingeniería excepcional</h3>
+        <div class="item-body">24MB Go binary, 130MB RAM, corriendo un agente autónomo con TTS, transcripción, smart home, monitoring, cron y multi-LLM — <strong>construido por una persona</strong>. El producto existe y funciona en producción. Eso es más que el 90% de los pitches.</div>
+      </div>
+
+      <div class="strength-item">
+        <h3>2. El paradigma "agente autónomo always-on" es correcto</h3>
+        <div class="item-body">La apuesta de que la AI debería ser proactiva (heartbeats, tareas programadas, monitoreo ambiental, aprendizaje) y no reactiva, es la dirección correcta. Cada BigTech se mueve hacia acá. Ser temprano en este paradigma es estratégicamente sólido.</div>
+      </div>
+
+      <div class="strength-item">
+        <h3>3. Eficiencia de capital extraordinaria</h3>
+        <div class="item-body">$28K de seed. Producto funcional construido por ~$0 de capital. Demuestra convicción y resourcefulness que los inversores respetan. Si el modelo de negocio fuera correcto, la eficiencia de capital haría de esto una apuesta asimétrica.</div>
+      </div>
+    </div>
+
+    <!-- RECOMENDACIONES -->
+    <div class="synthesis-section">
+      <h2 style="color: var(--blue);">Recomendaciones concretas</h2>
+
+      <div class="fix-item">
+        <h3>Fix #1: Construir un moat real</h3>
+        <div class="item-body">
+          <strong>Skill Marketplace + Community Lock-in.</strong> Lanzar "Chango Skills" donde usuarios comparten y instalan configuraciones de agentes (smart home, workflows, tools custom). OpenClaw no tiene esto. Crear efecto red: "más usuarios comparten skills → mejor la plataforma para todos."<br><br>
+          <strong>Modelo local fine-tuneado.</strong> Un modelo de 1-3B params fine-tuneado para routing de tareas de agente, corriendo EN el Pi. Incluso para intent classification sería un moat técnico genuino.
+        </div>
+      </div>
+
+      <div class="fix-item">
+        <h3>Fix #2: Costos honestos — bundlear o ir full local</h3>
+        <div class="item-body">
+          <strong>Opción A:</strong> Partner con proveedor de inferencia (Groq, Together AI) y bundlear los costos API en $9/mo. "Chango Pro: $9/mo, todo incluido, sin costos ocultos." Aunque el margen baje a 40%, la claridad vale más.<br><br>
+          <strong>Opción B:</strong> All-in en inferencia local. Pi 5 con 8GB puede correr un modelo 3-7B via llama.cpp. No matchea GPT-4 en calidad, pero para domótica, reminders y tareas básicas alcanza. Marketear como "el único AI agent que funciona sin internet."
+        </div>
+      </div>
+
+      <div class="fix-item">
+        <h3>Fix #3: Elegir un nicho y dominarlo</h3>
+        <div class="item-body">
+          Dejar de comparar con el TAM de $56B. El mercado real es "usuarios técnicos que quieren un agente AI dedicado para smart home + productividad personal."<br><br>
+          <strong>Nicho propuesto:</strong> "Smart home AI para hispanohablantes en LATAM" — un mercado que NINGÚN competidor atiende, donde Diego tiene ventaja cultural y de idioma. O: "AI agent privacy-first para SMBs europeas" — ángulo GDPR/soberanía de datos.<br><br>
+          Dominar el nicho antes de expandir. Círculos concéntricos de Thiel.
+        </div>
+      </div>
+
+      <div class="fix-item">
+        <h3>Fix #4: Co-founder de growth + canal de distribución</h3>
+        <div class="item-body">
+          El producto es fuerte; la distribución no existe. Necesitás un co-founder de growth/community.<br><br>
+          <strong>Canales concretos:</strong> (1) Partner con Pi resellers (PiShop, Pimoroni, The Pi Hut) para bundles de hardware. (2) Serie YouTube/TikTok: "Mi Raspberry Pi es mi asistente AI". (3) Launch en Product Hunt + Hacker News con el ángulo: "Reemplacé ChatGPT con un Raspberry Pi de $75."
+        </div>
+      </div>
+
+      <div class="fix-item">
+        <h3>Fix #5: De feature a plataforma</h3>
+        <div class="item-body">
+          <strong>"Chango Protocol":</strong> Estándar para cómo edge AI agents descubren, comunican y comparten capacidades.<br><br>
+          <strong>Plugin SDK:</strong> Que devs terceros puedan agregar tools, integraciones y skills.<br><br>
+          <strong>"Chango Hub":</strong> Dashboard web donde usuarios manejan su agente, navegan skills y ven analytics. Esto se convierte en la capa de plataforma.<br><br>
+          <strong>Visión long-term:</strong> Múltiples Changos en un hogar formando un mesh de agentes especializados (cocina, oficina, taller). Eso es visión de plataforma que inversores pueden financiar.
+        </div>
+      </div>
+    </div>
+
+    <!-- NUEVO POSICIONAMIENTO -->
+    <div class="new-positioning">
+      <h2>Posicionamiento revisado</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;"><s>"El Home Assistant de los AI agents"</s> &larr; invita comparación directa con HA (80K integraciones, gratis)</p>
+      <p class="tagline-new">"El primer AI autónomo que vive en tu casa, no en la nube."</p>
+      <blockquote>
+        Toda AI hoy es un inquilino en el data center de otro. Chango es diferente. Es un agente AI que corre 24/7 en un dispositivo de $75 en tu casa. Aprende tus rutinas, controla tus luces, monitorea tus sistemas y actúa en tu nombre — sin enviar un solo byte a la nube.<br><br>
+        No estamos construyendo otro chatbot. Estamos construyendo el sistema operativo para AI personal — empezando por el único hardware lo suficientemente barato para poner uno en cada hogar.
+      </blockquote>
+    </div>
+
+    <!-- BOTTOM LINE -->
+    <div class="bottom-line">
+      <p><strong>Bottom line</strong></p>
+      <p>El producto es real, la ingeniería es fuerte, y el instinto es correcto.</p>
+      <p>Pero el negocio como está pitcheado hoy es un hobby project bien construido, no una venture-scale company.</p>
+      <p style="margin-top: 1rem;">El path de acá a fundable requiere 3 cosas:<br>
+      <strong>(1) un moat genuino</strong> (marketplace + inferencia local),<br>
+      <strong>(2) economics honestos</strong> (bundlear o ir local),<br>
+      <strong>(3) una tesis de plataforma</strong> que muestre cómo esto se vuelve 100x más grande que el Pi de una persona.</p>
+    </div>
+  </main>
+
+  <footer>Chango Pitch Deck &middot; Marzo 2026 &middot; Red Team Analysis</footer>
+</body>
+</html>

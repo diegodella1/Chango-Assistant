@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chango — Los Números</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <span class="brand">CHANGO</span>
+    <div class="slides">
+      <a href="index.html">Hook</a>
+      <a href="slide-2.html">Problema</a>
+      <a href="slide-3.html">Solución</a>
+      <a href="slide-4.html" class="active">Números</a>
+      <a href="slide-5.html">Ask</a>
+    </div>
+    <div class="arrows">
+      <a href="slide-3.html">&#8592;</a>
+      <a href="slide-5.html">&#8594;</a>
+    </div>
+  </nav>
+
+  <main>
+    <p class="slide-label">Slide 4 de 5 &middot; 60 segundos</p>
+    <h1>Los <span class="highlight">Números</span></h1>
+
+    <div class="disclaimer">
+      Proyecciones basadas en benchmarks del sector. 0 paying customers hoy. Producto en producción +4 meses corriendo 24/7.
+    </div>
+
+    <hr class="divider">
+    <h2>Costo Total para el Usuario (transparente)</h2>
+
+    <div class="three-col">
+      <div class="col-card" style="border-top: 3px solid var(--green);">
+        <h3>Chango Local</h3>
+        <div class="price-tag">USD 9/mo</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Todo incluido. Inferencia local en Pi (modelos 3-7B). Sin API cloud. Calidad suficiente para rutinas, smart home, resúmenes.</p>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">Costo real: hardware USD 75 one-time + USD 9/mo sub</p>
+      </div>
+      <div class="col-card" style="border-top: 3px solid var(--accent-light);">
+        <h3>Chango Pro</h3>
+        <div class="price-tag accent">USD 15/mo</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Incluye USD 6 de API credits bundleados (Groq/Together). Calidad GPT-4 class para tareas complejas + inferencia local para el resto.</p>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">vs ChatGPT Plus USD 20/mo + no tenés control</p>
+      </div>
+      <div class="col-card" style="border-top: 3px solid var(--blue);">
+        <h3>BYOD (Open Source)</h3>
+        <div class="price-tag blue">Gratis</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Core open-source en GitHub. Traé tu propia API key. Sin límites, sin tracking. Para devs que quieren control total.</p>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">Costo real: solo lo que gastés en API (~USD 3-10/mo típico)</p>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="two-col">
+      <!-- Columna izquierda: UNIT ECONOMICS -->
+      <div>
+        <h2>Unit Economics</h2>
+
+        <table>
+          <tbody>
+            <tr><td><strong>Kit Pi + Chango</strong></td><td>USD 149 one-time</td></tr>
+            <tr><td>Costo hardware</td><td>~USD 85 (margen 43%)</td></tr>
+            <tr><td><strong>Chango Pro</strong></td><td>USD 15/mo</td></tr>
+            <tr><td>Costo API bundleado</td><td>~USD 4/user/mo</td></tr>
+            <tr><td>Costo infra software</td><td>~USD 0.50/user/mo</td></tr>
+            <tr><td>Margen Pro</td><td><strong>~70%</strong></td></tr>
+            <tr><td><strong>Chango Local</strong></td><td>USD 9/mo</td></tr>
+            <tr><td>Costo infra (Local)</td><td>~USD 0.50/user/mo</td></tr>
+            <tr><td>Margen Local</td><td><strong>~94%</strong></td></tr>
+            <tr><td><strong>Skill Marketplace</strong></td><td>15% comisión en premium</td></tr>
+          </tbody>
+        </table>
+
+        <div class="metrics" style="margin-top: 1.5rem;">
+          <div class="metric green">
+            <div class="value">$320</div>
+            <div class="label">LTV estimado</div>
+          </div>
+          <div class="metric">
+            <div class="value">&lt;$30</div>
+            <div class="label">CAC target</div>
+          </div>
+          <div class="metric green">
+            <div class="value">10:1</div>
+            <div class="label">LTV:CAC</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Columna derecha: PROYECCIONES -->
+      <div>
+        <h2>Proyecciones</h2>
+
+        <table>
+          <thead>
+            <tr><th></th><th>Mes 4-6</th><th>Mes 9-12</th><th>Mes 18</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Fase</td>
+              <td>Beta + early adopters</td>
+              <td>Launch Pro + kits</td>
+              <td>Marketplace live</td>
+            </tr>
+            <tr>
+              <td>Usuarios BYOD</td>
+              <td>200</td>
+              <td>1,200</td>
+              <td>4,000</td>
+            </tr>
+            <tr>
+              <td>Suscriptores pagos</td>
+              <td>30 Local + 20 Pro</td>
+              <td>250 Local + 150 Pro</td>
+              <td>700 Local + 500 Pro</td>
+            </tr>
+            <tr>
+              <td>Kits vendidos</td>
+              <td>20</td>
+              <td>150</td>
+              <td>400</td>
+            </tr>
+            <tr>
+              <td><strong>MRR subs</strong></td>
+              <td><strong>USD 570</strong></td>
+              <td><strong>USD 4,500</strong></td>
+              <td><strong>USD 13,800</strong></td>
+            </tr>
+            <tr>
+              <td>Marketplace rev.</td>
+              <td>-</td>
+              <td>-</td>
+              <td>USD 500/mo</td>
+            </tr>
+            <tr>
+              <td>Hardware rev. acum.</td>
+              <td>USD 2,980</td>
+              <td>USD 22,350</td>
+              <td>USD 59,600</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <hr class="divider">
+        <h3>Flywheel Economics</h3>
+
+        <div class="callout" style="margin-top: 0;">
+          <p><strong>Skill Marketplace:</strong> Comisión 15% en skills premium. Con 500 skills y 5,000 usuarios, estimamos USD 500-2,000/mo adicionales. Este revenue crece con el ecosistema sin costo marginal.</p>
+          <p><strong>Breakeven software:</strong> ~80 suscriptores Pro (USD 1,200/mo)</p>
+          <p><strong>Breakeven total:</strong> Mes 12-14 con seed de USD 30K</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>Chango Pitch Deck &middot; Marzo 2026</footer>
+</body>
+</html>
