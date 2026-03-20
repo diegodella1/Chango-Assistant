@@ -1,11 +1,14 @@
 // Pitch deck navigation — keyboard + swipe + progress
 (function () {
   const slides = [
-    'index.html', 'slide-2.html', 'slide-3.html',
-    'slide-4.html', 'slide-5.html'
+    'deck.html', 'slide-2.html', 'slide-3.html',
+    'slide-4.html', 'slide-5.html', 'slide-6.html'
   ];
   const path = location.pathname.split('/').pop() || 'index.html';
   const idx = slides.indexOf(path);
+
+  // Only run on deck pages
+  if (idx === -1) return;
 
   // Progress bar
   const bar = document.createElement('div');

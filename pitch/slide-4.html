@@ -10,11 +10,12 @@
   <nav>
     <span class="brand">CHANGO</span>
     <div class="slides">
-      <a href="index.html">Hook</a>
+      <a href="deck.html">Hook</a>
       <a href="slide-2.html">Problema</a>
       <a href="slide-3.html">Solución</a>
       <a href="slide-4.html" class="active">Números</a>
-      <a href="slide-5.html">Ask</a>
+      <a href="slide-5.html">Equipo</a>
+      <a href="slide-6.html">Ask</a>
     </div>
     <div class="arrows">
       <a href="slide-3.html">&#8592;</a>
@@ -23,7 +24,7 @@
   </nav>
 
   <main>
-    <p class="slide-label">Slide 4 de 5 &middot; 60 segundos</p>
+    <p class="slide-label">Slide 4 de 6 &middot; 60 segundos</p>
     <h1>Unit Economics + <span class="highlight">Camino a Rentabilidad</span></h1>
 
     <div class="hero-metrics">
@@ -34,157 +35,86 @@
     </div>
 
     <div class="disclaimer">
-      Proyecciones basadas en benchmarks del sector. 0 paying customers hoy. Producto en producción +4 meses corriendo 24/7 como appliance privado.
+      Proyecciones basadas en benchmarks del sector. 0 paying customers hoy. Producto en producción corriendo 24/7.
     </div>
 
     <hr class="divider">
-    <h2 class="section-header">Tiers de Suscripción (3 revenue streams)</h2>
+    <h2 class="section-header">Tiers de Suscripción</h2>
 
     <div class="three-col">
       <div class="col-card" style="border-top: 3px solid var(--green);">
         <h3>Chango Local</h3>
         <div class="price-tag">USD 9/mo</div>
-        <p style="font-size: 0.85rem; color: var(--text-muted);">Inferencia local (modelos 3-7B). Sin cloud. Margen bruto: 94%. Costo variable: ~USD 0.50/user/mo.</p>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">Appliance USD 75 one-time (margen 57% en hardware)</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Inferencia local (modelos 3-7B). Sin cloud. Margen bruto: 94%.</p>
       </div>
       <div class="col-card" style="border-top: 3px solid var(--blue);">
         <h3>Chango Pro</h3>
         <div class="price-tag blue">USD 15/mo</div>
-        <p style="font-size: 0.85rem; color: var(--text-muted);">API credits GPT-4 class + inferencia local. Margen bruto: 70%. Costo variable: ~USD 4.50/user/mo.</p>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">vs ChatGPT Plus USD 20/mo sin privacidad ni proactividad</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">API credits GPT-4 class + inferencia local. Margen bruto: 70%.</p>
       </div>
       <div class="col-card recommended" style="border-top: 3px solid var(--accent-light);">
         <h3>Chango Executive</h3>
         <div class="price-tag accent">USD 49/mo</div>
-        <p style="font-size: 0.85rem; color: var(--text-muted);">Modelos premium ilimitados, briefings, research proactivo. Margen bruto: 82%. Costo variable: ~USD 9/user/mo.</p>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">vs consultor/EA USD 5K-15K/mo — 100x mas econ&oacute;mico</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Modelos premium ilimitados, briefings, research proactivo. Margen bruto: 82%.</p>
       </div>
     </div>
 
     <hr class="divider">
+    <h2 class="section-header">Proyecciones (MRR + ARR)</h2>
 
-    <div class="two-col">
-      <!-- Columna izquierda: UNIT ECONOMICS -->
-      <div>
-        <h2 class="section-header">Unit Economics (camino a rentabilidad)</h2>
+    <table>
+      <thead>
+        <tr><th></th><th>Mes 4-6</th><th>Mes 9-12</th><th>Mes 18</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Fase</td>
+          <td>Beta + early adopters</td>
+          <td>Launch + appliances</td>
+          <td>Marketplace live</td>
+        </tr>
+        <tr>
+          <td>Usuarios org&aacute;nicos</td>
+          <td>150</td>
+          <td>800</td>
+          <td>2,500</td>
+        </tr>
+        <tr>
+          <td>Suscriptores pagos</td>
+          <td>20L + 15P + 10E</td>
+          <td>150L + 100P + 80E</td>
+          <td>400L + 300P + 250E</td>
+        </tr>
+        <tr>
+          <td><strong>MRR</strong></td>
+          <td><strong>USD 895</strong></td>
+          <td><strong>USD 7,270</strong></td>
+          <td><strong>USD 21,850</strong></td>
+        </tr>
+        <tr>
+          <td><strong>ARR</strong></td>
+          <td><strong>USD 10,740</strong></td>
+          <td><strong>USD 87,240</strong></td>
+          <td><strong>USD 262,200</strong></td>
+        </tr>
+      </tbody>
+    </table>
 
-        <table>
-          <tbody>
-            <tr><td><strong>Appliance + Chango</strong></td><td>USD 199 one-time</td></tr>
-            <tr><td>Costo hardware</td><td>~USD 85 (margen 57%)</td></tr>
-            <tr><td><strong>Chango Executive (tier principal)</strong></td><td>USD 49/mo</td></tr>
-            <tr><td>Costo variable (API + infra)</td><td>~USD 9/user/mo</td></tr>
-            <tr><td>Margen bruto Executive</td><td><strong>~82%</strong></td></tr>
-            <tr><td><strong>LTV estimado (24 mo avg)</strong></td><td><strong>USD 890</strong></td></tr>
-            <tr><td><strong>CAC target</strong></td><td><strong>&lt;USD 75</strong></td></tr>
-            <tr><td><strong>LTV:CAC</strong></td><td><strong>12:1</strong></td></tr>
-            <tr><td><strong>Payback period</strong></td><td><strong>&lt;2 meses</strong></td></tr>
-            <tr><td><strong>Marketplace comisión</strong></td><td>15% en capacidades premium</td></tr>
-          </tbody>
-        </table>
-
-        <div class="metrics" style="margin-top: 1.5rem;">
-          <div class="metric green">
-            <div class="value">Mes 10-12</div>
-            <div class="label">Breakeven</div>
-          </div>
-          <div class="metric">
-            <div class="value">$262K</div>
-            <div class="label">ARR Mes 18</div>
-          </div>
-          <div class="metric green">
-            <div class="value">$1M</div>
-            <div class="label">ARR Mes 30*</div>
-          </div>
-        </div>
+    <div class="bar-chart">
+      <div class="bar-col">
+        <div class="bar-value">$10.7K ARR</div>
+        <div class="bar" style="height: 30px;"></div>
+        <div class="bar-label">Mes 4-6</div>
       </div>
-
-      <!-- Columna derecha: PROYECCIONES -->
-      <div>
-        <h2 class="section-header">Proyecciones (MRR + ARR)</h2>
-
-        <table>
-          <thead>
-            <tr><th></th><th>Mes 4-6</th><th>Mes 9-12</th><th>Mes 18</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Fase</td>
-              <td>Beta + early adopters</td>
-              <td>Launch + appliances</td>
-              <td>Marketplace live</td>
-            </tr>
-            <tr>
-              <td>Usuarios org&aacute;nicos</td>
-              <td>150</td>
-              <td>800</td>
-              <td>2,500</td>
-            </tr>
-            <tr>
-              <td>Suscriptores pagos</td>
-              <td>20L + 15P + 10E</td>
-              <td>150L + 100P + 80E</td>
-              <td>400L + 300P + 250E</td>
-            </tr>
-            <tr>
-              <td>Appliances vendidos</td>
-              <td>25</td>
-              <td>180</td>
-              <td>500</td>
-            </tr>
-            <tr>
-              <td><strong>MRR subs</strong></td>
-              <td><strong>USD 895</strong></td>
-              <td><strong>USD 7,270</strong></td>
-              <td><strong>USD 21,850</strong></td>
-            </tr>
-            <tr>
-              <td><strong>ARR subs</strong></td>
-              <td><strong>USD 10,740</strong></td>
-              <td><strong>USD 87,240</strong></td>
-              <td><strong>USD 262,200</strong></td>
-            </tr>
-            <tr>
-              <td>Marketplace rev.</td>
-              <td>-</td>
-              <td>-</td>
-              <td>USD 1,200/mo</td>
-            </tr>
-            <tr>
-              <td>Hardware rev. acum.</td>
-              <td>USD 4,975</td>
-              <td>USD 35,820</td>
-              <td>USD 99,500</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="bar-chart">
-          <div class="bar-col">
-            <div class="bar-value">$10.7K ARR</div>
-            <div class="bar" style="height: 30px;"></div>
-            <div class="bar-label">Mes 4-6</div>
-          </div>
-          <div class="bar-col">
-            <div class="bar-value">$87K ARR</div>
-            <div class="bar" style="height: 95px;"></div>
-            <div class="bar-label">Mes 9-12</div>
-          </div>
-          <div class="bar-col">
-            <div class="bar-value">$262K ARR</div>
-            <div class="bar" style="height: 140px;"></div>
-            <div class="bar-label">Mes 18</div>
-          </div>
-        </div>
-
-        <hr class="divider">
-        <h3>Camino a $1M ARR</h3>
-
-        <div class="callout" style="margin-top: 0;">
-          <p><strong>Breakeven operativo:</strong> ~40 suscriptores Executive (USD 1,960/mo MRR) — alcanzable en mes 10-12.</p>
-          <p><strong>$262K ARR en mes 18</strong> con el seed de USD 50K. Crecimiento orgánico via referral + thought leadership.</p>
-          <p><strong>$1M ARR estimado en mes 28-30*</strong> con marketplace de capacidades generando revenue adicional sin costo marginal. *Requiere ejecución del roadmap de marketplace + Series A para escalar ventas.</p>
-        </div>
+      <div class="bar-col">
+        <div class="bar-value">$87K ARR</div>
+        <div class="bar" style="height: 95px;"></div>
+        <div class="bar-label">Mes 9-12</div>
+      </div>
+      <div class="bar-col">
+        <div class="bar-value">$262K ARR</div>
+        <div class="bar" style="height: 140px;"></div>
+        <div class="bar-label">Mes 18</div>
       </div>
     </div>
   </main>

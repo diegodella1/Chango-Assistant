@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chango — Documentacion</title>
+  <meta name="description" content="Guia completa de Chango: requisitos, instalacion, funcionalidades, comandos y FAQ.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-docs">
+
+  <nav class="site-nav">
+    <a href="index.html" class="brand">CHANGO</a>
+    <div class="nav-links">
+      <a href="index.html#features">Producto</a>
+      <a href="index.html#how">Como Funciona</a>
+      <a href="index.html#pricing">Precios</a>
+      <a href="docs.html" class="active">Docs</a>
+      <a href="about.html">Nosotros</a>
+    </div>
+    <div class="nav-actions">
+      <a href="deck.html" class="nav-btn ghost">Inversores</a>
+      <a href="index.html#contact" class="nav-btn primary">Contactar</a>
+    </div>
+    <button class="mobile-menu" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+  <main class="page-content docs-layout">
+    <!-- SIDEBAR -->
+    <aside class="docs-sidebar">
+      <h4>Documentacion</h4>
+      <a href="#overview" class="active">Vista general</a>
+      <a href="#requirements">Requisitos</a>
+      <a href="#setup">Instalacion</a>
+      <a href="#features">Funcionalidades</a>
+      <a href="#commands">Comandos</a>
+      <a href="#architecture">Arquitectura</a>
+      <a href="#privacy">Privacidad</a>
+      <a href="#faq">FAQ</a>
+    </aside>
+
+    <!-- CONTENT -->
+    <div class="docs-content">
+      <section id="overview">
+        <h1>Documentacion de <span class="highlight">Chango</span></h1>
+        <p class="docs-intro">Chango es una plataforma de AI privado que corre 24/7 en un appliance dedicado en tu red local. Se comunica por Telegram y trabaja de forma proactiva — monitoreo, briefings, automatizacion y smart office.</p>
+        <div class="docs-callout">
+          <strong>Estado actual:</strong> Chango esta en produccion continua desde noviembre 2025. El software se actualiza semanalmente.
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <section id="requirements">
+        <h2>Requisitos</h2>
+        <div class="docs-table-wrap">
+          <table>
+            <thead><tr><th>Componente</th><th>Requisito</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Hardware</strong></td><td>Raspberry Pi 5 (8GB) o equivalente ARM64</td></tr>
+              <tr><td><strong>Red</strong></td><td>Conexion a tu red local (Ethernet o WiFi)</td></tr>
+              <tr><td><strong>Telegram</strong></td><td>Cuenta activa de Telegram en tu telefono</td></tr>
+              <tr><td><strong>Suscripcion</strong></td><td>Plan Local ($9/mo), Pro ($15/mo) o Executive ($49/mo)</td></tr>
+              <tr><td><strong>Internet</strong></td><td>Para planes Pro/Executive (acceso a APIs de modelos)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <section id="setup">
+        <h2>Instalacion</h2>
+        <div class="docs-steps">
+          <div class="docs-step">
+            <div class="docs-step-num">1</div>
+            <div>
+              <h3>Recibis el appliance</h3>
+              <p>Llega pre-configurado con Chango instalado. Solo necesitas conectar alimentacion y red.</p>
+            </div>
+          </div>
+          <div class="docs-step">
+            <div class="docs-step-num">2</div>
+            <div>
+              <h3>Conectalo a tu red</h3>
+              <p>Cable Ethernet directo a tu router. Opcionalmente configurable por WiFi.</p>
+            </div>
+          </div>
+          <div class="docs-step">
+            <div class="docs-step-num">3</div>
+            <div>
+              <h3>Escanea el QR</h3>
+              <p>En la pantalla (o tarjeta incluida) hay un QR que te lleva directo al bot de Telegram. Escribi "Hola" y Chango te guia.</p>
+            </div>
+          </div>
+          <div class="docs-step">
+            <div class="docs-step-num">4</div>
+            <div>
+              <h3>Configura tu perfil</h3>
+              <p>En los primeros 5 minutos, Chango te hace preguntas para entender tu contexto: rol, industria, prioridades. Despues de eso, funciona solo.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <section id="features">
+        <h2>Funcionalidades</h2>
+
+        <div class="docs-feature">
+          <h3>Briefings ejecutivos</h3>
+          <p>Todos los dias a la hora que elijas, Chango te envia un resumen personalizado con lo mas relevante: noticias de tu industria, agenda del dia, tareas pendientes y metricas clave.</p>
+        </div>
+
+        <div class="docs-feature">
+          <h3>Research proactivo</h3>
+          <p>Pedile que investigue un tema y lo hace en segundo plano. Competidores, tendencias de mercado, datos financieros — te avisa cuando tiene resultados.</p>
+        </div>
+
+        <div class="docs-feature">
+          <h3>Voz bidireccional</h3>
+          <p>Enviale un audio y te responde con audio. Usa Edge TTS con acento argentino (configurable). Ideal para cuando estas manejando o en una reunion.</p>
+        </div>
+
+        <div class="docs-feature">
+          <h3>Vision (imagenes)</h3>
+          <p>Manda una foto y Chango la analiza. Documentos, graficos, pizarras, capturas de pantalla — entiende contexto visual.</p>
+        </div>
+
+        <div class="docs-feature">
+          <h3>Smart office</h3>
+          <p>Controla luces WiFi (Magic Home), y proximamente otros dispositivos IoT. "Chango, prende las luces del escritorio" funciona por texto o voz.</p>
+        </div>
+
+        <div class="docs-feature">
+          <h3>Automatizacion y cron jobs</h3>
+          <p>Programa tareas recurrentes: reportes semanales, recordatorios, chequeos automaticos. Chango las ejecuta sin supervision.</p>
+        </div>
+
+        <div class="docs-feature">
+          <h3>Generacion de imagenes</h3>
+          <p>Pedile que genere una imagen y te la envia directo al chat. Usa modelos de generacion de ultima linea.</p>
+        </div>
+
+        <div class="docs-feature">
+          <h3>Traduccion</h3>
+          <p>Traduce textos al instante. Soporta todos los idiomas principales con contexto profesional.</p>
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <section id="commands">
+        <h2>Comandos</h2>
+        <div class="docs-table-wrap">
+          <table>
+            <thead><tr><th>Comando</th><th>Descripcion</th></tr></thead>
+            <tbody>
+              <tr><td><code>/model</code></td><td>Cambiar modelo de AI. Muestra teclado con 9 opciones o escribi el nombre directamente.</td></tr>
+              <tr><td><code>/model gpt-4o</code></td><td>Cambiar a un modelo especifico de OpenRouter.</td></tr>
+              <tr><td>Texto libre</td><td>Habla con Chango naturalmente. No necesita comandos.</td></tr>
+              <tr><td>Enviar foto</td><td>Chango analiza la imagen con vision multimodal.</td></tr>
+              <tr><td>Enviar audio</td><td>Chango transcribe y responde (con audio si el input fue voz).</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <section id="architecture">
+        <h2>Arquitectura</h2>
+        <div class="arch-diagram">
+          <div class="arch-layer">
+            <div class="arch-box user">Tu telefono<span>Telegram</span></div>
+            <div class="arch-arrow">&darr;</div>
+            <div class="arch-box core">Chango (Go)<span>Agent loop + Tools + Bus</span></div>
+            <div class="arch-arrow">&darr;</div>
+            <div class="arch-row">
+              <div class="arch-box ext">LLM APIs<span>OpenRouter</span></div>
+              <div class="arch-box ext">IoT<span>Luces, sensores</span></div>
+              <div class="arch-box ext">Storage<span>Local filesystem</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="docs-callout">
+          <strong>Dato clave:</strong> El binario de Chango pesa ~15MB, consume ~130MB de RAM y corre en un solo proceso. Sin bases de datos externas, sin microservicios, sin complejidad innecesaria.
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <section id="privacy">
+        <h2>Privacidad y seguridad</h2>
+        <div class="docs-feature">
+          <h3>Que datos se procesan localmente?</h3>
+          <p>Todos. Las conversaciones, archivos, notas, configuraciones y datos de dispositivos se almacenan exclusivamente en el appliance. El unico trafico que sale de tu red son las llamadas a APIs de modelos (en planes Pro/Executive), que envian solo el prompt — no el contexto historico.</p>
+        </div>
+        <div class="docs-feature">
+          <h3>Que pasa con el plan Local?</h3>
+          <p>Zero traffic. Con inferencia 100% local usando modelos 3-7B optimizados para ARM64, el appliance no necesita conexion a internet para funcionar.</p>
+        </div>
+        <div class="docs-feature">
+          <h3>Compliance</h3>
+          <p>La arquitectura de Chango es GDPR y LGPD compliant by design. No hay datos personales en servidores de terceros porque no hay servidores de terceros. Los datos residen fisicamente en tu oficina.</p>
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <section id="faq">
+        <h2>Preguntas frecuentes</h2>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>Necesito saber de tecnologia para usarlo?</summary>
+            <p>No. El appliance llega listo para usar. Conectas, escaneas un QR y hablas por Telegram. Si sabes mandar un mensaje, sabes usar Chango.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Puedo cambiar de plan despues?</summary>
+            <p>Si, podes subir o bajar de plan en cualquier momento. El cambio se aplica en el proximo ciclo de facturacion.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Que pasa si se corta la luz?</summary>
+            <p>Chango arranca automaticamente cuando vuelve la energia. Retoma donde quedo sin perder datos.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Funciona fuera de mi red?</summary>
+            <p>Si. Como Telegram es cloud-native, podes hablar con Chango desde cualquier lugar. El procesamiento sigue siendo local — tu telefono habla con Telegram, Telegram habla con el appliance en tu red.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Que modelos de AI soporta?</summary>
+            <p>Depende del plan. Local: modelos open-source 3-7B optimizados. Pro: GPT-4o, Claude Sonnet, Gemini, Llama y mas via OpenRouter. Executive: acceso ilimitado a modelos premium incluyendo GPT-4, Claude Opus y razonamiento avanzado.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Puedo usar mi propia API key?</summary>
+            <p>Si. Si ya tenes una API key de OpenRouter, OpenAI u otro proveedor, podes configurarla directamente.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Como se actualiza?</summary>
+            <p>Automaticamente. Las actualizaciones se descargan e instalan sin intervencion. Podes elegir actualizaciones manuales si preferis control total.</p>
+          </details>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <span class="brand">CHANGO</span>
+        <p>AI privado que trabaja 24/7.</p>
+      </div>
+      <div class="footer-links">
+        <div class="footer-col">
+          <h4>Producto</h4>
+          <a href="index.html#features">Funcionalidades</a>
+          <a href="index.html#how">Como funciona</a>
+          <a href="index.html#pricing">Precios</a>
+        </div>
+        <div class="footer-col">
+          <h4>Recursos</h4>
+          <a href="docs.html">Documentacion</a>
+          <a href="about.html">Nosotros</a>
+          <a href="deck.html">Inversores</a>
+        </div>
+        <div class="footer-col">
+          <h4>Contacto</h4>
+          <a href="mailto:diego@chango.ai">diego@chango.ai</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Chango &middot; 2026. AI privado, hecho en Argentina.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile menu
+    document.querySelector('.mobile-menu')?.addEventListener('click', function() {
+      document.querySelector('.nav-links').classList.toggle('open');
+      document.querySelector('.nav-actions').classList.toggle('open');
+      this.classList.toggle('active');
+    });
+
+    // Active sidebar link on scroll
+    const sections = document.querySelectorAll('.docs-content section[id]');
+    const sidebarLinks = document.querySelectorAll('.docs-sidebar a');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 120) current = s.id;
+      });
+      sidebarLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    }, { passive: true });
+  </script>
+</body>
+</html>

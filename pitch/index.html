@@ -3,56 +3,308 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chango — Pitch Deck</title>
+  <title>Chango — AI Privado que Trabaja 24/7</title>
+  <meta name="description" content="Chango es una plataforma de AI privado que corre en tu propia red. Monitorea, anticipa y ejecuta sin exponer datos confidenciales.">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <nav>
-    <span class="brand">CHANGO</span>
-    <div class="slides">
-      <a href="index.html" class="active">Hook</a>
-      <a href="slide-2.html">Problema</a>
-      <a href="slide-3.html">Solución</a>
-      <a href="slide-4.html">Números</a>
-      <a href="slide-5.html">Ask</a>
+<body class="page-home">
+
+  <nav class="site-nav">
+    <a href="index.html" class="brand">CHANGO</a>
+    <div class="nav-links">
+      <a href="#features">Producto</a>
+      <a href="#how">Como Funciona</a>
+      <a href="#pricing">Precios</a>
+      <a href="docs.html">Docs</a>
+      <a href="about.html">Nosotros</a>
     </div>
-    <div class="arrows">
-      <a class="disabled">&#8592;</a>
-      <a href="slide-2.html">&#8594;</a>
+    <div class="nav-actions">
+      <a href="deck.html" class="nav-btn ghost">Inversores</a>
+      <a href="#contact" class="nav-btn primary">Contactar</a>
     </div>
+    <button class="mobile-menu" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
 
-  <main>
-    <p class="slide-label">Slide 1 de 5 &middot; Pre-Seed Round</p>
-    <h1>La Plataforma de <span class="highlight">AI Privado</span> para Ejecutivos</h1>
-    <p class="tagline">Un mercado de USD 71B crece al 35% anual, pero el 91% de ejecutivos no puede adoptar AI por riesgo de filtración de datos.<br>Chango captura ese mercado desatendido con un appliance dedicado de USD 75 y márgenes superiores al 80%.</p>
-
-    <div class="stat-banner">
-      <blockquote>
-        <span class="num">TAM USD 71B (2028)</span> en AI Productivity + Executive Tools, creciendo al 35% CAGR.<br>
-        <span class="num">91% de C-levels</span> frenan la adopción de AI por riesgo de filtración de datos (Cisco AI Report 2025).<br>
-        <span class="num">0 competidores</span> resuelven AI autónomo + privacidad total + proactividad en un appliance dedicado.
-      </blockquote>
-    </div>
-
-    <p class="desc">
-      <strong>Chango es una plataforma de AI privado que corre 24/7 en un appliance de USD 75, con márgenes brutos del 82-94%.</strong>
-      No es un chatbot reactivo. Monitorea, anticipa, ejecuta y aprende del usuario
-      — sin que la información confidencial pase por servidores de terceros. Reemplaza 5+ suscripciones SaaS fragmentadas en un solo producto con alto switching cost.
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-badge">En produccion 24/7</div>
+    <h1>Tu AI privado<br>que <span class="highlight">nunca duerme</span></h1>
+    <p class="hero-sub">
+      Una plataforma de inteligencia artificial que corre en tu propia red.<br>
+      Monitorea, anticipa y ejecuta — sin que tus datos salgan de tu oficina.
     </p>
-
-    <p class="desc">
-      <strong>La visión:</strong> Construir el ecosistema de capacidades para AI privado — un marketplace de skills (research, finanzas, legal, CRM, smart office) con efectos de red, donde más usuarios generan más capacidades y mayor retención. El "App Store" del AI personal.
-    </p>
-
-    <div class="author">
-      <span class="author-dot"></span>
-      <span class="author-name">Diego Dell Agostino</span>
-      <span class="author-role">CPO / Founder</span>
+    <div class="hero-ctas">
+      <a href="docs.html" class="btn primary">Ver documentacion</a>
+      <a href="#how" class="btn ghost">Como funciona</a>
     </div>
-  </main>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="hero-stat-value">24/7</span>
+        <span class="hero-stat-label">Siempre activo</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-value">0</span>
+        <span class="hero-stat-label">Datos en la nube</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-value">USD 75</span>
+        <span class="hero-stat-label">Hardware total</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-value">&lt;15 min</span>
+        <span class="hero-stat-label">Setup inicial</span>
+      </div>
+    </div>
+  </section>
 
-  <footer>Chango Pitch Deck &middot; Marzo 2026</footer>
-  <script src="nav.js"></script>
+  <!-- PROBLEM -->
+  <section class="section" id="problem">
+    <div class="section-inner">
+      <p class="section-label">El problema</p>
+      <h2>El AI que usas hoy <span class="highlight">expone todo</span></h2>
+      <p class="section-desc">Cada consulta a ChatGPT, cada documento en Copilot, cada prompt — viaja a servidores de terceros. Para ejecutivos y profesionales que manejan informacion sensible, eso no es una opcion.</p>
+      <div class="problem-grid">
+        <div class="problem-card">
+          <div class="problem-icon red">91%</div>
+          <p>de C-levels frenan adopcion de AI por riesgo de filtracion</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-icon yellow">$200-500</div>
+          <p>por mes en SaaS fragmentado sin integracion real</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-icon blue">$50K+</div>
+          <p>cuesta un setup enterprise — fuera de alcance para el 95%</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-icon accent">0</div>
+          <p>soluciones de AI proactivo para el ejecutivo individual</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section alt" id="features">
+    <div class="section-inner">
+      <p class="section-label">Producto</p>
+      <h2>Todo lo que necesitas,<br><span class="highlight">nada que no</span></h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon-wrap green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h3>Privacidad por arquitectura</h3>
+          <p>Tus datos se procesan localmente. No hay servidor central, no hay cloud, no hay riesgo. GDPR/LGPD by design.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon-wrap accent">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3>Siempre activo</h3>
+          <p>Chango no espera que le preguntes. Monitorea, investiga y actua de forma autonoma, 24 horas, 7 dias.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon-wrap blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>Interfaz natural</h3>
+          <p>Hablas por Telegram — la app que ya usas. Texto, voz, imagenes. Sin apps nuevas, sin curva de aprendizaje.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon-wrap yellow">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <h3>Briefings ejecutivos</h3>
+          <p>Resumenes diarios de negocio, mercado y agenda. La informacion que necesitas, antes de que la pidas.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon-wrap green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <h3>Smart office</h3>
+          <p>Controla luces, dispositivos y sensores de oficina. Todo integrado en la misma conversacion.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon-wrap accent">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          </div>
+          <h3>Aprende de vos</h3>
+          <p>Cada interaccion lo hace mas util. Tu contexto, tus preferencias, tu forma de trabajar — todo queda en tu dispositivo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" id="how">
+    <div class="section-inner">
+      <p class="section-label">Como funciona</p>
+      <h2>De la caja a tu asistente<br><span class="highlight">en 15 minutos</span></h2>
+      <div class="steps-row">
+        <div class="step-item">
+          <div class="step-number">1</div>
+          <h3>Conecta el appliance</h3>
+          <p>Un dispositivo de USD 75 que se enchufa a tu red. Sin servidores, sin configuracion compleja.</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-number">2</div>
+          <h3>Abri Telegram</h3>
+          <p>Escanea un QR, habla con Chango. Texto, voz o imagenes — como hablar con un colega.</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-number">3</div>
+          <h3>Chango aprende</h3>
+          <p>En las primeras 48 horas entiende tu contexto, tus preferencias y tu ritmo de trabajo.</p>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-number">4</div>
+          <h3>Trabaja solo</h3>
+          <p>Briefings, alertas, automatizacion. Proactivo, no reactivo. Vos segui con lo tuyo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="section alt" id="pricing">
+    <div class="section-inner">
+      <p class="section-label">Precios</p>
+      <h2>Simple, transparente,<br><span class="highlight">sin sorpresas</span></h2>
+      <p class="section-desc">Todos los planes incluyen el appliance (USD 75 one-time) y actualizaciones automaticas.</p>
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="pricing-tier">Local</div>
+          <div class="pricing-price">USD 9<span>/mes</span></div>
+          <p class="pricing-desc">Inferencia 100% local con modelos 3-7B. Cero dependencia de cloud.</p>
+          <ul class="pricing-features">
+            <li>Modelos locales optimizados</li>
+            <li>Privacidad absoluta</li>
+            <li>Smart office integrado</li>
+            <li>Actualizaciones OTA</li>
+          </ul>
+          <a href="#contact" class="btn ghost full">Empezar</a>
+        </div>
+        <div class="pricing-card featured">
+          <div class="pricing-badge">Recomendado</div>
+          <div class="pricing-tier">Executive</div>
+          <div class="pricing-price">USD 49<span>/mes</span></div>
+          <p class="pricing-desc">Modelos premium ilimitados + briefings proactivos + research automatico.</p>
+          <ul class="pricing-features">
+            <li>Todo de Pro +</li>
+            <li>Modelos premium (GPT-4, Claude)</li>
+            <li>Briefings ejecutivos diarios</li>
+            <li>Research proactivo en segundo plano</li>
+            <li>Soporte prioritario</li>
+          </ul>
+          <a href="#contact" class="btn primary full">Empezar</a>
+        </div>
+        <div class="pricing-card">
+          <div class="pricing-tier">Pro</div>
+          <div class="pricing-price">USD 15<span>/mes</span></div>
+          <p class="pricing-desc">Lo mejor de ambos mundos: inferencia local + modelos cloud de primera linea.</p>
+          <ul class="pricing-features">
+            <li>Todo de Local +</li>
+            <li>API credits GPT-4 class</li>
+            <li>Automatizacion avanzada</li>
+            <li>Traducciones y reportes</li>
+          </ul>
+          <a href="#contact" class="btn ghost full">Empezar</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUST -->
+  <section class="section" id="trust">
+    <div class="section-inner centered">
+      <p class="section-label">Por que Chango</p>
+      <h2>No es otro chatbot.<br><span class="highlight">Es infraestructura privada.</span></h2>
+      <div class="trust-grid">
+        <div class="trust-item">
+          <div class="trust-value">4+</div>
+          <div class="trust-label">Meses en produccion continua</div>
+        </div>
+        <div class="trust-item">
+          <div class="trust-value">0</div>
+          <div class="trust-label">Datos enviados a la nube</div>
+        </div>
+        <div class="trust-item">
+          <div class="trust-value">82%</div>
+          <div class="trust-label">Margen bruto (Executive)</div>
+        </div>
+        <div class="trust-item">
+          <div class="trust-value">GDPR</div>
+          <div class="trust-label">Compliant by architecture</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section-cta" id="contact">
+    <div class="section-inner centered">
+      <h2>Listo para tener tu propio AI privado?</h2>
+      <p>El producto ya existe y funciona en produccion. No es un prototipo — es un sistema corriendo 24/7.</p>
+      <div class="cta-actions">
+        <a href="mailto:diego@chango.ai" class="btn primary large">Agendar demo</a>
+        <a href="docs.html" class="btn ghost large">Leer documentacion</a>
+      </div>
+      <p class="cta-sub">diego@chango.ai</p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <span class="brand">CHANGO</span>
+        <p>AI privado que trabaja 24/7.</p>
+      </div>
+      <div class="footer-links">
+        <div class="footer-col">
+          <h4>Producto</h4>
+          <a href="#features">Funcionalidades</a>
+          <a href="#how">Como funciona</a>
+          <a href="#pricing">Precios</a>
+        </div>
+        <div class="footer-col">
+          <h4>Recursos</h4>
+          <a href="docs.html">Documentacion</a>
+          <a href="about.html">Nosotros</a>
+          <a href="deck.html">Inversores</a>
+        </div>
+        <div class="footer-col">
+          <h4>Contacto</h4>
+          <a href="mailto:diego@chango.ai">diego@chango.ai</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Chango &middot; 2026. AI privado, hecho en Argentina.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile menu toggle
+    document.querySelector('.mobile-menu')?.addEventListener('click', function() {
+      document.querySelector('.nav-links').classList.toggle('open');
+      document.querySelector('.nav-actions').classList.toggle('open');
+      this.classList.toggle('active');
+    });
+
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
+      });
+    });
+  </script>
 </body>
 </html>
