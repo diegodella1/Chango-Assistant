@@ -446,12 +446,234 @@ tr:hover td { background: var(--bg-card-hover); }
 
 .cta .sub { font-weight: 400; font-size: 0.95rem; opacity: 0.85; margin-top: 0.5rem; }
 
-/* Section divider */
+/* Section divider — gradient fade */
 .divider {
   border: none;
   height: 1px;
-  background: var(--border);
-  margin: 2.5rem 0;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 3rem 0;
+}
+
+/* Section header — accent bar */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.section-header::before {
+  content: '';
+  width: 4px;
+  height: 1.2em;
+  background: var(--accent);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Recommended pricing card */
+.col-card.recommended {
+  border: 2px solid var(--accent);
+  background: linear-gradient(180deg, rgba(108,92,231,0.08), var(--bg-card));
+  box-shadow: 0 0 30px rgba(108,92,231,0.15);
+  transform: scale(1.04);
+  position: relative;
+}
+.col-card.recommended::before {
+  content: 'RECOMENDADO';
+  position: absolute;
+  top: -0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+}
+@media (max-width: 800px) {
+  .col-card.recommended { transform: none; }
+}
+
+/* Moat cards — horizontal with icon */
+.moat-card {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.5rem;
+  transition: border-color 0.2s;
+}
+.moat-card:hover { border-color: var(--accent); }
+.moat-icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(108,92,231,0.12);
+  color: var(--accent-light);
+}
+.moat-icon svg { width: 24px; height: 24px; }
+.moat-icon.green { background: var(--green-dim); color: var(--green); }
+.moat-icon.accent { background: rgba(108,92,231,0.12); color: var(--accent-light); }
+.moat-icon.blue { background: var(--blue-dim); color: var(--blue); }
+.moat-icon.yellow { background: var(--yellow-dim); color: var(--yellow); }
+.moat-card h3 { color: var(--text); margin-bottom: 0.5rem; }
+.moat-card p { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0; }
+
+/* Flywheel ring — circular CSS */
+.flywheel-ring {
+  position: relative;
+  width: 360px;
+  height: 360px;
+  margin: 2rem auto;
+}
+.flywheel-ring .ring-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 2;
+}
+.flywheel-ring .ring-center span {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--accent-light);
+}
+.flywheel-ring .ring-step {
+  position: absolute;
+  width: 120px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+.flywheel-ring .ring-step .flywheel-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+/* Pentagon positions */
+.flywheel-ring .ring-step:nth-child(2) { top: 0; left: 50%; transform: translateX(-50%); }
+.flywheel-ring .ring-step:nth-child(3) { top: 22%; right: -10px; }
+.flywheel-ring .ring-step:nth-child(4) { bottom: 5%; right: 5px; }
+.flywheel-ring .ring-step:nth-child(5) { bottom: 5%; left: 5px; }
+.flywheel-ring .ring-step:nth-child(6) { top: 22%; left: -10px; }
+
+@media (max-width: 700px) {
+  .flywheel-ring {
+    width: 100%;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  .flywheel-ring .ring-center { display: none; }
+  .flywheel-ring .ring-step {
+    position: static;
+    width: 100%;
+    transform: none !important;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    background: rgba(108,92,231,0.08);
+    border: 1px solid rgba(108,92,231,0.2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .flywheel-ring .ring-step .flywheel-num { margin-bottom: 0; }
+}
+
+/* MRR Bar chart */
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  height: 200px;
+  margin-top: 1.5rem;
+}
+.bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  max-width: 100px;
+}
+.bar {
+  width: 100%;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, var(--accent-light), var(--accent));
+  min-height: 8px;
+  transition: height 0.3s;
+}
+.bar-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-light);
+}
+.bar-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Highlighted column in table */
+.col-highlight {
+  background: rgba(108,92,231,0.06);
+}
+
+/* Hero metrics strip */
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(108,92,231,0.12), rgba(0,210,160,0.08));
+  border: 1px solid rgba(108,92,231,0.25);
+  border-radius: 14px;
+  margin-bottom: 2rem;
+}
+.hero-metric {
+  text-align: center;
+}
+.hero-metric .value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+.hero-metric .value.green { color: var(--green); }
+.hero-metric .value.accent { color: var(--accent-light); }
+.hero-metric .label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+@media (max-width: 700px) {
+  .hero-metrics { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Freemium note */

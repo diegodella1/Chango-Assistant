@@ -26,12 +26,19 @@
     <p class="slide-label">Slide 4 de 5 &middot; 60 segundos</p>
     <h1>Los <span class="highlight">Números</span></h1>
 
+    <div class="hero-metrics">
+      <div class="hero-metric"><div class="value green">94%</div><div class="label">Margen Local</div></div>
+      <div class="hero-metric"><div class="value green">70%</div><div class="label">Margen Pro</div></div>
+      <div class="hero-metric"><div class="value accent">$320</div><div class="label">LTV estimado</div></div>
+      <div class="hero-metric"><div class="value accent">10:1</div><div class="label">LTV:CAC</div></div>
+    </div>
+
     <div class="disclaimer">
       Proyecciones basadas en benchmarks del sector. 0 paying customers hoy. Producto en producción +4 meses corriendo 24/7.
     </div>
 
     <hr class="divider">
-    <h2>Costo Total para el Usuario (transparente)</h2>
+    <h2 class="section-header">Costo Total para el Usuario (transparente)</h2>
 
     <div class="three-col">
       <div class="col-card" style="border-top: 3px solid var(--green);">
@@ -40,7 +47,7 @@
         <p style="font-size: 0.85rem; color: var(--text-muted);">Todo incluido. Inferencia local en Pi (modelos 3-7B). Sin API cloud. Calidad suficiente para rutinas, smart home, resúmenes.</p>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">Costo real: hardware USD 75 one-time + USD 9/mo sub</p>
       </div>
-      <div class="col-card" style="border-top: 3px solid var(--accent-light);">
+      <div class="col-card recommended" style="border-top: 3px solid var(--accent-light);">
         <h3>Chango Pro</h3>
         <div class="price-tag accent">USD 15/mo</div>
         <p style="font-size: 0.85rem; color: var(--text-muted);">Incluye USD 6 de API credits bundleados (Groq/Together). Calidad GPT-4 class para tareas complejas + inferencia local para el resto.</p>
@@ -59,7 +66,7 @@
     <div class="two-col">
       <!-- Columna izquierda: UNIT ECONOMICS -->
       <div>
-        <h2>Unit Economics</h2>
+        <h2 class="section-header">Unit Economics</h2>
 
         <table>
           <tbody>
@@ -94,7 +101,7 @@
 
       <!-- Columna derecha: PROYECCIONES -->
       <div>
-        <h2>Proyecciones</h2>
+        <h2 class="section-header">Proyecciones</h2>
 
         <table>
           <thead>
@@ -145,6 +152,24 @@
             </tr>
           </tbody>
         </table>
+
+        <div class="bar-chart">
+          <div class="bar-col">
+            <div class="bar-value">$570</div>
+            <div class="bar" style="height: 30px;"></div>
+            <div class="bar-label">Mes 4-6</div>
+          </div>
+          <div class="bar-col">
+            <div class="bar-value">$4,500</div>
+            <div class="bar" style="height: 95px;"></div>
+            <div class="bar-label">Mes 9-12</div>
+          </div>
+          <div class="bar-col">
+            <div class="bar-value">$13,800</div>
+            <div class="bar" style="height: 140px;"></div>
+            <div class="bar-label">Mes 18</div>
+          </div>
+        </div>
 
         <hr class="divider">
         <h3>Flywheel Economics</h3>
