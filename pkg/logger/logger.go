@@ -34,6 +34,10 @@ var (
 	logger       *Logger
 	once         sync.Once
 	mu           sync.RWMutex
+
+	ringBuf   [500]LogEntry
+	ringCount int
+	ringMu    sync.RWMutex
 )
 
 type Logger struct {
@@ -138,6 +142,11 @@ func logMessage(level LogLevel, component string, message string, fields map[str
 
 	log.Println(logLine)
 
+	ringMu.Lock()
+	ringBuf[ringCount%len(ringBuf)] = entry
+	ringCount++
+	ringMu.Unlock()
+
 	if level == FATAL {
 		os.Exit(1)
 	}
@@ -236,4 +245,54 @@ func FatalF(message string, fields map[string]interface{}) {
 
 func FatalCF(component string, message string, fields map[string]interface{}) {
 	logMessage(FATAL, component, message, fields)
+}
+
+// GetRecentLogs returns filtered recent log entries in chronological order.
+func GetRecentLogs(maxLines int, level string, search string) []LogEntry {
+	ringMu.RLock()
+	defer ringMu.RUnlock()
+
+	if ringCount == 0 {
+		return nil
+	}
+
+	total := ringCount
+	size := len(ringBuf)
+	available := total
+	if available > size {
+		available = size
+	}
+
+	// Collect entries in chronological order
+	start := 0
+	if total > size {
+		start = total % size
+	}
+
+	levelUpper := strings.ToUpper(level)
+	searchLower := strings.ToLower(search)
+
+	var result []LogEntry
+	for i := 0; i < available; i++ {
+		idx := (start + i) % size
+		e := ringBuf[idx]
+
+		if levelUpper != "" && e.Level != levelUpper {
+			continue
+		}
+		if searchLower != "" &&
+			!strings.Contains(strings.ToLower(e.Message), searchLower) &&
+			!strings.Contains(strings.ToLower(e.Component), searchLower) {
+			continue
+		}
+
+		result = append(result, e)
+	}
+
+	// Return only the last maxLines entries
+	if maxLines > 0 && len(result) > maxLines {
+		result = result[len(result)-maxLines:]
+	}
+
+	return result
 }

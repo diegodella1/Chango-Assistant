@@ -54,7 +54,17 @@ type Config struct {
 	Sentinel  SentinelConfig  `json:"sentinel"`
 	Council   CouncilConfig   `json:"council"`
 	Admin     AdminConfig     `json:"admin"`
+	Briefing  BriefingConfig  `json:"briefing"`
 	mu        sync.RWMutex
+}
+
+type BriefingConfig struct {
+	Enabled      bool     `json:"enabled"`
+	Topics       []string `json:"topics"`
+	Competitors  []string `json:"competitors"`
+	Sources      []string `json:"sources"`
+	DeliveryTime string   `json:"delivery_time"`
+	Language     string   `json:"language"`
 }
 
 type AgentsConfig struct {

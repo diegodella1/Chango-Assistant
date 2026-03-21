@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
 //go:embed static/index.html
@@ -41,6 +43,10 @@ type Handler struct {
 	token         string
 	configPath    string
 	config        *config.Config
+	cronService   *cron.CronService
+	lightsTool    *tools.LightsTool
+	reloadFn      func() error
+	version       string
 }
 
 func New(workspacePath, token, configPath string, cfg *config.Config) *Handler {
@@ -51,6 +57,11 @@ func New(workspacePath, token, configPath string, cfg *config.Config) *Handler {
 		config:        cfg,
 	}
 }
+
+func (h *Handler) SetCronService(cs *cron.CronService) { h.cronService = cs }
+func (h *Handler) SetLightsTool(lt *tools.LightsTool)   { h.lightsTool = lt }
+func (h *Handler) SetReloadFn(fn func() error)          { h.reloadFn = fn }
+func (h *Handler) SetVersion(v string)                   { h.version = v }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/admin", h.serveSPA)
@@ -71,6 +82,26 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/settings/agent", h.withAuth(h.settingsAgent))
 	mux.HandleFunc("/api/settings/upload/google-sa", h.withAuth(h.uploadGoogleSA))
 	mux.HandleFunc("/api/settings/test/provider", h.withAuth(h.testProvider))
+	mux.HandleFunc("/api/settings/briefing", h.withAuth(h.settingsBriefing))
+	// Agent reload
+	mux.HandleFunc("/api/agent/reload", h.withAuth(h.agentReload))
+	// Cron CRUD
+	mux.HandleFunc("/api/cron/jobs", h.withAuth(h.cronJobs))
+	mux.HandleFunc("/api/cron/jobs/", h.withAuth(h.cronJob))
+	// Logs
+	mux.HandleFunc("/api/logs", h.withAuth(h.getLogs))
+	// Devices / Lights
+	mux.HandleFunc("/api/devices/lights", h.withAuth(h.lightsDevices))
+	mux.HandleFunc("/api/devices/lights/discover", h.withAuth(h.lightsDiscover))
+	mux.HandleFunc("/api/devices/lights/save", h.withAuth(h.lightsSave))
+	mux.HandleFunc("/api/devices/lights/control", h.withAuth(h.lightsControl))
+	mux.HandleFunc("/api/devices/lights/", h.withAuth(h.lightsDevice))
+	// Updates
+	mux.HandleFunc("/api/updates/check", h.withAuth(h.updatesCheck))
+	mux.HandleFunc("/api/updates/apply", h.withAuth(h.updatesApply))
+	// Onboarding
+	mux.HandleFunc("/api/onboarding/status", h.withAuth(h.onboardingStatus))
+	mux.HandleFunc("/api/onboarding/profile", h.withAuth(h.onboardingProfile))
 }
 
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -777,4 +808,47 @@ func (h *Handler) writeFile(w http.ResponseWriter, r *http.Request, path string)
 	logger.InfoCF("admin", "File saved", map[string]interface{}{"path": path})
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// --- Agent Reload ---
+
+func (h *Handler) agentReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	reloaded := []string{}
+
+	// Re-read config from disk
+	newCfg, err := config.LoadConfig(h.configPath)
+	if err != nil {
+		logger.ErrorCF("admin", "Reload config failed", map[string]interface{}{"error": err.Error()})
+		jsonErr(w, http.StatusInternalServerError, "config reload failed: "+err.Error())
+		return
+	}
+
+	// Update config fields in-place (pointer is shared with all services)
+	h.config.Agents = newCfg.Agents
+	h.config.Providers = newCfg.Providers
+	h.config.Tools = newCfg.Tools
+	h.config.Heartbeat = newCfg.Heartbeat
+	h.config.Sentinel = newCfg.Sentinel
+	h.config.Devices = newCfg.Devices
+	h.config.Council = newCfg.Council
+	h.config.Channels = newCfg.Channels
+	h.config.Briefing = newCfg.Briefing
+	reloaded = append(reloaded, "config")
+
+	// Reload cron jobs
+	if h.reloadFn != nil {
+		if err := h.reloadFn(); err != nil {
+			logger.ErrorCF("admin", "Reload services failed", map[string]interface{}{"error": err.Error()})
+		} else {
+			reloaded = append(reloaded, "cron")
+		}
+	}
+
+	logger.InfoCF("admin", "Agent reloaded", map[string]interface{}{"reloaded": reloaded})
+	jsonOK(w, map[string]interface{}{"status": "ok", "reloaded": reloaded})
 }

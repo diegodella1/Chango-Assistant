@@ -414,12 +414,141 @@
   .upload-zone:hover { border-color: var(--accent); color: var(--text); }
   .upload-zone input { display: none; }
 
+  /* Cron panel */
+  .cron-panel { flex: 1; padding: 24px; overflow-y: auto; }
+  .cron-panel h2 { font-size: 16px; margin-bottom: 16px; font-weight: 600; }
+  .cron-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .cron-card .cron-info { flex: 1; }
+  .cron-card .cron-name { font-size: 14px; font-weight: 500; }
+  .cron-card .cron-schedule { font-size: 12px; color: var(--text-muted); font-family: 'SF Mono', monospace; margin-top: 2px; }
+  .cron-card .cron-status { font-size: 12px; margin-top: 4px; }
+  .cron-card .cron-status.ok { color: var(--success); }
+  .cron-card .cron-status.err { color: var(--error); }
+  .cron-card .cron-actions { display: flex; gap: 8px; align-items: center; }
+  .cron-form {
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .cron-form h3 { font-size: 14px; margin-bottom: 12px; }
+  .cron-form .settings-row { margin-bottom: 10px; }
+  .btn-danger {
+    padding: 4px 10px; font-size: 12px; border-radius: 4px;
+    border: 1px solid var(--error); background: transparent;
+    color: var(--error); cursor: pointer;
+  }
+  .btn-danger:hover { background: rgba(248,81,73,0.15); }
+
+  /* Logs panel */
+  .logs-panel { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; }
+  .logs-panel h2 { font-size: 16px; margin-bottom: 16px; font-weight: 600; }
+  .logs-filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+  .logs-filters select, .logs-filters input {
+    padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 13px; outline: none;
+  }
+  .logs-filters select:focus, .logs-filters input:focus { border-color: var(--accent); }
+  .logs-output {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; overflow-y: auto;
+    font-family: 'SF Mono', monospace; font-size: 12px; line-height: 1.5;
+    min-height: 300px; max-height: 60vh;
+  }
+  .log-line { white-space: pre-wrap; word-break: break-all; }
+  .log-line.DEBUG { color: var(--text-muted); }
+  .log-line.INFO { color: var(--text); }
+  .log-line.WARN { color: #d29922; }
+  .log-line.ERROR { color: var(--error); }
+  .log-line.FATAL { color: var(--error); font-weight: bold; }
+
+  /* Lights panel */
+  .lights-panel { flex: 1; padding: 24px; overflow-y: auto; }
+  .lights-panel h2 { font-size: 16px; margin-bottom: 16px; font-weight: 600; }
+  .lights-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px; margin-bottom: 24px;
+  }
+  .light-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .light-card .light-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .light-card .light-name { font-size: 14px; font-weight: 500; flex: 1; }
+  .light-card .light-type {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    background: rgba(88,166,255,0.1); color: var(--accent);
+  }
+  .light-card .light-ip { font-size: 12px; color: var(--text-muted); font-family: 'SF Mono', monospace; }
+  .light-controls { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .light-controls input[type="color"] {
+    width: 36px; height: 28px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--bg); cursor: pointer; padding: 2px;
+  }
+  .light-controls input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--accent); }
+  .light-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .light-dot.on { background: var(--success); }
+  .light-dot.off { background: var(--text-muted); }
+  .discover-results {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .discover-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 0; border-bottom: 1px solid rgba(48,54,61,0.5);
+  }
+  .discover-item:last-child { border-bottom: none; }
+
+  /* Onboarding wizard */
+  .wizard-overlay {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; z-index: 90;
+  }
+  .wizard-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 40px; width: 480px; max-width: 95vw;
+  }
+  .wizard-box h2 { font-size: 22px; margin-bottom: 8px; }
+  .wizard-box .wizard-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+  .wizard-steps {
+    display: flex; gap: 8px; margin-bottom: 24px;
+  }
+  .wizard-step {
+    flex: 1; height: 4px; border-radius: 2px; background: var(--border);
+    transition: background 0.3s;
+  }
+  .wizard-step.done { background: var(--success); }
+  .wizard-step.active { background: var(--accent); }
+  .wizard-box .settings-row { margin-bottom: 12px; }
+  .wizard-box .settings-row label { min-width: 100px; }
+  .wizard-box input[type="text"], .wizard-box input[type="password"] {
+    width: 100%; padding: 10px 12px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 14px; outline: none; margin-bottom: 8px;
+  }
+  .wizard-box input:focus { border-color: var(--accent); }
+  .wizard-nav { display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end; }
+
+  /* Update section in health */
+  .update-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-top: 16px;
+  }
+  .update-available {
+    background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 8px; padding: 12px; margin-top: 12px;
+  }
+
   @media (max-width: 640px) {
     .sidebar { width: 160px; }
     .sidebar li { padding: 8px 12px; font-size: 13px; }
     .health-grid { grid-template-columns: 1fr; }
     .settings-row { flex-direction: column; align-items: stretch; }
     .settings-row label { min-width: auto; }
+    .lights-grid { grid-template-columns: 1fr; }
+    .wizard-box { padding: 24px; }
   }
 </style>
 </head>
@@ -445,8 +574,14 @@
     <ul><li id="healthNav" onclick="showHealth()">Raspberry Pi</li></ul>
     <div class="section-label">Memoria</div>
     <ul><li id="vaultNav" onclick="showVault()">Obsidian Vault</li></ul>
+    <div class="section-label">IoT</div>
+    <ul><li id="lightsNav" onclick="showLights()">Luces</li></ul>
+    <div class="section-label">Automatizacion</div>
+    <ul><li id="cronNav" onclick="showCron()">Cron Jobs</li></ul>
     <div class="section-label">Config</div>
     <ul><li id="settingsNav" onclick="showSettings()">Ajustes</li></ul>
+    <div class="section-label">Logs</div>
+    <ul><li id="logsNav" onclick="showLogs()">Visor</li></ul>
     <div class="section-label">Archivos</div>
     <ul id="fileList"></ul>
   </nav>
@@ -455,6 +590,9 @@
     <div class="health-panel" id="healthPanel" style="display:none"></div>
     <div class="vault-panel" id="vaultPanel" style="display:none"></div>
     <div class="settings-panel" id="settingsPanel" style="display:none"></div>
+    <div class="cron-panel" id="cronPanel" style="display:none"></div>
+    <div class="logs-panel" id="logsPanel" style="display:none"></div>
+    <div class="lights-panel" id="lightsPanel" style="display:none"></div>
     <div style="display:none;flex-direction:column;flex:1;overflow:hidden" id="editorPanel">
       <div class="editor-toolbar">
         <span class="filename" id="currentFile"></span>
@@ -544,7 +682,7 @@ function openFile(name, el) {
 
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   el.classList.add('active');
-  hideHealth();
+  hideAllPanels();
 
   setStatus('Cargando...', 'idle');
   fetch(API + '/api/files/' + encodeURIComponent(name), { headers: headers() })
@@ -608,9 +746,7 @@ function showHealth() {
 
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   document.getElementById('healthNav').classList.add('active');
-  document.getElementById('emptyState').style.display = 'none';
-  document.getElementById('editorPanel').style.display = 'none';
-  document.getElementById('vaultPanel').style.display = 'none';
+  hideAllPanels();
   document.getElementById('healthPanel').style.display = 'block';
 
   loadHealth();
@@ -618,11 +754,18 @@ function showHealth() {
   healthInterval = setInterval(loadHealth, 30000);
 }
 
-function hideHealth() {
-  document.getElementById('healthPanel').style.display = 'none';
-  document.getElementById('vaultPanel').style.display = 'none';
-  document.getElementById('settingsPanel').style.display = 'none';
+function hideAllPanels() {
+  ['healthPanel','vaultPanel','settingsPanel','cronPanel','logsPanel','lightsPanel'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('editorPanel').style.display = 'none';
   if (healthInterval) { clearInterval(healthInterval); healthInterval = null; }
+  if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
+}
+
+function hideHealth() {
+  hideAllPanels();
 }
 
 function loadHealth() {
@@ -826,9 +969,7 @@ function showVault() {
 
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   document.getElementById('vaultNav').classList.add('active');
-  document.getElementById('emptyState').style.display = 'none';
-  document.getElementById('editorPanel').style.display = 'none';
-  hideHealth();
+  hideAllPanels();
   document.getElementById('vaultPanel').style.display = 'block';
 
   loadVault();
@@ -977,10 +1118,7 @@ function showSettings() {
 
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   document.getElementById('settingsNav').classList.add('active');
-  document.getElementById('emptyState').style.display = 'none';
-  document.getElementById('editorPanel').style.display = 'none';
-  hideHealth();
-  document.getElementById('vaultPanel').style.display = 'none';
+  hideAllPanels();
   document.getElementById('settingsPanel').style.display = 'block';
 
   renderSettingsShell();
@@ -998,9 +1136,10 @@ function renderSettingsShell() {
     { id: 'tools', label: 'Tools' },
     { id: 'services', label: 'Servicios' },
     { id: 'agent', label: 'Agente' },
+    { id: 'briefing', label: 'Briefing' },
   ];
   let html = '<h2>Ajustes</h2>';
-  html += '<div class="restart-banner" id="restartBanner">Los cambios requieren reinicio para tomar efecto.</div>';
+  html += '<div class="restart-banner" id="restartBanner">Hay cambios sin aplicar. <button class="btn" style="margin-left:12px;padding:4px 12px;font-size:12px" onclick="applyReload()">Aplicar cambios</button></div>';
   html += '<div class="settings-tabs">';
   tabs.forEach(t => {
     html += '<button class="settings-tab' + (t.id === currentSettingsTab ? ' active' : '') + '" onclick="switchSettingsTab(\'' + t.id + '\')">' + t.label + '</button>';
@@ -1023,7 +1162,7 @@ function switchSettingsTab(tabId) {
   if (section) section.classList.add('active');
 
   // Load data for the tab
-  const loaders = { providers: loadProviders, channels: loadChannels, tools: loadTools, services: loadServices, agent: loadAgent };
+  const loaders = { providers: loadProviders, channels: loadChannels, tools: loadTools, services: loadServices, agent: loadAgent, briefing: loadBriefing };
   if (loaders[tabId]) loaders[tabId]();
 }
 
@@ -1349,6 +1488,510 @@ function saveAgent() {
     .then(() => { settingsToast('agent', 'Guardado', true); markRestart(); })
     .catch(e => settingsToast('agent', 'Error: ' + e.message, false));
 }
+
+// --- Briefing ---
+function loadBriefing() {
+  const el = document.getElementById('settingsSection_briefing');
+  el.innerHTML = '<div class="spinner"></div> Cargando...';
+  fetch(API + '/api/settings/briefing', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderBriefing(data))
+    .catch(e => { el.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderBriefing(data) {
+  let html = '<div class="settings-card"><h3>Briefing Ejecutivo</h3>';
+  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('brief_enabled', data.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Horario</label><input type="text" id="brief_time" value="' + esc(data.delivery_time || '08:00') + '" placeholder="HH:MM"></div>';
+  html += '<div class="settings-row"><label>Idioma</label><input type="text" id="brief_lang" value="' + esc(data.language || 'es-AR') + '"></div>';
+  html += '<div class="settings-row"><label>Temas</label><input type="text" id="brief_topics" value="' + esc((data.topics || []).join(', ')) + '" placeholder="AI, fintech, ..."></div>';
+  html += '<div class="settings-row"><label>Competidores</label><input type="text" id="brief_competitors" value="' + esc((data.competitors || []).join(', ')) + '" placeholder="Company A, Company B"></div>';
+  html += '<div class="settings-row"><label>Fuentes</label><input type="text" id="brief_sources" value="' + esc((data.sources || []).join(', ')) + '" placeholder="TechCrunch, HN, ..."></div>';
+  html += '</div>';
+  html += '<div class="settings-actions">';
+  html += '<button class="btn btn-primary" onclick="saveBriefing()">Guardar</button>';
+  html += '<span class="settings-toast" id="toast_briefing"></span></div>';
+  document.getElementById('settingsSection_briefing').innerHTML = html;
+}
+
+function saveBriefing() {
+  const split = v => v ? v.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const body = {
+    enabled: document.getElementById('brief_enabled').checked,
+    delivery_time: document.getElementById('brief_time').value,
+    language: document.getElementById('brief_lang').value,
+    topics: split(document.getElementById('brief_topics').value),
+    competitors: split(document.getElementById('brief_competitors').value),
+    sources: split(document.getElementById('brief_sources').value),
+  };
+  fetch(API + '/api/settings/briefing', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { settingsToast('briefing', 'Guardado', true); markRestart(); })
+    .catch(e => settingsToast('briefing', 'Error: ' + e.message, false));
+}
+
+// --- Agent Reload ---
+function applyReload() {
+  fetch(API + '/api/agent/reload', { method: 'POST', headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => {
+      settingsNeedsRestart = false;
+      const b = document.getElementById('restartBanner');
+      if (b) b.style.display = 'none';
+      alert('Recargado: ' + (data.reloaded || []).join(', '));
+    })
+    .catch(e => alert('Error al recargar: ' + e.message));
+}
+
+// --- Cron Jobs ---
+let cronFormVisible = false;
+
+function showCron() {
+  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  dirty = false; currentFile = null;
+  document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
+  document.getElementById('cronNav').classList.add('active');
+  hideAllPanels();
+  document.getElementById('cronPanel').style.display = 'block';
+  loadCron();
+}
+
+function loadCron() {
+  const el = document.getElementById('cronPanel');
+  el.innerHTML = '<h2>Cron Jobs</h2><div class="spinner"></div> Cargando...';
+  fetch(API + '/api/cron/jobs', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderCron(data.jobs || []))
+    .catch(e => { el.innerHTML = '<h2>Cron Jobs</h2><div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderCron(jobs) {
+  let html = '<h2>Cron Jobs</h2>';
+  html += '<button class="btn btn-primary" onclick="toggleCronForm()" style="margin-bottom:16px">+ Nuevo Job</button>';
+  html += '<div class="cron-form" id="cronForm" style="display:none">';
+  html += '<h3>Nuevo Cron Job</h3>';
+  html += '<div class="settings-row"><label>Nombre</label><input type="text" id="cj_name" placeholder="Mi tarea"></div>';
+  html += '<div class="settings-row"><label>Tipo</label><select id="cj_kind" style="padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px"><option value="cron">Cron</option><option value="every">Cada X ms</option></select></div>';
+  html += '<div class="settings-row"><label>Expresion</label><input type="text" id="cj_expr" placeholder="0 8 * * *"></div>';
+  html += '<div class="settings-row"><label>Mensaje</label><input type="text" id="cj_msg" placeholder="Prompt o comando"></div>';
+  html += '<div class="settings-row"><label>Deliver</label>' + toggle('cj_deliver', true) + '</div>';
+  html += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" onclick="createCronJob()">Crear</button><button class="btn" onclick="toggleCronForm()">Cancelar</button></div>';
+  html += '</div>';
+
+  if (jobs.length === 0) {
+    html += '<p style="color:var(--text-muted)">No hay cron jobs configurados</p>';
+  }
+  jobs.forEach(j => {
+    const schedStr = j.schedule.kind === 'cron' ? j.schedule.expr : (j.schedule.kind === 'every' ? 'cada ' + (j.schedule.everyMs/1000) + 's' : 'una vez');
+    const statusCls = j.state.lastStatus === 'ok' ? 'ok' : (j.state.lastStatus === 'error' ? 'err' : '');
+    const lastRun = j.state.lastRunAtMs ? timeSince(new Date(j.state.lastRunAtMs).toISOString()) : 'nunca';
+    const nextRun = j.state.nextRunAtMs ? new Date(j.state.nextRunAtMs).toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}) : '-';
+    html += '<div class="cron-card">';
+    html += '<div class="cron-info">';
+    html += '<div class="cron-name">' + esc(j.name) + '</div>';
+    html += '<div class="cron-schedule">' + esc(schedStr) + '</div>';
+    html += '<div class="cron-status ' + statusCls + '">Ultimo: ' + lastRun + ' | Proximo: ' + nextRun + '</div>';
+    html += '</div>';
+    html += '<div class="cron-actions">';
+    html += toggle('cron_toggle_' + j.id, j.enabled);
+    html += '<button class="btn-danger" onclick="deleteCronJob(\'' + j.id + '\')">Eliminar</button>';
+    html += '</div></div>';
+    // Wire toggle after render
+    setTimeout(() => {
+      const cb = document.getElementById('cron_toggle_' + j.id);
+      if (cb) cb.onchange = () => toggleCronJob(j.id, cb.checked);
+    }, 0);
+  });
+  document.getElementById('cronPanel').innerHTML = html;
+  // Re-wire toggles
+  jobs.forEach(j => {
+    setTimeout(() => {
+      const cb = document.getElementById('cron_toggle_' + j.id);
+      if (cb) cb.onchange = () => toggleCronJob(j.id, cb.checked);
+    }, 50);
+  });
+}
+
+function toggleCronForm() {
+  const f = document.getElementById('cronForm');
+  if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+function createCronJob() {
+  const kind = document.getElementById('cj_kind').value;
+  const expr = document.getElementById('cj_expr').value;
+  const schedule = { kind: kind };
+  if (kind === 'cron') schedule.expr = expr;
+  else if (kind === 'every') schedule.everyMs = parseInt(expr) || 60000;
+
+  const body = {
+    name: document.getElementById('cj_name').value,
+    schedule: schedule,
+    message: document.getElementById('cj_msg').value,
+    deliver: document.getElementById('cj_deliver').checked,
+    enabled: true,
+  };
+  fetch(API + '/api/cron/jobs', { method: 'POST', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => loadCron())
+    .catch(e => alert('Error: ' + e.message));
+}
+
+function toggleCronJob(id, enabled) {
+  fetch(API + '/api/cron/jobs/' + id + '/toggle', {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ enabled: enabled })
+  }).catch(e => alert('Error: ' + e.message));
+}
+
+function deleteCronJob(id) {
+  if (!confirm('Eliminar este cron job?')) return;
+  fetch(API + '/api/cron/jobs/' + id, { method: 'DELETE', headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => loadCron())
+    .catch(e => alert('Error: ' + e.message));
+}
+
+// --- Logs ---
+let logsInterval = null;
+
+function showLogs() {
+  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  dirty = false; currentFile = null;
+  document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
+  document.getElementById('logsNav').classList.add('active');
+  hideAllPanels();
+  document.getElementById('logsPanel').style.display = 'flex';
+  renderLogsShell();
+  loadLogs();
+}
+
+function renderLogsShell() {
+  let html = '<h2>Logs</h2>';
+  html += '<div class="logs-filters">';
+  html += '<select id="logLevel"><option value="">Todos</option><option value="DEBUG">DEBUG</option><option value="INFO">INFO</option><option value="WARN">WARN</option><option value="ERROR">ERROR</option></select>';
+  html += '<input type="text" id="logSearch" placeholder="Buscar..." style="flex:1;min-width:120px">';
+  html += '<input type="number" id="logLines" value="100" min="10" max="500" style="width:70px">';
+  html += '<label style="font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><input type="checkbox" id="logAuto" onchange="toggleLogAuto()"> Auto</label>';
+  html += '<button class="btn" onclick="loadLogs()">Refrescar</button>';
+  html += '</div>';
+  html += '<div class="logs-output" id="logsOutput"></div>';
+  document.getElementById('logsPanel').innerHTML = html;
+}
+
+function loadLogs() {
+  const level = document.getElementById('logLevel')?.value || '';
+  const search = document.getElementById('logSearch')?.value || '';
+  const lines = document.getElementById('logLines')?.value || '100';
+  const url = API + '/api/logs?lines=' + lines + (level ? '&level=' + level : '') + (search ? '&search=' + encodeURIComponent(search) : '');
+  fetch(url, { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => {
+      const out = document.getElementById('logsOutput');
+      if (!data.logs || data.logs.length === 0) { out.innerHTML = '<span style="color:var(--text-muted)">Sin logs</span>'; return; }
+      let html = '';
+      data.logs.forEach(l => {
+        const comp = l.component ? ' ' + l.component + ':' : '';
+        const fields = l.fields ? ' ' + JSON.stringify(l.fields) : '';
+        html += '<div class="log-line ' + esc(l.level) + '">[' + esc(l.timestamp) + '] [' + esc(l.level) + ']' + esc(comp) + ' ' + esc(l.message) + esc(fields) + '</div>';
+      });
+      out.innerHTML = html;
+      out.scrollTop = out.scrollHeight;
+    })
+    .catch(e => {
+      const out = document.getElementById('logsOutput');
+      if (out) out.innerHTML = '<span style="color:var(--error)">Error: ' + esc(e.message) + '</span>';
+    });
+}
+
+function toggleLogAuto() {
+  const auto = document.getElementById('logAuto')?.checked;
+  if (auto) { logsInterval = setInterval(loadLogs, 5000); }
+  else { if (logsInterval) { clearInterval(logsInterval); logsInterval = null; } }
+}
+
+// --- Lights ---
+function showLights() {
+  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  dirty = false; currentFile = null;
+  document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
+  document.getElementById('lightsNav').classList.add('active');
+  hideAllPanels();
+  document.getElementById('lightsPanel').style.display = 'block';
+  loadLights();
+}
+
+function loadLights() {
+  const el = document.getElementById('lightsPanel');
+  el.innerHTML = '<h2>Luces</h2><div class="spinner"></div> Cargando...';
+  fetch(API + '/api/devices/lights', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => renderLights(data.output || '[]'))
+    .catch(e => { el.innerHTML = '<h2>Luces</h2><div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function renderLights(outputStr) {
+  let devices = [];
+  try { devices = JSON.parse(outputStr); } catch(e) {}
+  if (!Array.isArray(devices)) devices = [];
+
+  let html = '<h2>Luces</h2>';
+  html += '<div style="display:flex;gap:12px;margin-bottom:16px">';
+  html += '<button class="btn btn-primary" id="btnDiscover" onclick="discoverLights()">Escanear red</button>';
+  html += '</div>';
+  html += '<div id="discoverArea"></div>';
+
+  if (devices.length === 0) {
+    html += '<p style="color:var(--text-muted)">No hay luces guardadas. Usa "Escanear red" para buscar dispositivos.</p>';
+  } else {
+    html += '<div class="lights-grid">';
+    devices.forEach(d => {
+      html += '<div class="light-card">';
+      html += '<div class="light-header"><span class="light-name">' + esc(d.name || d.ip) + '</span>';
+      html += '<span class="light-type">' + esc(d.type || 'unknown') + '</span></div>';
+      html += '<div class="light-ip">' + esc(d.ip) + '</div>';
+      html += '<div class="light-controls">';
+      html += '<button class="btn" onclick="lightControl(\'' + esc(d.name||d.ip) + '\',\'on\')">On</button>';
+      html += '<button class="btn" onclick="lightControl(\'' + esc(d.name||d.ip) + '\',\'off\')">Off</button>';
+      html += '<input type="color" id="lc_' + esc(d.ip) + '" value="#ffffff" onchange="lightColor(\'' + esc(d.name||d.ip) + '\',this.value)">';
+      html += '<input type="range" min="1" max="100" value="100" onchange="lightBrightness(\'' + esc(d.name||d.ip) + '\',this.value)">';
+      html += '<button class="btn-danger" onclick="lightRemove(\'' + esc(d.name||d.ip) + '\')">X</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+  document.getElementById('lightsPanel').innerHTML = html;
+}
+
+function discoverLights() {
+  const btn = document.getElementById('btnDiscover');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Buscando...'; }
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 15000);
+  fetch(API + '/api/devices/lights/discover', { method: 'POST', headers: headers(), signal: ctrl.signal })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Escanear red'; }
+      let devices = [];
+      try { devices = JSON.parse(data.output || '[]'); } catch(e) {}
+      const area = document.getElementById('discoverArea');
+      if (!devices.length) { area.innerHTML = '<p style="color:var(--text-muted);margin-bottom:16px">No se encontraron dispositivos</p>'; return; }
+      let html = '<div class="discover-results"><h3>Encontrados (' + devices.length + ')</h3>';
+      devices.forEach((d,i) => {
+        html += '<div class="discover-item">';
+        html += '<span style="flex:1;font-family:monospace;font-size:13px">' + esc(d.ip || d.IP) + ' | ' + esc(d.mac || d.MAC) + ' | ' + esc(d.model || d.Model) + '</span>';
+        html += '<input type="text" id="disc_name_' + i + '" placeholder="Nombre" style="width:120px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:13px">';
+        html += '<button class="btn" onclick="saveLightFromDiscover(' + i + ',\'' + esc(d.ip||d.IP) + '\',\'' + esc(d.mac||d.MAC) + '\',\'' + esc(d.model||d.Model) + '\')">Guardar</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+      area.innerHTML = html;
+    })
+    .catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Escanear red'; }
+      const area = document.getElementById('discoverArea');
+      if (area) area.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>';
+    });
+}
+
+function saveLightFromDiscover(idx, ip, mac, model) {
+  const name = document.getElementById('disc_name_' + idx)?.value || ip;
+  fetch(API + '/api/devices/lights/save', {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ name: name, ip: ip, mac: mac, model: model })
+  })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => loadLights())
+    .catch(e => alert('Error: ' + e.message));
+}
+
+function lightControl(device, action) {
+  fetch(API + '/api/devices/lights/control', {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ device: device, action: action })
+  }).catch(e => alert('Error: ' + e.message));
+}
+
+function lightColor(device, hex) {
+  const r = parseInt(hex.substr(1,2),16), g = parseInt(hex.substr(3,2),16), b = parseInt(hex.substr(5,2),16);
+  fetch(API + '/api/devices/lights/control', {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ device: device, action: 'color', r: r, g: g, b: b })
+  }).catch(e => alert('Error: ' + e.message));
+}
+
+function lightBrightness(device, val) {
+  fetch(API + '/api/devices/lights/control', {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ device: device, action: 'brightness', brightness: parseInt(val) })
+  }).catch(e => alert('Error: ' + e.message));
+}
+
+function lightRemove(device) {
+  if (!confirm('Eliminar "' + device + '"?')) return;
+  fetch(API + '/api/devices/lights/' + encodeURIComponent(device), { method: 'DELETE', headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => loadLights())
+    .catch(e => alert('Error: ' + e.message));
+}
+
+// --- Updates (in health panel) ---
+function checkUpdates() {
+  const el = document.getElementById('updateArea');
+  if (!el) return;
+  el.innerHTML = '<span class="spinner"></span> Verificando...';
+  fetch(API + '/api/updates/check', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => {
+      let html = '<div style="font-size:13px">Version actual: <strong>' + esc(data.current || 'dev') + '</strong></div>';
+      if (data.update_available) {
+        html += '<div class="update-available">';
+        html += '<div style="font-size:14px;font-weight:500;margin-bottom:8px">Nueva version disponible: ' + esc(data.latest) + '</div>';
+        if (data.release_notes) html += '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;white-space:pre-wrap">' + esc(data.release_notes.substring(0,500)) + '</div>';
+        html += '<button class="btn btn-primary" onclick="applyUpdate()">Actualizar ahora</button>';
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px">El sistema se reiniciara</div>';
+        html += '</div>';
+      } else {
+        html += '<div style="font-size:13px;color:var(--success);margin-top:8px">Estas al dia</div>';
+      }
+      if (data.error) html += '<div style="font-size:13px;color:var(--error);margin-top:8px">' + esc(data.error) + '</div>';
+      el.innerHTML = html;
+    })
+    .catch(e => { el.innerHTML = '<div style="color:var(--error)">Error: ' + esc(e.message) + '</div>'; });
+}
+
+function applyUpdate() {
+  fetch(API + '/api/updates/apply', { method: 'POST', headers: headers() })
+    .then(r => r.json())
+    .then(data => alert(data.message || 'Deploy iniciado'))
+    .catch(e => alert('Error: ' + e.message));
+}
+
+// Inject updates section into health panel after render
+const origRenderHealth = renderHealth;
+renderHealth = function(d) {
+  origRenderHealth(d);
+  const panel = document.getElementById('healthPanel');
+  if (panel) {
+    const updateHtml = '<div class="update-section"><h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Actualizaciones</h3>' +
+      '<button class="btn" onclick="checkUpdates()">Verificar</button>' +
+      '<div id="updateArea" style="margin-top:12px"></div></div>';
+    panel.insertAdjacentHTML('beforeend', updateHtml);
+  }
+};
+
+// --- Onboarding Wizard ---
+function checkOnboarding() {
+  fetch(API + '/api/onboarding/status', { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(data => {
+      if (data.needed) showWizard(data.completed_steps || []);
+    })
+    .catch(() => {});
+}
+
+let wizardStep = 0;
+const wizardSteps = ['provider', 'telegram', 'profile'];
+
+function showWizard(completed) {
+  wizardStep = 0;
+  for (let i = 0; i < wizardSteps.length; i++) {
+    if (!completed.includes(wizardSteps[i])) { wizardStep = i; break; }
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'wizard-overlay';
+  overlay.id = 'wizardOverlay';
+  overlay.innerHTML = '<div class="wizard-box" id="wizardBox"></div>';
+  document.body.appendChild(overlay);
+  renderWizardStep();
+}
+
+function renderWizardStep() {
+  const box = document.getElementById('wizardBox');
+  if (!box) return;
+
+  let stepsHtml = '<div class="wizard-steps">';
+  wizardSteps.forEach((s, i) => {
+    const cls = i < wizardStep ? 'done' : (i === wizardStep ? 'active' : '');
+    stepsHtml += '<div class="wizard-step ' + cls + '"></div>';
+  });
+  stepsHtml += '</div>';
+
+  let html = '<h2>Configuracion inicial</h2>';
+  html += '<div class="wizard-sub">Configura Chango en unos minutos</div>';
+  html += stepsHtml;
+
+  if (wizardStep === 0) {
+    html += '<h3 style="margin-bottom:12px">1. Provider LLM</h3>';
+    html += '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Necesitas al menos una API key. OpenRouter es recomendado.</p>';
+    html += '<div class="settings-row"><label>OpenRouter</label><input type="password" id="wiz_or_key" placeholder="sk-or-..."></div>';
+    html += '<div class="wizard-nav"><button class="btn btn-primary" onclick="wizardSaveProvider()">Siguiente</button></div>';
+  } else if (wizardStep === 1) {
+    html += '<h3 style="margin-bottom:12px">2. Telegram Bot</h3>';
+    html += '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Crea un bot en @BotFather y pega el token aca.</p>';
+    html += '<div class="settings-row"><label>Bot Token</label><input type="password" id="wiz_tg_token" placeholder="123456:ABC..."></div>';
+    html += '<div class="settings-row"><label>Tu Chat ID</label><input type="text" id="wiz_tg_chatid" placeholder="123456789"></div>';
+    html += '<div class="wizard-nav"><button class="btn" onclick="wizardStep=0;renderWizardStep()">Atras</button><button class="btn btn-primary" onclick="wizardSaveTelegram()">Siguiente</button></div>';
+  } else if (wizardStep === 2) {
+    html += '<h3 style="margin-bottom:12px">3. Tu Perfil</h3>';
+    html += '<input type="text" id="wiz_name" placeholder="Nombre completo">';
+    html += '<input type="text" id="wiz_role" placeholder="Rol (ej: CEO, CTO)">';
+    html += '<input type="text" id="wiz_industry" placeholder="Industria">';
+    html += '<input type="text" id="wiz_tz" placeholder="Timezone (ej: America/Buenos_Aires)" value="America/Buenos_Aires">';
+    html += '<div class="wizard-nav"><button class="btn" onclick="wizardStep=1;renderWizardStep()">Atras</button><button class="btn btn-primary" onclick="wizardSaveProfile()">Completar</button></div>';
+  }
+
+  box.innerHTML = html;
+}
+
+function wizardSaveProvider() {
+  const key = document.getElementById('wiz_or_key')?.value;
+  if (!key) { alert('Ingresa una API key'); return; }
+  fetch(API + '/api/settings/providers', {
+    method: 'PUT', headers: headers(),
+    body: JSON.stringify({ openrouter: { api_key: key, api_base: '' }, anthropic: { api_key: '', api_base: '' }, openai: { api_key: '', api_base: '' }, groq: { api_key: '', api_base: '' }, gemini: { api_key: '', api_base: '' }, deepseek: { api_key: '', api_base: '' }, zhipu: { api_key: '', api_base: '' }, vllm: { api_key: '', api_base: '' }, nvidia: { api_key: '', api_base: '' }, moonshot: { api_key: '', api_base: '' }, shengsuanyun: { api_key: '', api_base: '' }, github_copilot: { api_key: '', api_base: '' } })
+  })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { wizardStep = 1; renderWizardStep(); })
+    .catch(e => alert('Error: ' + e.message));
+}
+
+function wizardSaveTelegram() {
+  const token = document.getElementById('wiz_tg_token')?.value;
+  const chatid = document.getElementById('wiz_tg_chatid')?.value;
+  if (!token) { alert('Ingresa el bot token'); return; }
+  const body = {
+    telegram: { enabled: true, token: token, allow_from: chatid ? [chatid] : [] },
+    discord: { enabled: false, token: '' },
+    slack: { enabled: false, token: '' },
+    webhook: { enabled: false },
+  };
+  fetch(API + '/api/settings/channels', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => { wizardStep = 2; renderWizardStep(); })
+    .catch(e => alert('Error: ' + e.message));
+}
+
+function wizardSaveProfile() {
+  const body = {
+    name: document.getElementById('wiz_name')?.value || '',
+    role: document.getElementById('wiz_role')?.value || '',
+    industry: document.getElementById('wiz_industry')?.value || '',
+    timezone: document.getElementById('wiz_tz')?.value || 'America/Buenos_Aires',
+  };
+  fetch(API + '/api/onboarding/profile', { method: 'POST', headers: headers(), body: JSON.stringify(body) })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+    .then(() => {
+      const overlay = document.getElementById('wizardOverlay');
+      if (overlay) overlay.remove();
+      applyReload();
+    })
+    .catch(e => alert('Error: ' + e.message));
+}
+
+// Check onboarding on init
+setTimeout(() => { if (token) checkOnboarding(); }, 1000);
 </script>
 </body>
 </html>

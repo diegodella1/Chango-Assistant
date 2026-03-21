@@ -507,6 +507,33 @@ func (h *Handler) uploadGoogleSA(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// --- Briefing ---
+
+func (h *Handler) settingsBriefing(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		jsonOK(w, h.config.Briefing)
+
+	case http.MethodPut:
+		var req config.BriefingConfig
+		if err := decodeBody(r, &req); err != nil {
+			jsonErr(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		h.config.Briefing = req
+		if err := h.saveConfig(); err != nil {
+			logger.ErrorCF("admin", "SaveConfig error", map[string]interface{}{"error": err.Error()})
+			jsonErr(w, http.StatusInternalServerError, "save failed")
+			return
+		}
+		logger.InfoC("admin", "Briefing config updated")
+		jsonOK(w, map[string]string{"status": "ok"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 // --- Test Provider ---
 
 func (h *Handler) testProvider(w http.ResponseWriter, r *http.Request) {

@@ -771,6 +771,12 @@ func gatewayCmd() {
 	// Admin panel
 	if cfg.Admin.Enabled {
 		adminHandler := admin.New(cfg.WorkspacePath(), cfg.Admin.Token, configPath, cfg)
+		adminHandler.SetCronService(cronService)
+		adminHandler.SetLightsTool(tools.NewLightsTool(cfg.WorkspacePath()))
+		adminHandler.SetVersion(version)
+		adminHandler.SetReloadFn(func() error {
+			return cronService.Load()
+		})
 		adminHandler.Register(healthMux)
 		fmt.Println("✓ Admin panel enabled at /admin")
 	}
