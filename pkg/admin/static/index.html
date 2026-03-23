@@ -1543,14 +1543,17 @@ function renderServices(data) {
   const dv = data.devices || {};
   let html = '';
   html += '<div class="settings-card"><h3>Heartbeat</h3>';
+  html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Chequeo periodico interno del agente. Ejecuta las tareas definidas en HEARTBEAT.md y reporta el estado general.</p>';
   html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_hb_enabled', hb.enabled) + '</div>';
   html += '<div class="settings-row"><label>Intervalo (min)</label><input type="number" id="svc_hb_interval" value="' + (hb.interval || 45) + '" min="5" max="1440"></div>';
   html += '</div>';
   html += '<div class="settings-card"><h3>Sentinel</h3>';
+  html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Monitor de salud del hardware: CPU temp, RAM y disco. Si algo se pasa de los umbrales (temp &gt;80\u00B0C, RAM &gt;90%, disco &gt;95%) te avisa por Telegram.</p>';
   html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_sn_enabled', sn.enabled) + '</div>';
   html += '<div class="settings-row"><label>Intervalo (seg)</label><input type="number" id="svc_sn_interval" value="' + (sn.interval_seconds || 120) + '" min="30" max="3600"></div>';
   html += '</div>';
   html += '<div class="settings-card"><h3>Devices</h3>';
+  html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Monitor de dispositivos USB conectados al appliance. Detecta cuando se conecta o desconecta algo.</p>';
   html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_dv_enabled', dv.enabled) + '</div>';
   html += '<div class="settings-row"><label>Monitor USB</label>' + toggle('svc_dv_usb', dv.monitor_usb) + '</div>';
   html += '</div>';
@@ -1585,6 +1588,7 @@ function loadAgent() {
 
 function renderAgent(data) {
   let html = '<div class="settings-card"><h3>Agente por defecto</h3>';
+  html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Configuracion del modelo de IA que usa Chango para responder. Provider y modelo determinan la calidad y velocidad de las respuestas.</p>';
   html += '<div class="settings-row"><label>Provider</label><input type="text" id="agent_provider" value="' + esc(data.provider || '') + '" placeholder="(auto-detect)"></div>';
   html += '<div class="settings-row"><label>Modelo</label><input type="text" id="agent_model" value="' + esc(data.model || '') + '" placeholder="e.g. gpt-4o"></div>';
   html += '<div class="settings-row"><label>Temperature</label><input type="number" id="agent_temp" value="' + (data.temperature || 0.7) + '" min="0" max="2" step="0.1"></div>';
@@ -1624,6 +1628,7 @@ function loadBriefing() {
 
 function renderBriefing(data) {
   let html = '<div class="settings-card"><h3>Briefing Ejecutivo</h3>';
+  html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Resumen diario automatico que Chango te envia por Telegram. Incluye noticias de tu industria, agenda y temas que configuraste.</p>';
   html += '<div class="settings-row"><label>Habilitado</label>' + toggle('brief_enabled', data.enabled) + '</div>';
   html += '<div class="settings-row"><label>Horario</label><input type="text" id="brief_time" value="' + esc(data.delivery_time || '08:00') + '" placeholder="HH:MM"></div>';
   html += '<div class="settings-row"><label>Idioma</label><input type="text" id="brief_lang" value="' + esc(data.language || 'es-AR') + '"></div>';
