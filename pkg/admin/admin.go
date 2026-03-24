@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/config"
@@ -50,6 +51,44 @@ type Handler struct {
 	lightsTool    *tools.LightsTool
 	reloadFn      func() error
 	version       string
+	eventBus      *EventBus
+}
+
+// EventBus broadcasts real-time agent activity events to SSE clients.
+type EventBus struct {
+	clients map[chan string]bool
+	mu      sync.RWMutex
+}
+
+func newEventBus() *EventBus {
+	return &EventBus{clients: make(map[chan string]bool)}
+}
+
+// Emit sends an event to all connected SSE clients.
+func (eb *EventBus) Emit(eventType string) {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+	for ch := range eb.clients {
+		select {
+		case ch <- eventType:
+		default: // drop if client is slow
+		}
+	}
+}
+
+func (eb *EventBus) subscribe() chan string {
+	ch := make(chan string, 16)
+	eb.mu.Lock()
+	eb.clients[ch] = true
+	eb.mu.Unlock()
+	return ch
+}
+
+func (eb *EventBus) unsubscribe(ch chan string) {
+	eb.mu.Lock()
+	delete(eb.clients, ch)
+	eb.mu.Unlock()
+	close(ch)
 }
 
 func New(workspacePath, token, configPath string, cfg *config.Config) *Handler {
@@ -58,6 +97,14 @@ func New(workspacePath, token, configPath string, cfg *config.Config) *Handler {
 		token:         token,
 		configPath:    configPath,
 		config:        cfg,
+		eventBus:      newEventBus(),
+	}
+}
+
+// EmitEvent exposes the event bus for the agent loop to emit activity events.
+func (h *Handler) EmitEvent(eventType string) {
+	if h.eventBus != nil {
+		h.eventBus.Emit(eventType)
 	}
 }
 
@@ -70,6 +117,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", h.serveHome)
 	mux.HandleFunc("/admin", h.serveSPA)
 	mux.HandleFunc("/api/public/status", h.publicStatus)
+	mux.HandleFunc("/api/public/events", h.sseEvents)
 	mux.HandleFunc("/api/health", h.withAuth(h.systemHealth))
 	mux.HandleFunc("/api/swap/free", h.withAuth(h.freeSwap))
 	mux.HandleFunc("/api/wifi/scan", h.withAuth(h.wifiScan))
@@ -948,4 +996,40 @@ func (h *Handler) agentReload(w http.ResponseWriter, r *http.Request) {
 
 	logger.InfoCF("admin", "Agent reloaded", map[string]interface{}{"reloaded": reloaded})
 	jsonOK(w, map[string]interface{}{"status": "ok", "reloaded": reloaded})
+}
+
+// sseEvents serves Server-Sent Events for real-time agent activity visualization.
+// Events: think, tool, memory, browse, learn, cron, heartbeat
+func (h *Handler) sseEvents(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "SSE not supported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := h.eventBus.subscribe()
+	defer h.eventBus.unsubscribe(ch)
+
+	// Send initial keepalive
+	fmt.Fprintf(w, ": connected\n\n")
+	flusher.Flush()
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", evt)
+			flusher.Flush()
+		}
+	}
 }

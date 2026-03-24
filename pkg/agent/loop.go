@@ -47,6 +47,18 @@ type AgentLoop struct {
 	configPath     string         // Path to config.json for persistence
 	tracker        *telemetry.Tracker
 	subagentMgr    *tools.SubagentManager
+	onEvent        func(string) // callback for real-time activity events (SSE)
+}
+
+// SetEventCallback sets a function called on agent activity events (think, tool, memory, etc.)
+func (al *AgentLoop) SetEventCallback(fn func(string)) {
+	al.onEvent = fn
+}
+
+func (al *AgentLoop) emitEvent(eventType string) {
+	if al.onEvent != nil {
+		al.onEvent(eventType)
+	}
 }
 
 // processOptions configures how a message is processed
@@ -501,6 +513,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		}
 
 		// Call LLM
+		al.emitEvent("think")
 		response, err := al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
 			"max_tokens":  8192,
 			"temperature": 0.7,
@@ -607,6 +620,17 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				}
 			}
 
+			// Emit activity event based on tool type
+			switch tc.Name {
+			case "memory":
+				al.emitEvent("memory")
+			case "browse", "web_search", "web_fetch":
+				al.emitEvent("browse")
+			case "learn":
+				al.emitEvent("learn")
+			default:
+				al.emitEvent("tool")
+			}
 			toolResult := al.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, opts.Channel, opts.ChatID, asyncCallback)
 
 			// Collect media URLs from tool results

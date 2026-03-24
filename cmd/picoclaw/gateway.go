@@ -282,6 +282,8 @@ func gatewayCmd() {
 			return cronService.Load()
 		})
 		adminHandler.Register(healthMux)
+		// Connect agent activity events to admin SSE for real-time visualization
+		agentLoop.SetEventCallback(adminHandler.EmitEvent)
 		fmt.Println("✓ Admin panel enabled at /admin")
 	}
 
