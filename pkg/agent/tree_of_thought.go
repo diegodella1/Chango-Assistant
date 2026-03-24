@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -96,8 +97,8 @@ func (al *AgentLoop) treeOfThought(ctx context.Context, messages []providers.Mes
 			branchMsgs = append(branchMsgs[:len(branchMsgs)-1], hint, branchMsgs[len(branchMsgs)-1])
 
 			resp, err := al.provider.Chat(totCtx, branchMsgs, nil, al.model, map[string]interface{}{
-				"max_tokens":  2048,
-				"temperature": 0.7,
+				"max_tokens":  constants.TreeOfThoughtBranchMaxTokens,
+				"temperature": constants.DefaultTemperature,
 			})
 			if err != nil {
 				branchErrors[idx] = err
@@ -160,8 +161,8 @@ Respond in the same language the user used.`, branches[0], branches[1], branches
 	al.emitEvent("think")
 
 	synthResp, err := al.provider.Chat(totCtx, synthMsgs, nil, al.model, map[string]interface{}{
-		"max_tokens":  4096,
-		"temperature": 0.5,
+		"max_tokens":  constants.TreeOfThoughtSynthesisMaxTokens,
+		"temperature": constants.CreativeTemperature,
 	})
 	if err != nil {
 		logger.WarnCF("agent", "ToT synthesis failed", map[string]interface{}{"error": err.Error()})

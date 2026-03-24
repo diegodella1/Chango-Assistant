@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/telemetry"
@@ -168,8 +169,8 @@ Return ONLY valid JSON array, no markdown fences:`
 	defer cancel()
 
 	resp, err := al.provider.Chat(distillCtx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.model, map[string]interface{}{
-		"max_tokens":  1024,
-		"temperature": 0.2,
+		"max_tokens":  constants.SummarizeMaxTokens,
+		"temperature": constants.MinimalTemperature,
 	})
 	if err != nil {
 		logger.WarnCF("agent", "Memory distillation failed", map[string]interface{}{"error": err.Error()})
@@ -238,8 +239,8 @@ func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Messa
 	}
 
 	response, err := al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.model, map[string]interface{}{
-		"max_tokens":  1024,
-		"temperature": 0.3,
+		"max_tokens":  constants.SummarizeMaxTokens,
+		"temperature": constants.LowTemperature,
 	})
 	if response != nil && response.Usage != nil && al.tracker != nil {
 		al.tracker.Record(telemetry.FeatureSummarize, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)

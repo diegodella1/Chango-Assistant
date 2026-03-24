@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
@@ -137,7 +138,7 @@ func (p *LlamaCppProvider) chatBinary(ctx context.Context, messages []Message, t
 	}
 
 	// Binary mode timeout: generous for Pi 5 (small models ~10-60s)
-	timeout := 120 * time.Second
+	timeout := constants.LLMRequestTimeout
 	if deadline, ok := ctx.Deadline(); ok {
 		timeout = time.Until(deadline)
 	}

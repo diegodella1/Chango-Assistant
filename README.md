@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="https://em-content.zobj.net/source/apple/391/lobster_1f99e.png" width="120" alt="Chango">
+  <img src="https://em-content.zobj.net/source/apple/391/monkey_1f412.png" width="120" alt="Chango">
 </p>
 
-<h1 align="center">Chango Assistant</h1>
+<h1 align="center">Chango</h1>
 
 <p align="center">
-  <strong>AI-powered personal assistant running on a Raspberry Pi 5</strong>
+  <strong>Autonomous AI agent running on a Raspberry Pi 5</strong>
 </p>
 
 <p align="center">
-  <em>Fork of <a href="https://github.com/picoclaw/picoclaw">picoclaw</a> — optimized for product development workflows and personal automation</em>
+  <em>Not a chatbot — a co-founder that thinks, acts, remembers, and improves on its own</em>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Platform-Raspberry%20Pi%205-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white" alt="Raspberry Pi">
   <img src="https://img.shields.io/badge/Channel-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram">
-  <img src="https://img.shields.io/badge/LLM-OpenRouter-8B5CF6?style=flat-square" alt="OpenRouter">
+  <img src="https://img.shields.io/badge/LLM-Multi--provider-8B5CF6?style=flat-square" alt="Multi-provider">
   <img src="https://img.shields.io/badge/Deploy-Coolify-6C47FF?style=flat-square" alt="Coolify">
 </p>
 
@@ -24,90 +24,127 @@
 
 ## What is Chango?
 
-Chango is an autonomous execution copilot that lives on a Raspberry Pi 5 and communicates via Telegram. It can search the web, manage your Google Calendar, generate images, transcribe voice messages, run shell commands on the host, and much more — all through natural conversation.
+Chango is an autonomous AI agent that lives on a Raspberry Pi 5. It thinks independently, acts proactively, remembers everything, and improves itself — all while running on a $80 computer in Buenos Aires.
 
-Built in Go, containerized with Docker, and deployed via Coolify. Zero cloud dependencies beyond the LLM API.
+It communicates via Telegram (and 13 other channels), uses 30+ tools, runs 7 background services, and has a personality with permission to disagree with you.
+
+Built in Go. Containerized with Docker. Deployed via Coolify. Zero cloud dependencies beyond the LLM API.
 
 ---
 
-## Features
+## What Chango does on its own
 
-### Conversation & Intelligence
-- **Multi-model support** — Switch between 9+ LLMs on-the-fly via `/model` command (GPT-4o, Claude, Gemini, DeepSeek, etc.)
-- **Runtime provider switching** — `/provider` command to change LLM providers without restart
-- **Persistent memory** — Key-value store for long-term context across sessions
-- **Session summarization** — Automatic context compression to stay within token limits
-- **Subagent system** — Spawn parallel agents for complex multi-step tasks
-- **Continuous learning** — Nightly reflection cycle extracts patterns from daily conversations and stores them as persistent memories
+These services run continuously without any user interaction:
 
-### Web & Search
-- **Google Search (Serper)** — Priority search provider with Google-quality results
-- **Brave Search** — API-based fallback
-- **DuckDuckGo** — HTML scraping as last resort
-- **Web Fetch** — Extract readable content from any URL
+| Service | Frequency | What it does |
+|---------|-----------|-------------|
+| **Heartbeat** | ~45 min | Buenos días, check-ins, follow-ups, task nudges |
+| **Sentinel** | 2 min | Monitors CPU temp, RAM, disk — alerts on critical thresholds |
+| **Attention** | 2 hours | Detects stale projects, overdue tasks, opportunities |
+| **Email Watcher** | 30 min | Classifies Gmail inbox, notifies about important messages |
+| **RSS Watcher** | 4 hours | Monitors feeds, filters by relevance, builds daily digest |
+| **Health Check** | 5 min | Pings HTTP endpoints, auto-restarts downed containers |
+| **Cron jobs** | Scheduled | Nightly reflection (23:00), weekly self-evaluation (Sundays 20:00), HN posting |
 
-### Google Workspace *(optional — requires service account credentials)*
-- **Calendar** — Read events, create appointments, manage multiple calendars
-- **Gmail** — Read, search, send, and reply to emails
-- **Drive** — List, search, and read documents
+Chango also **auto-distills memories** — after each conversation, it extracts learnings and stores them in its Obsidian vault for future context.
 
-### Voice & Media
-- **Voice transcription** — Groq-powered speech-to-text for incoming voice messages
-- **Text-to-speech** — Edge TTS with Argentine Spanish voice (es-AR-TomasNeural)
-- **Image generation** — Pollinations.ai with HTTP validation and automatic retries
-- **YouTube** — Extract transcripts from YouTube videos
+---
 
-### Smart Home & IoT
-- **Lights** — Magic Home WiFi device control (RGB strips, bulbs) via UDP discovery + TCP commands
-- **I2C / SPI** — Direct hardware bus interaction for IoT peripherals
+## What Chango does when you talk to it
 
-### Automation & Productivity
-- **Reminders** — Schedule notifications delivered via Telegram
-- **Tasks** — Persistent goal and task tracking
-- **Snippets** — Save and retrieve code snippets
-- **Cron jobs** — Scheduled background tasks (JSON-configured)
-- **Heartbeat** — Periodic check-ins with proactive notifications (every 45min)
-- **Telemetry** — Token usage tracking per feature (chat, heartbeat, cron, summarize) with daily breakdown, 30-day retention
+### Thinking (before responding)
+- **Inner Monologue** — System 2 thinking via local model (zero cost, private)
+- **Tree of Thought** — 3 parallel branches (pragmatic, contrarian, exploratory) → synthesis
+- **Self-Critique** — Catches generic filler, yes-man behavior, intent mismatches
+- **Council** — 3 specialized AI advisors deliberate before answering complex questions
+- **Knowledge Graph** — Analogical reasoning across stored entities and relationships
 
-### Monitoring & System
-- **Sentinel** — Go-pure system health monitor (CPU temp, RAM, disk) every 2min with critical alerts direct to Telegram
-- **Shell execution** — Run commands inside the container
-- **Host access** — Execute commands on the Raspberry Pi host via `nsenter`
-- **HTTP requests** — Arbitrary API calls to external services
+### 30+ Tools
 
-### Council of Experts
-- **LinkedIn PR Committee** — Three specialized AI personas (Writer, Strategist, Editor) collaborate in a Telegram group to craft professional content
+**Memory & Knowledge**
+- Obsidian vault with TF-IDF semantic search (auto-injection on every message)
+- Long-term preferences, daily notes, auto-distillation from conversations
+- Knowledge graph for entity relationships and analogical reasoning
+
+**Web & Research**
+- Web search (Serper/Brave/DuckDuckGo), browse pages, fetch URLs
+- YouTube transcript extraction
+
+**Google Workspace**
+- Gmail (read, search, send, reply)
+- Calendar (events, appointments, multiple calendars)
+- Drive (list, search, read documents)
+
+**Communication & Media**
+- Voice transcription (Groq STT) + Text-to-Speech (Edge TTS, es-AR-TomasNeural)
+- Image generation (Pollinations.ai)
+- Translation
+
+**Automation**
+- Shell execution (container + host via nsenter)
+- Subagent system for parallel multi-step tasks
+- Reminders, tasks, cron jobs, snippets
+- HTTP requests to arbitrary APIs
+
+**Smart Home**
+- Magic Home WiFi lights (discovery, on/off, RGB, brightness)
+- I2C / SPI hardware bus interaction
+
+**Security**
+- Encrypted credential vault (AES-256-GCM)
+- Privacy Router — sensitive data (DNI, cards, medical, financial) stays on local model
+- Session locking: once classified sensitive, stays local
+
+**Self-modification**
+- Can read and edit its own operating instructions (AGENTS.md)
+- Behavioral experiments (up to 3 active, evaluated weekly)
+- Nightly distillation + weekly self-evaluation with auto-modification
 
 ---
 
 ## Architecture
 
 ```
-                    ┌─────────────────────────────────────────┐
-                    │            Raspberry Pi 5               │
-                    │                                         │
-  Telegram ────────►│  ┌──────────┐    ┌──────────────────┐  │
-  (polling)         │  │ Telegram  │───►│    MessageBus    │  │
-                    │  │ Channel   │◄───│                  │  │
-                    │  └──────────┘    └────────┬─────────┘  │
-                    │                           │             │
-                    │                  ┌────────▼─────────┐  │
-                    │                  │    AgentLoop      │  │
-                    │                  │  ┌─────────────┐  │  │
-                    │                  │  │ContextBuilder│  │  │
-                    │                  │  │  + Skills    │  │  │
-                    │                  │  │  + Memory    │  │  │
-                    │                  │  └─────────────┘  │  │
-                    │                  └────────┬─────────┘  │
-                    │                           │             │
-                    │              ┌────────────▼──────────┐  │
-                    │              │     ToolRegistry      │  │
-                    │              │  30 tools available   │  │
-                    │              └───────────────────────┘  │
-                    │                                         │
-                    │  LLM: OpenRouter ──► GPT-4o / Claude /  │
-                    │                      Gemini / DeepSeek   │
-                    └─────────────────────────────────────────┘
+                    ┌──────────────────────────────────────────────┐
+                    │              Raspberry Pi 5                   │
+                    │                                               │
+  Telegram ────────►│  ┌───────────┐    ┌───────────────────────┐  │
+  (+ 13 channels)   │  │  Channel   │───►│      MessageBus       │  │
+                    │  │  Manager   │◄───│                       │  │
+                    │  └───────────┘    └──────────┬────────────┘  │
+                    │                              │                │
+                    │  ┌───────────────────────────▼─────────────┐  │
+                    │  │              AgentLoop                   │  │
+                    │  │  ┌─────────────┐  ┌──────────────────┐  │  │
+                    │  │  │   Context    │  │  Depth of        │  │  │
+                    │  │  │   Builder    │  │  Reasoning        │  │  │
+                    │  │  │  + Memory    │  │  • Monologue     │  │  │
+                    │  │  │  + Skills    │  │  • Tree of Thought│  │  │
+                    │  │  │  + Knowledge │  │  • Self-Critique  │  │  │
+                    │  │  └─────────────┘  └──────────────────┘  │  │
+                    │  └───────────────────────────┬─────────────┘  │
+                    │                              │                │
+                    │              ┌────────────────▼──────────────┐ │
+                    │              │        ToolRegistry           │ │
+                    │              │     30+ tools available       │ │
+                    │              └───────────────────────────────┘ │
+                    │                                               │
+                    │  ┌─────────────────────────────────────────┐  │
+                    │  │         Background Services              │  │
+                    │  │  Heartbeat · Sentinel · Attention        │  │
+                    │  │  Email · RSS · HealthCheck · Cron        │  │
+                    │  └─────────────────────────────────────────┘  │
+                    │                                               │
+                    │  ┌─────────────────────────────────────────┐  │
+                    │  │         Privacy Router                   │  │
+                    │  │  Tier 1: Regex (instant)                 │  │
+                    │  │  Tier 2: Local LLM (when needed)         │  │
+                    │  │  Sensitive → local · Safe → cloud        │  │
+                    │  └─────────────────────────────────────────┘  │
+                    │                                               │
+                    │  LLM: OpenAI · Anthropic · OpenRouter ·      │
+                    │       Groq · Gemini · DeepSeek · LlamaCpp    │
+                    └──────────────────────────────────────────────┘
 ```
 
 ### Key Components
@@ -116,19 +153,15 @@ Built in Go, containerized with Docker, and deployed via Coolify. Zero cloud dep
 |-----------|------|---------|
 | Agent Loop | `pkg/agent/loop.go` | Core message processing, LLM iteration, tool execution |
 | Context Builder | `pkg/agent/context.go` | System prompt assembly (identity + skills + memory) |
-| Telegram Channel | `pkg/channels/telegram.go` | Polling, TTS, voice transcription, inline keyboards |
-| Tool Registry | `pkg/tools/` | 30 tools — web, calendar, exec, memory, media, lights, telemetry, etc. |
+| Depth of Reasoning | `pkg/agent/` | Monologue, Tree of Thought, self-critique, scoring |
+| Channel Manager | `pkg/channels/` | 14 channels (Telegram, Discord, Slack, WhatsApp, etc.) |
+| Tool Registry | `pkg/tools/` | 30+ tools — web, calendar, exec, memory, media, lights |
+| Privacy Router | `pkg/providers/privacy_router.go` | Route sensitive data to local model |
+| Memory Store | `pkg/agent/memory.go` | Obsidian vault with TF-IDF search |
+| Services | `pkg/services/` | Email watcher, RSS watcher, health check |
+| Sentinel | `pkg/sentinel/` | System health monitor with alerts |
+| Attention | `pkg/attention/` | Proactive concern detection |
 | Config | `pkg/config/config.go` | JSON config with env var overrides |
-| Session Manager | `pkg/session/` | Conversation history, summarization, persistence |
-| Sentinel | `pkg/sentinel/service.go` | System health monitor (CPU temp, RAM, disk) with alerts |
-| Telemetry | `pkg/telemetry/tracker.go` | Token usage tracking per feature per day |
-
-### Search Provider Priority
-
-```
-Serper (Google) ──► Brave Search ──► DuckDuckGo (HTML scraping)
-   (preferred)       (fallback)        (last resort)
-```
 
 ---
 
@@ -156,8 +189,8 @@ Edit `~/.picoclaw/config.json`:
     }
   },
   "providers": {
-    "openrouter": {
-      "api_key": "sk-or-v1-..."
+    "openai": {
+      "api_key": "sk-..."
     }
   },
   "tools": {
@@ -175,7 +208,7 @@ Edit `~/.picoclaw/config.json`:
 
 ```bash
 # Local
-go build -o picoclaw . && ./picoclaw gateway
+go build -o picoclaw ./cmd/picoclaw && ./picoclaw gateway
 
 # Docker
 docker build -t chango . && docker run -v ~/.picoclaw:/root/.picoclaw chango
@@ -183,39 +216,40 @@ docker build -t chango . && docker run -v ~/.picoclaw:/root/.picoclaw chango
 
 ---
 
-## Personality & Customization
+## Personality
 
 Chango's behavior is defined by markdown files in the workspace:
 
 | File | Purpose |
 |------|---------|
-| `IDENTITY.md` | Core personality and communication style |
-| `SOUL.md` | Deep behavioral rules and decision-making framework |
-| `USER.md` | User profile, preferences, and account information |
-| `AGENTS.md` | Agent capabilities and autonomous behavior rules |
+| `AGENTS.md` | Operating instructions — execution protocol, tool APIs, behavioral rules |
+| `SOUL.md` | Personality — mentors (Thiel, Jobs, Musk), humor, communication style |
+| `IDENTITY.md` | Core identity and name |
+| `USER.md` | User profile, preferences, account information |
+| `HEARTBEAT.md` | Proactive tasks and check-in behavior |
 
-These files are loaded into the system prompt at startup. Edit them to customize Chango's personality.
+These files are loaded into the system prompt at runtime. Chango can modify its own `AGENTS.md` during weekly self-evaluation.
 
 ---
 
 ## Deployment
 
-Chango runs as a Docker container deployed via [Coolify](https://coolify.io/) on a Raspberry Pi 5:
+Runs as a Docker container deployed via [Coolify](https://coolify.io/) on a Raspberry Pi 5:
 
 1. Push to GitHub
 2. Trigger Coolify restart via API
-3. Multi-stage Dockerfile: Go build + Debian bookworm runtime (python3 + edge-tts + ffmpeg)
+3. Multi-stage Dockerfile: Go build → Debian bookworm runtime (python3 + edge-tts + ffmpeg)
 4. Volume mount: `~/.picoclaw` for config, workspace, and persistent data
 
 ---
 
-## Credits
+## In one line
 
-- **Original project:** [picoclaw](https://github.com/picoclaw/picoclaw) by the picoclaw contributors
-- **This fork:** Optimized for product development and personal automation
+**Alone**: monitors, reflects, remembers, alerts, improves itself.
+**Assisted**: thinks deep, executes with 30+ tools, challenges assumptions, learns from every interaction.
 
 ---
 
 <p align="center">
-  <em>Built on a Raspberry Pi 5 with Go, deployed with Coolify, powered by OpenRouter</em>
+  <em>Built on a Raspberry Pi 5 in Buenos Aires — Go + Docker + Coolify</em>
 </p>

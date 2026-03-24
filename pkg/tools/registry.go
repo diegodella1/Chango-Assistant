@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -74,9 +75,9 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 	// Global timeout safety net: prevent any tool from hanging forever.
 	// Tools with their own timeout (like exec) will finish before this.
 	// Council needs more time: 3 sequential LLM calls with tools.
-	toolTimeout := 120 * time.Second
+	toolTimeout := constants.ToolExecutionTimeout
 	if name == "council" {
-		toolTimeout = 6 * time.Minute
+		toolTimeout = constants.ToolExecutionTimeoutLong
 	}
 	toolCtx, toolCancel := context.WithTimeout(ctx, toolTimeout)
 	defer toolCancel()

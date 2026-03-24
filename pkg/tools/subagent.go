@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
@@ -169,8 +170,8 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 		Tools:         tools,
 		MaxIterations: maxIter,
 		LLMOptions: map[string]any{
-			"max_tokens":  4096,
-			"temperature": 0.7,
+			"max_tokens":  constants.SubagentMaxTokens,
+			"temperature": constants.DefaultTemperature,
 		},
 	}, messages, task.OriginChannel, task.OriginChatID)
 
@@ -335,8 +336,8 @@ func (t *SubagentTool) Execute(ctx context.Context, args map[string]interface{})
 		Tools:         tools,
 		MaxIterations: maxIter,
 		LLMOptions: map[string]any{
-			"max_tokens":  4096,
-			"temperature": 0.7,
+			"max_tokens":  constants.SubagentMaxTokens,
+			"temperature": constants.DefaultTemperature,
 		},
 	}, messages, t.originChannel, t.originChatID)
 

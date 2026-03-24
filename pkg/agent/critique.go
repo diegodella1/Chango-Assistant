@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -58,8 +59,8 @@ If any fail, reply: REVISE: [one line explaining what to fix]`
 	al.emitEvent("think")
 
 	resp, err := al.localProvider.Chat(critiqueCtx, messages, nil, "", map[string]interface{}{
-		"max_tokens":  64,
-		"temperature": 0.1,
+		"max_tokens":  constants.CritiqueMaxTokens,
+		"temperature": constants.MinimalTemperature,
 	})
 	if err != nil {
 		logger.DebugCF("agent", "Self-critique failed (non-critical)", map[string]interface{}{"error": err.Error()})

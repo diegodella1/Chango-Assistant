@@ -10,8 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -51,7 +52,7 @@ type CredentialsTool struct {
 func NewCredentialsTool(workspace string, masterKeyStr string) *CredentialsTool {
 	if masterKeyStr == "" {
 		masterKeyStr = workspace
-		log.Printf("[credentials] WARNING: no master key configured, using workspace-derived key (not secure)")
+		logger.WarnC("credentials", "no master key configured, using workspace-derived key (not secure)")
 	}
 
 	hash := sha256.Sum256([]byte(masterKeyStr))
@@ -188,7 +189,7 @@ func (t *CredentialsTool) loadStore() *CredentialStore {
 	}
 	var s CredentialStore
 	if err := json.Unmarshal(data, &s); err != nil {
-		log.Printf("[credentials] failed to parse store: %v", err)
+		logger.ErrorC("credentials", fmt.Sprintf("failed to parse store: %v", err))
 		return &CredentialStore{Version: 1, Credentials: []Credential{}}
 	}
 	return &s

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/utils"
@@ -56,8 +57,8 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 		llmOpts := config.LLMOptions
 		if llmOpts == nil {
 			llmOpts = map[string]any{
-				"max_tokens":  4096,
-				"temperature": 0.7,
+				"max_tokens":  constants.SubagentMaxTokens,
+				"temperature": constants.DefaultTemperature,
 			}
 		}
 

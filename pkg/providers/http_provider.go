@@ -19,6 +19,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/auth"
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
@@ -30,7 +31,7 @@ type HTTPProvider struct {
 
 func NewHTTPProvider(apiKey, apiBase, proxy string) *HTTPProvider {
 	client := &http.Client{
-		Timeout: 120 * time.Second,
+		Timeout: constants.LLMRequestTimeout,
 	}
 
 	if proxy != "" {
@@ -97,7 +98,7 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 	}
 
 	// Retry loop with exponential backoff
-	maxRetries := 3
+	maxRetries := constants.ProviderMaxRetries
 	backoffs := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
 
 	var resp *http.Response

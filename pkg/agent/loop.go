@@ -672,8 +672,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 				"model":             al.model,
 				"messages_count":    len(messages),
 				"tools_count":       len(providerToolDefs),
-				"max_tokens":        8192,
-				"temperature":       0.7,
+				"max_tokens":        constants.DefaultMaxTokens,
+				"temperature":       constants.DefaultTemperature,
 				"system_prompt_len": len(messages[0].Content),
 			})
 
@@ -690,8 +690,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		// Call LLM
 		al.emitEvent("think")
 		response, err := al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
-			"max_tokens":  8192,
-			"temperature": 0.7,
+			"max_tokens":  constants.DefaultMaxTokens,
+			"temperature": constants.DefaultTemperature,
 		})
 
 		// Record token usage

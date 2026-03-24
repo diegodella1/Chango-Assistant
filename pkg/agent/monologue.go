@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -70,8 +71,8 @@ User's message: ` + userMessage
 	}
 
 	resp, err := monologueProvider.Chat(monologueCtx, contextMsgs, nil, monologueModel, map[string]interface{}{
-		"max_tokens":  256,
-		"temperature": 0.3,
+		"max_tokens":  constants.MonologueMaxTokens,
+		"temperature": constants.LowTemperature,
 	})
 	if err != nil {
 		logger.DebugCF("agent", "Inner monologue failed (non-critical)", map[string]interface{}{"error": err.Error()})

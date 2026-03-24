@@ -158,9 +158,9 @@
     }
     neurons.push({
       nx, ny, nz,
-      vx: (Math.random() - 0.5) * 0.0003,
-      vy: (Math.random() - 0.5) * 0.0003,
-      base: 0.15 + Math.random() * 0.1, // slightly brighter base for contrast
+      vx: (Math.random() - 0.5) * 0.00012,
+      vy: (Math.random() - 0.5) * 0.00012,
+      base: 0.25 + Math.random() * 0.15, // brighter base for contrast
       glow: 0,
       size: 0.5 + Math.random() * 0.6,
     });
@@ -179,69 +179,11 @@
     }
   }
 
-  // --- Active synapses (lightning bolts) ---
-  const MAX_SYN = 100;
+  // --- Active synapses (soft pulses, no bolts) ---
+  const MAX_SYN = 60;
   const synapses = [];
   for (let i = 0; i < MAX_SYN; i++) {
-    synapses.push({ ci: -1, life: 0, max: 0, bolts: null });
-  }
-
-  // Generate realistic lightning bolt with recursive branching
-  function makeBolt(x1, y1, x2, y2, depth) {
-    const pts = [{ x: x1, y: y1 }];
-    const segments = 6 + Math.floor(Math.random() * 6);
-    const dx = x2 - x1, dy = y2 - y1;
-    const len = Math.sqrt(dx*dx + dy*dy);
-    if (len < 1) return pts;
-    const perpX = -dy / len, perpY = dx / len;
-    // Strong zigzag displacement — key to looking like real lightning
-    const displacement = len * 0.35;
-    for (let i = 1; i < segments; i++) {
-      const t = i / segments;
-      const jitter = (Math.random() - 0.5) * displacement;
-      // Add slight curve for organic feel
-      const curve = Math.sin(t * Math.PI) * len * 0.08 * (Math.random() - 0.5);
-      pts.push({
-        x: x1 + dx * t + perpX * jitter + perpX * curve,
-        y: y1 + dy * t + perpY * jitter + perpY * curve,
-      });
-    }
-    pts.push({ x: x2, y: y2 });
-    return pts;
-  }
-
-  // Draw a lightning bolt with multi-layer glow (thin but glowy)
-  function drawBolt(pts, alpha) {
-    if (pts.length < 2) return;
-    // Layer 1: wide soft glow (blurred, ambient light)
-    ctx.save();
-    ctx.filter = 'blur(6px)';
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(200,140,20,' + (alpha * 0.35) + ')';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.restore();
-
-    // Layer 2: medium glow (sharper)
-    ctx.save();
-    ctx.filter = 'blur(2px)';
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(230,180,50,' + (alpha * 0.5) + ')';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.restore();
-
-    // Layer 3: bright thin core (the actual "bolt")
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(255,245,200,' + (alpha * 0.9) + ')';
-    ctx.lineWidth = 0.4;
-    ctx.stroke();
+    synapses.push({ ci: -1, life: 0, max: 0 });
   }
 
   // --- SSE: real activity ---
@@ -283,21 +225,21 @@
     time += 0.002;
     ctx.clearRect(0, 0, W, H);
 
-    // Slow rotation
-    const cos = Math.cos(time * 0.3), sin = Math.sin(time * 0.3);
+    // Very slow rotation — preserve brain shape
+    const cos = Math.cos(time * 0.08), sin = Math.sin(time * 0.08);
 
     // Update neuron positions (gentle drift + slow rotation)
     for (const n of neurons) {
       n.nx += n.vx;
       n.ny += n.vy;
       const d = Math.sqrt(n.nx*n.nx + n.ny*n.ny + n.nz*n.nz);
-      if (d > 0.85) {
-        n.vx -= n.nx * 0.00008;
-        n.vy -= n.ny * 0.00008;
+      if (d > 0.75) {
+        n.vx -= n.nx * 0.0002;
+        n.vy -= n.ny * 0.0002;
       }
-      n.vx += (Math.random() - 0.5) * 0.00002;
-      n.vy += (Math.random() - 0.5) * 0.00002;
-      n.vx *= 0.999; n.vy *= 0.999;
+      n.vx += (Math.random() - 0.5) * 0.000008;
+      n.vy += (Math.random() - 0.5) * 0.000008;
+      n.vx *= 0.995; n.vy *= 0.995;
       n.glow *= 0.94;
 
       // Apply slow Y rotation for 3D feel
@@ -313,59 +255,58 @@
         const ci = Math.floor(Math.random() * conns.length);
         const conn = conns[ci];
         const na = neurons[conn.a], nb = neurons[conn.b];
-        const pa = getScreenPos(na), pb = getScreenPos(nb);
         synapses[s].ci = ci;
-        synapses[s].max = 20 + Math.random() * 30;
+        synapses[s].max = 25 + Math.random() * 35;
         synapses[s].life = synapses[s].max;
-        // Generate lightning bolt along the connection path
-        synapses[s].bolts = [
-          makeBolt(pa.x, pa.y, pb.x, pb.y, 1),
-        ];
-        // Re-generate bolt shape periodically for flickering effect
-        synapses[s].lastRegen = 0;
-        // Light up endpoint neurons strongly
+        // Light up endpoint neurons
         na.glow = 1; nb.glow = 1;
-        // Cascade: light up nearby neurons for propagation effect
+        // Cascade: light up nearby neurons
         for (let k = 0; k < N; k++) {
           const dx = neurons[k].nx - na.nx, dy = neurons[k].ny - na.ny;
-          if (dx*dx + dy*dy < 0.015) neurons[k].glow = Math.max(neurons[k].glow, 0.5);
+          if (dx*dx + dy*dy < 0.02) neurons[k].glow = Math.max(neurons[k].glow, 0.6);
         }
       }
-      if (synapses[s].life > 0) {
-        synapses[s].life--;
-        // Flicker: regenerate bolt shape every few frames for electric effect
-        synapses[s].lastRegen = (synapses[s].lastRegen || 0) + 1;
-        if (synapses[s].lastRegen > 3) {
-          synapses[s].lastRegen = 0;
-          const conn = conns[synapses[s].ci];
-          if (conn) {
-            const pa = getScreenPos(neurons[conn.a]), pb = getScreenPos(neurons[conn.b]);
-            synapses[s].bolts = [makeBolt(pa.x, pa.y, pb.x, pb.y, 1)];
-          }
-        }
-      }
+      if (synapses[s].life > 0) synapses[s].life--;
     }
 
-    // Draw static connections (very faint network)
-    ctx.lineWidth = 0.3;
+    // Draw static connections (subtle network)
+    ctx.lineWidth = 0.4;
     for (const conn of conns) {
       const pa = getScreenPos(neurons[conn.a]);
       const pb = getScreenPos(neurons[conn.b]);
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(140,100,35,0.06)';
+      ctx.strokeStyle = 'rgba(160,120,40,0.08)';
       ctx.stroke();
     }
 
-    // Draw active lightning bolts (electric glow on existing connections)
+    // Draw active synapse pulses (soft glowing lines, no bolts)
     for (let s = 0; s < MAX_SYN; s++) {
-      if (synapses[s].life <= 0 || !synapses[s].bolts) continue;
+      if (synapses[s].life <= 0) continue;
+      const conn = conns[synapses[s].ci];
+      if (!conn) continue;
+      const pa = getScreenPos(neurons[conn.a]);
+      const pb = getScreenPos(neurons[conn.b]);
       const t = synapses[s].life / synapses[s].max;
       const alpha = Math.sin(t * Math.PI);
-      for (const bolt of synapses[s].bolts) {
-        drawBolt(bolt, alpha);
-      }
+      // Soft glow line
+      ctx.save();
+      ctx.filter = 'blur(3px)';
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.strokeStyle = 'rgba(230,180,60,' + (alpha * 0.4) + ')';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+      // Bright core
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.strokeStyle = 'rgba(255,230,140,' + (alpha * 0.6) + ')';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
     }
 
     // Draw neurons with multi-layer glow
@@ -375,8 +316,8 @@
       const r = n.size;
 
       // Layer 1: wide soft glow (always visible, stronger when active)
-      const glowRadius = r * (6 + n.glow * 10);
-      const glowAlpha = 0.03 + n.glow * 0.35;
+      const glowRadius = r * (8 + n.glow * 12);
+      const glowAlpha = 0.06 + n.glow * 0.45;
       ctx.save();
       if (n.glow > 0.2) ctx.filter = 'blur(2px)';
       const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
@@ -391,16 +332,16 @@
 
       // Layer 2: core dot (bright when active)
       ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      const coreAlpha = Math.min(brightness * 1.2, 1);
+      ctx.arc(p.x, p.y, r * 1.1, 0, Math.PI * 2);
+      const coreAlpha = Math.min(brightness * 1.4, 1);
       if (n.glow > 0.3) {
         // Hot white-yellow core when firing
         ctx.fillStyle = 'rgba(255,245,200,' + coreAlpha + ')';
       } else {
-        // Dim warm ember at rest
-        const cr = Math.round(120 + brightness * 80);
-        const cg = Math.round(80 + brightness * 60);
-        const cb = Math.round(15 + brightness * 20);
+        // Warm amber at rest — visible against dark bg
+        const cr = Math.round(180 + brightness * 60);
+        const cg = Math.round(120 + brightness * 50);
+        const cb = Math.round(20 + brightness * 20);
         ctx.fillStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + coreAlpha + ')';
       }
       ctx.fill();

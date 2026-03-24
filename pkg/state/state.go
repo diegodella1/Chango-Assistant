@@ -3,8 +3,9 @@ package state
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 	"path/filepath"
 	"sync"
 	"time"
@@ -53,7 +54,7 @@ func NewManager(workspace string) *Manager {
 			if err := json.Unmarshal(data, sm.state); err == nil {
 				// Migrate to new location
 				sm.saveAtomic()
-				log.Printf("[INFO] state: migrated state from %s to %s", oldStateFile, stateFile)
+				logger.InfoC("state", fmt.Sprintf("migrated state from %s to %s", oldStateFile, stateFile))
 			}
 		}
 	} else {
