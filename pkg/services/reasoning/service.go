@@ -139,6 +139,15 @@ func (s *Service) Start(ctx context.Context) {
 	s.runCycle()
 
 	interval := time.Duration(s.cfg.IntervalMinutes) * time.Minute
+
+	// Run first cycle after a short warmup (give llama-server time to load)
+	select {
+	case <-s.ctx.Done():
+		return
+	case <-time.After(45 * time.Second):
+	}
+	s.runCycle()
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -187,9 +196,9 @@ func (s *Service) runCycle() {
 		return
 	}
 
-	// Phase 2: local triage
+	// Phase 2: local triage (60s — Qwen 1.5B on Pi 5 can be slow)
 	s.emitEvent("reasoning")
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 60*time.Second)
 	defer cancel()
 
 	triage, err := s.triageLocal(ctx, snapshot)
