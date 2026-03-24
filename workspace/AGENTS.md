@@ -357,6 +357,53 @@ Tenés el tool `browse` para navegar páginas web de forma estructurada. Mantien
 - Máximo 500KB de body, texto truncado a 5000 chars en `fetch`
 - Para búsquedas web usá `web_search`, para fetch simple usá `web_fetch`, para navegación estructurada usá `browse`
 
+### Personal Agenda (agenda tool)
+Tenés el tool `agenda` para manejar tu calendario personal. Almacena eventos en JSON con soporte para recurrencia.
+
+**Acciones:**
+- `today` — eventos de hoy ordenados por hora
+- `list(from?, to?)` — eventos en un rango de fechas (default: próximos 7 días)
+- `create(title, start, end?, location?, notes?, recurring?)` — crear evento
+- `update(id, title?, start?, end?, location?, notes?)` — actualizar evento
+- `delete(id)` — eliminar evento
+- `upcoming(hours?)` — eventos en las próximas N horas (default: 4)
+
+**Formatos de fecha aceptados:**
+- ISO 8601: `2026-03-24T10:00:00-03:00`
+- Fecha y hora: `2026-03-24 10:00`
+- Solo fecha: `2026-03-24` (default 00:00)
+- Natural: `mañana 15:00`, `tomorrow 3pm`, `hoy 10:00`, `pasado mañana 14:30`
+
+**Recurrencia:** `daily`, `weekly`, `monthly` — se expanden automáticamente en queries.
+
+**Notas:**
+- Timezone default: Argentina (ART, UTC-3)
+- Si el usuario dice "tengo una reunión mañana a las 10", creá el evento directamente
+- El morning briefing usa `agenda(action='today')` para el resumen diario
+- Archivo: `workspace/state/agenda.json`
+
+### Lightning Wallet (wallet tool)
+Tenés el tool `wallet` para operar con Bitcoin Lightning Network vía LNbits.
+
+**Acciones:**
+- `balance` — ver saldo actual en sats
+- `send(bolt11)` — pagar una factura Lightning (BOLT11). Verifica límites diarios/mensuales antes de pagar
+- `receive(amount, memo?)` — crear factura para recibir sats. Devuelve BOLT11 y payment_request
+- `history(limit?)` — últimas transacciones (default 10)
+- `limits` — ver gasto diario/mensual vs límites configurados
+
+**Seguridad:**
+- Límite diario y mensual en sats. Si un pago excede el límite, se rechaza automáticamente
+- Todos los pagos salientes se loguean en `state/wallet_spend.json`
+- NUNCA pagues una factura sin que el usuario lo pida explícitamente
+- Antes de pagar, siempre confirmá el monto con el usuario
+- Si el usuario pide enviar sats a alguien, necesitás una factura BOLT11 — pedísela
+
+**Notas:**
+- El saldo se muestra en sats (1 BTC = 100,000,000 sats)
+- Las facturas BOLT11 empiezan con `lnbc` (mainnet) o `lntb` (testnet)
+- Para recibir, creá una factura con `receive` y compartí el BOLT11 string al pagador
+
 ### Smart Reminders
 You have the built-in `reminder` tool to schedule reminders.
 When the user asks you to remind them about something, use the reminder tool.

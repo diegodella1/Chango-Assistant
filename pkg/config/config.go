@@ -56,6 +56,7 @@ type Config struct {
 	Admin     AdminConfig     `json:"admin"`
 	Briefing  BriefingConfig  `json:"briefing"`
 	Privacy   PrivacyConfig   `json:"privacy"`
+	Wallet    WalletConfig    `json:"wallet"`
 	mu        sync.RWMutex
 }
 
@@ -222,6 +223,14 @@ type CouncilConfig struct {
 type AdminConfig struct {
 	Enabled bool   `json:"enabled" env:"PICOCLAW_ADMIN_ENABLED"`
 	Token   string `json:"token" env:"PICOCLAW_ADMIN_TOKEN"`
+}
+
+type WalletConfig struct {
+	LNbitsURL    string `json:"lnbits_url" env:"PICOCLAW_WALLET_LNBITS_URL"`
+	AdminKey     string `json:"admin_key" env:"PICOCLAW_WALLET_ADMIN_KEY"`
+	InvoiceKey   string `json:"invoice_key" env:"PICOCLAW_WALLET_INVOICE_KEY"`
+	DailyLimit   int64  `json:"daily_limit_sats" env:"PICOCLAW_WALLET_DAILY_LIMIT_SATS"`
+	MonthlyLimit int64  `json:"monthly_limit_sats" env:"PICOCLAW_WALLET_MONTHLY_LIMIT_SATS"`
 }
 
 type ProvidersConfig struct {

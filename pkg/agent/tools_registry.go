@@ -69,6 +69,9 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	// Tasks - persistent task/goal tracking
 	registry.Register(tools.NewTasksTool(workspace))
 
+	// Agenda - personal calendar
+	registry.Register(tools.NewAgendaTool(workspace))
+
 	// Snippets
 	registry.Register(tools.NewSnippetTool(workspace))
 
@@ -89,6 +92,17 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 
 	// HTTP request
 	registry.Register(tools.NewHTTPRequestTool())
+
+	// Lightning wallet (LNbits)
+	if wt := tools.NewWalletTool(workspace, tools.WalletConfig{
+		LNbitsURL:    cfg.Wallet.LNbitsURL,
+		AdminKey:     cfg.Wallet.AdminKey,
+		InvoiceKey:   cfg.Wallet.InvoiceKey,
+		DailyLimit:   cfg.Wallet.DailyLimit,
+		MonthlyLimit: cfg.Wallet.MonthlyLimit,
+	}); wt != nil {
+		registry.Register(wt)
+	}
 
 	// Structured web browsing (session-persistent, form extraction/submit)
 	registry.Register(tools.NewBrowseTool())

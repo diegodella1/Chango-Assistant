@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"google.golang.org/api/drive/v3"
@@ -27,7 +29,7 @@ func NewGDriveTool(saFile, email string) *GDriveTool {
 func (t *GDriveTool) Name() string { return "gdrive" }
 
 func (t *GDriveTool) Description() string {
-	return "Google Drive: list, search, read, upload, create folders and share files. Actions: list_files, search, read, upload, create_folder, share."
+	return "Google Drive: list, search, read, upload (text content or binary file_path), create folders and share files. Actions: list_files, search, read, upload, create_folder, share."
 }
 
 func (t *GDriveTool) Parameters() map[string]interface{} {
@@ -65,7 +67,11 @@ func (t *GDriveTool) Parameters() map[string]interface{} {
 			},
 			"content": map[string]interface{}{
 				"type":        "string",
-				"description": "File content as text (for upload)",
+				"description": "File content as text (for upload). Use content OR file_path, not both",
+			},
+			"file_path": map[string]interface{}{
+				"type":        "string",
+				"description": "Absolute path to a local file to upload as binary (for upload). MIME type is auto-detected from extension. Use file_path OR content, not both",
 			},
 			"mime_type": map[string]interface{}{
 				"type":        "string",
@@ -256,15 +262,84 @@ func (t *GDriveTool) read(srv *drive.Service, args map[string]interface{}) *Tool
 	return SilentResult(fmt.Sprintf("File: %s\nType: %s\n\n%s", file.Name, file.MimeType, content))
 }
 
+// mimeFromExt returns a MIME type based on file extension.
+func mimeFromExt(name string) string {
+	ext := strings.ToLower(filepath.Ext(name))
+	m := map[string]string{
+		".jpg":  "image/jpeg",
+		".jpeg": "image/jpeg",
+		".png":  "image/png",
+		".gif":  "image/gif",
+		".webp": "image/webp",
+		".svg":  "image/svg+xml",
+		".bmp":  "image/bmp",
+		".pdf":  "application/pdf",
+		".zip":  "application/zip",
+		".gz":   "application/gzip",
+		".tar":  "application/x-tar",
+		".mp3":  "audio/mpeg",
+		".ogg":  "audio/ogg",
+		".wav":  "audio/wav",
+		".mp4":  "video/mp4",
+		".webm": "video/webm",
+		".mov":  "video/quicktime",
+		".txt":  "text/plain",
+		".csv":  "text/csv",
+		".json": "application/json",
+		".html": "text/html",
+		".xml":  "application/xml",
+		".doc":  "application/msword",
+		".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		".xls":  "application/vnd.ms-excel",
+		".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		".ppt":  "application/vnd.ms-powerpoint",
+		".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	}
+	if mt, ok := m[ext]; ok {
+		return mt
+	}
+	return "application/octet-stream"
+}
+
 func (t *GDriveTool) upload(srv *drive.Service, args map[string]interface{}) *ToolResult {
 	name, _ := args["name"].(string)
 	content, _ := args["content"].(string)
+	filePath, _ := args["file_path"].(string)
 
-	if name == "" || content == "" {
-		return ErrorResult("name and content are required for upload")
+	if name == "" && filePath == "" {
+		return ErrorResult("name is required for upload (or file_path to infer it)")
 	}
 
-	mimeType := "text/plain"
+	if content == "" && filePath == "" {
+		return ErrorResult("either content (text) or file_path (binary file) is required for upload")
+	}
+
+	var reader io.Reader
+	var mimeType string
+
+	if filePath != "" {
+		// Binary file upload from disk
+		f, err := os.Open(filePath)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("failed to open file %s: %v", filePath, err))
+		}
+		defer f.Close()
+		reader = f
+
+		// Auto-detect MIME from extension
+		mimeType = mimeFromExt(filePath)
+
+		// Use filename from path if name not provided
+		if name == "" {
+			name = filepath.Base(filePath)
+		}
+	} else {
+		// Text content upload (existing behavior)
+		reader = strings.NewReader(content)
+		mimeType = "text/plain"
+	}
+
+	// Allow explicit mime_type override
 	if v, ok := args["mime_type"].(string); ok && v != "" {
 		mimeType = v
 	}
@@ -279,14 +354,33 @@ func (t *GDriveTool) upload(srv *drive.Service, args map[string]interface{}) *To
 	}
 
 	created, err := srv.Files.Create(file).
-		Media(strings.NewReader(content)).
+		Media(reader).
 		Fields("id, name, webViewLink").
 		Do()
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to upload file: %v", err))
 	}
 
-	return SilentResult(fmt.Sprintf("File uploaded: %s\nID: %s\nLink: %s", created.Name, created.Id, created.WebViewLink))
+	// Make file accessible via link (anyone with link can view)
+	linkPerm := &drive.Permission{
+		Type: "anyone",
+		Role: "reader",
+	}
+	_, permErr := srv.Permissions.Create(created.Id, linkPerm).Do()
+
+	// Re-fetch to get updated webViewLink
+	updated, getErr := srv.Files.Get(created.Id).Fields("webViewLink").Do()
+	link := created.WebViewLink
+	if getErr == nil && updated.WebViewLink != "" {
+		link = updated.WebViewLink
+	}
+
+	result := fmt.Sprintf("File uploaded: %s\nID: %s\nMIME: %s\nLink: %s", created.Name, created.Id, mimeType, link)
+	if permErr != nil {
+		result += fmt.Sprintf("\nWarning: could not make file public (%v). Use share action to share manually.", permErr)
+	}
+
+	return SilentResult(result)
 }
 
 func (t *GDriveTool) createFolder(srv *drive.Service, args map[string]interface{}) *ToolResult {
