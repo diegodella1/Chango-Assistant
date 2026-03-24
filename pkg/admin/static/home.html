@@ -197,7 +197,7 @@
       nx, ny, nz,
       vx: (Math.random() - 0.5) * 0.00012,
       vy: (Math.random() - 0.5) * 0.00012,
-      base: 0.25 + Math.random() * 0.15,
+      base: 0.35 + Math.random() * 0.2,
       glow: 0,
       glowColor: null,
       size: 1.2 + Math.random() * 0.8,
@@ -343,7 +343,7 @@
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(100,140,200,0.06)';
+      ctx.strokeStyle = 'rgba(100,140,200,0.10)';
       ctx.stroke();
     }
 
@@ -388,7 +388,7 @@
 
       // Layer 1: wide soft glow (process-colored when active)
       const glowRadius = r * (8 + n.glow * 12);
-      const glowAlpha = 0.06 + n.glow * 0.45;
+      const glowAlpha = 0.10 + n.glow * 0.45;
       ctx.save();
       if (n.glow > 0.2) ctx.filter = 'blur(2px)';
       const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
