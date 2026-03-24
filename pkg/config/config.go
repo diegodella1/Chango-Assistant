@@ -56,8 +56,9 @@ type Config struct {
 	Admin     AdminConfig     `json:"admin"`
 	Briefing  BriefingConfig  `json:"briefing"`
 	Privacy   PrivacyConfig   `json:"privacy"`
-	Wallet    WalletConfig    `json:"wallet"`
-	mu        sync.RWMutex
+	Wallet      WalletConfig      `json:"wallet"`
+	TokenBudget TokenBudgetConfig `json:"token_budget"`
+	mu          sync.RWMutex
 }
 
 // PrivacyConfig controls the privacy router that prevents sensitive data from leaving the Pi.
@@ -231,6 +232,11 @@ type WalletConfig struct {
 	InvoiceKey   string `json:"invoice_key" env:"PICOCLAW_WALLET_INVOICE_KEY"`
 	DailyLimit   int64  `json:"daily_limit_sats" env:"PICOCLAW_WALLET_DAILY_LIMIT_SATS"`
 	MonthlyLimit int64  `json:"monthly_limit_sats" env:"PICOCLAW_WALLET_MONTHLY_LIMIT_SATS"`
+}
+
+type TokenBudgetConfig struct {
+	DailyLimit    int64 `json:"daily_limit" env:"PICOCLAW_TOKEN_BUDGET_DAILY"`
+	BackgroundMax int64 `json:"background_max" env:"PICOCLAW_TOKEN_BUDGET_BACKGROUND"`
 }
 
 type ProvidersConfig struct {

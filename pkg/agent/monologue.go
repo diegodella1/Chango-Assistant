@@ -17,6 +17,12 @@ func (al *AgentLoop) innerMonologue(ctx context.Context, userMessage string, his
 		return ""
 	}
 
+	// Check token budget before spending on background monologue
+	if al.tokenBudget != nil && !al.tokenBudget.CanSpend(500, true) {
+		logger.DebugCF("agent", "Skipping inner monologue — token budget exceeded", nil)
+		return ""
+	}
+
 	monologueCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -72,8 +78,13 @@ User's message: ` + userMessage
 		return ""
 	}
 
-	if resp != nil && resp.Usage != nil && al.tracker != nil {
-		al.tracker.Record("monologue", resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
+	if resp != nil && resp.Usage != nil {
+		if al.tracker != nil {
+			al.tracker.Record("monologue", resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
+		}
+		if al.tokenBudget != nil {
+			al.tokenBudget.Record(int64(resp.Usage.TotalTokens), true)
+		}
 	}
 
 	logger.DebugCF("agent", "Inner monologue completed", map[string]interface{}{

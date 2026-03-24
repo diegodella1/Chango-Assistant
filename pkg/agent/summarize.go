@@ -127,6 +127,12 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 // batch and saves them to the obsidian vault automatically. This is the "subconscious" that
 // ensures conversations produce long-term learning without explicit user instructions.
 func (al *AgentLoop) distillMemories(ctx context.Context, batch []providers.Message) {
+	// Check token budget before spending on background distillation
+	if al.tokenBudget != nil && !al.tokenBudget.CanSpend(1500, true) {
+		logger.InfoCF("agent", "Skipping memory distillation — token budget exceeded", nil)
+		return
+	}
+
 	// Build a condensed view of the conversation for the extraction LLM call
 	var sb strings.Builder
 	for _, m := range batch {
@@ -169,8 +175,13 @@ Return ONLY valid JSON array, no markdown fences:`
 		logger.WarnCF("agent", "Memory distillation failed", map[string]interface{}{"error": err.Error()})
 		return
 	}
-	if resp != nil && resp.Usage != nil && al.tracker != nil {
-		al.tracker.Record(telemetry.FeatureSummarize, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
+	if resp != nil && resp.Usage != nil {
+		if al.tracker != nil {
+			al.tracker.Record(telemetry.FeatureSummarize, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
+		}
+		if al.tokenBudget != nil {
+			al.tokenBudget.Record(int64(resp.Usage.TotalTokens), true)
+		}
 	}
 
 	// Parse JSON response

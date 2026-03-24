@@ -50,6 +50,7 @@ type AgentLoop struct {
 	scoring        *ScoringEngine
 	localProvider  providers.LLMProvider // local model for inner monologue (zero cost, private)
 	onEvent        func(string) // callback for real-time activity events (SSE)
+	tokenBudget    *telemetry.TokenBudget
 }
 
 // SetLocalProvider sets a local LLM provider for inner monologue (zero cost, private).
@@ -131,6 +132,17 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	// Wire system prompt builder so subagents inherit the main agent's personality
 	subagentManager.SetSystemPromptBuilder(func() string { return contextBuilder.BuildSystemPrompt() })
 
+	// Initialize token budget with config values or defaults
+	dailyLimit := cfg.TokenBudget.DailyLimit
+	if dailyLimit == 0 {
+		dailyLimit = 200000
+	}
+	bgMax := cfg.TokenBudget.BackgroundMax
+	if bgMax == 0 {
+		bgMax = 50000
+	}
+	tokenBudget := telemetry.NewTokenBudget(workspace, dailyLimit, bgMax)
+
 	return &AgentLoop{
 		bus:            msgBus,
 		provider:       provider,
@@ -148,6 +160,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		configPath:     configPath,
 		subagentMgr:    subagentManager,
 		scoring:        NewScoringEngine(workspace),
+		tokenBudget:    tokenBudget,
 	}
 }
 
