@@ -82,6 +82,12 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	// Smart lights (Magic Home WiFi)
 	registry.Register(tools.NewLightsTool(workspace))
 
+	// Bluetooth device management
+	registry.Register(tools.NewBluetoothTool())
+
+	// Audio playback (mpv + PipeWire/PulseAudio)
+	registry.Register(tools.NewAudioTool())
+
 	// Knowledge graph (entity relationships)
 	kgTool := tools.NewKnowledgeGraphTool(workspace)
 	registry.Register(kgTool)

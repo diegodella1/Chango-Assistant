@@ -126,6 +126,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/swap/free", h.withAuth(h.freeSwap))
 	mux.HandleFunc("/api/wifi/scan", h.withAuth(h.wifiScan))
 	mux.HandleFunc("/api/bluetooth/scan", h.withAuth(h.bluetoothScan))
+	mux.HandleFunc("/api/bluetooth/connect", h.withAuth(h.bluetoothConnect))
+	mux.HandleFunc("/api/bluetooth/disconnect", h.withAuth(h.bluetoothDisconnect))
+	mux.HandleFunc("/api/bluetooth/remove", h.withAuth(h.bluetoothRemove))
 	mux.HandleFunc("/api/files", h.withAuth(h.listFiles))
 	mux.HandleFunc("/api/files/", h.withAuth(h.handleFile))
 	mux.HandleFunc("/api/vault", h.withAuth(h.vaultOverview))
@@ -495,16 +498,23 @@ func readBluetooth() []bluetoothInfo {
 	return bt
 }
 
-// hostExec runs a command via nsenter in the host's mount+net namespace.
+// hostExec runs a command via nsenter in the host's mount+uts+ipc+net namespace.
 // Uses /hostfs/proc/1/ns/* when --pid=host is not available (Coolify ignores it).
+// IPC namespace is needed for D-Bus access (bluetoothctl, pactl, etc.).
 func hostExec(timeout time.Duration, args ...string) ([]byte, error) {
 	var nsArgs []string
 	if _, err := os.Stat("/hostfs/proc/1/ns/mnt"); err == nil {
 		// Coolify container: --pid=host not applied, use /hostfs/proc bind mount
-		nsArgs = append([]string{"--mount=/hostfs/proc/1/ns/mnt", "--net=/hostfs/proc/1/ns/net", "--"}, args...)
+		nsArgs = append([]string{
+			"--mount=/hostfs/proc/1/ns/mnt",
+			"--uts=/hostfs/proc/1/ns/uts",
+			"--ipc=/hostfs/proc/1/ns/ipc",
+			"--net=/hostfs/proc/1/ns/net",
+			"--",
+		}, args...)
 	} else {
 		// Fallback: assume --pid=host works
-		nsArgs = append([]string{"-t", "1", "-m", "-n", "--"}, args...)
+		nsArgs = append([]string{"-t", "1", "-m", "-u", "-i", "-n", "--"}, args...)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -596,9 +606,13 @@ func (h *Handler) wifiScan(w http.ResponseWriter, r *http.Request) {
 }
 
 type btDevice struct {
-	Address string `json:"address"`
-	Name    string `json:"name"`
+	Address   string `json:"address"`
+	Name      string `json:"name"`
+	Paired    bool   `json:"paired"`
+	Connected bool   `json:"connected"`
 }
+
+var btAddrRegex = regexp.MustCompile(`^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$`)
 
 func (h *Handler) bluetoothScan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -606,7 +620,17 @@ func (h *Handler) bluetoothScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := hostExec(15*time.Second, "hcitool", "scan", "--length=8")
+	// Step 1: trigger BLE + classic scan (8 sec)
+	hostExec(12*time.Second, "sh", "-c", "bluetoothctl --timeout 8 scan on >/dev/null 2>&1")
+
+	// Step 2: list all devices with status
+	out, err := hostExec(10*time.Second, "sh", "-c", `
+bluetoothctl -- devices | while IFS= read -r _ addr rest; do
+  info=$(bluetoothctl -- info "$addr" 2>/dev/null)
+  paired=$(echo "$info" | grep -c "Paired: yes")
+  connected=$(echo "$info" | grep -c "Connected: yes")
+  echo "$addr|$rest|$paired|$connected"
+done`)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -615,21 +639,86 @@ func (h *Handler) bluetoothScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var devices []btDevice
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "Scanning") {
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 4 {
 			continue
 		}
-		// Format: "XX:XX:XX:XX:XX:XX	Device Name"
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) == 2 {
-			devices = append(devices, btDevice{Address: parts[0], Name: parts[1]})
-		}
+		devices = append(devices, btDevice{
+			Address:   strings.TrimSpace(parts[0]),
+			Name:      strings.TrimSpace(parts[1]),
+			Paired:    strings.TrimSpace(parts[2]) == "1",
+			Connected: strings.TrimSpace(parts[3]) == "1",
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(devices)
+}
+
+func (h *Handler) bluetoothConnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct{ Address string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if !btAddrRegex.MatchString(req.Address) {
+		http.Error(w, "invalid MAC address", http.StatusBadRequest)
+		return
+	}
+	// Pair (ignores error if already paired) then connect
+	hostExec(10*time.Second, "sh", "-c", "bluetoothctl -- pair "+req.Address+" 2>/dev/null")
+	out, err := hostExec(15*time.Second, "sh", "-c", "bluetoothctl -- connect "+req.Address)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": string(out)})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "connected"})
+}
+
+func (h *Handler) bluetoothDisconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct{ Address string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if !btAddrRegex.MatchString(req.Address) {
+		http.Error(w, "invalid MAC address", http.StatusBadRequest)
+		return
+	}
+	out, err := hostExec(10*time.Second, "sh", "-c", "bluetoothctl -- disconnect "+req.Address)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": string(out)})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "disconnected"})
+}
+
+func (h *Handler) bluetoothRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct{ Address string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if !btAddrRegex.MatchString(req.Address) {
+		http.Error(w, "invalid MAC address", http.StatusBadRequest)
+		return
+	}
+	out, err := hostExec(10*time.Second, "sh", "-c", "bluetoothctl -- remove "+req.Address)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": string(out)})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "removed"})
 }
 
 func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
