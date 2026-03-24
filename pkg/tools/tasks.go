@@ -52,7 +52,7 @@ func (t *TasksTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"action": map[string]interface{}{
 				"type":        "string",
-				"enum":        []string{"add", "list", "get", "update", "complete", "cancel", "delete", "search"},
+				"enum":        []string{"add", "list", "get", "update", "complete", "cancel", "delete", "search", "decompose"},
 				"description": "Action to perform",
 			},
 			"id": map[string]interface{}{
@@ -122,6 +122,8 @@ func (t *TasksTool) Execute(ctx context.Context, args map[string]interface{}) *T
 		return t.del(args)
 	case "search":
 		return t.search(args)
+	case "decompose":
+		return t.decompose(args)
 	default:
 		return ErrorResult(fmt.Sprintf("unknown action: %s", action))
 	}
@@ -475,4 +477,54 @@ func (t *TasksTool) search(args map[string]interface{}) *ToolResult {
 		return SilentResult(fmt.Sprintf("No tasks matching '%s'", query))
 	}
 	return SilentResult(fmt.Sprintf("Found %d task(s):\n%s", len(matches), strings.Join(matches, "\n")))
+}
+
+// decompose reads a goal/task and returns a prompt for the LLM to create sub-tasks.
+func (t *TasksTool) decompose(args map[string]interface{}) *ToolResult {
+	id, _ := args["id"].(string)
+	if id == "" {
+		return ErrorResult("id is required for decompose — provide the goal/task ID to break down")
+	}
+
+	t.mu.Lock()
+	tasks, err := t.loadTasks()
+	t.mu.Unlock()
+
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to load tasks: %v", err))
+	}
+
+	var goal *Task
+	var existingSubs []string
+	for i, task := range tasks {
+		if task.ID == id {
+			goal = &tasks[i]
+		}
+		if task.GoalID == id && task.Status != "cancelled" {
+			existingSubs = append(existingSubs, fmt.Sprintf("- %s (status: %s)", task.Title, task.Status))
+		}
+	}
+
+	if goal == nil {
+		return ErrorResult(fmt.Sprintf("No task found with ID '%s'", id))
+	}
+
+	// Build decomposition prompt for the LLM
+	result := fmt.Sprintf("GOAL TO DECOMPOSE:\n"+
+		"ID: %s\nTitle: %s\nDescription: %s\nPriority: %s\n",
+		goal.ID, goal.Title, goal.Description, goal.Priority)
+
+	if len(existingSubs) > 0 {
+		result += fmt.Sprintf("\nExisting sub-tasks:\n%s\n", strings.Join(existingSubs, "\n"))
+		result += "\nOnly add MISSING sub-tasks, don't duplicate existing ones.\n"
+	}
+
+	result += fmt.Sprintf("\n"+
+		"Now create 3-7 concrete, actionable sub-tasks using:\n"+
+		"tasks(action='add', title='...', description='...', priority='...', goal_id='%s')\n\n"+
+		"Each sub-task should be completable in a single session. "+
+		"Be specific — 'research X' is better than 'think about X'.",
+		goal.ID)
+
+	return SilentResult(result)
 }

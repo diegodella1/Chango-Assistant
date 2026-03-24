@@ -365,6 +365,32 @@ func (s *Service) gatherState() string {
 			}
 			parts = append(parts, "Observaciones recientes:\n"+strings.Join(notes, "\n"))
 		}
+
+		// Pending action verifications
+		recentActions := s.memoryTool.ListNotesByFolder("actions", 10)
+		var pendingActions []string
+		for _, n := range recentActions {
+			isPending := false
+			for _, tag := range n.Tags {
+				if tag == "pending-verification" {
+					isPending = true
+					break
+				}
+			}
+			if isPending {
+				preview := n.Content
+				if len(preview) > 100 {
+					preview = preview[:100] + "..."
+				}
+				pendingActions = append(pendingActions, fmt.Sprintf("- [%s] %s", n.Key, preview))
+			}
+		}
+		if len(pendingActions) > 0 {
+			if len(pendingActions) > 3 {
+				pendingActions = pendingActions[:3]
+			}
+			parts = append(parts, "Acciones pendientes de verificación:\n"+strings.Join(pendingActions, "\n"))
+		}
 	}
 
 	if len(parts) == 0 {
@@ -397,6 +423,37 @@ Ejemplos:
 
 Respondé SOLO con JSON válido, sin markdown ni explicaciones:
 {"score": N, "observation": "qué notás", "action": "none|notify|investigate|execute", "reason": "por qué este score"}`
+
+const escalationPrompt = `ESCALACIÓN DEL RAZONAMIENTO DE FONDO (score %d/10)
+
+Observación del triage local: %s
+Acción recomendada: %s
+Razón: %s
+
+Snapshot completo del estado:
+%s
+
+INSTRUCCIONES — Actuá según la acción recomendada:
+
+Si action=notify:
+→ Mandá un mensaje breve a Diego con lo relevante (tool: message).
+
+Si action=investigate:
+→ Investigá usando tus tools (memory search, web_search, tasks list, gmail, etc.)
+→ Guardá lo que encontraste como insight: memory(action='save', key='insight-FECHA', folder='insights')
+
+Si action=execute:
+→ Ejecutá la acción necesaria: completar/actualizar tasks, guardar notas en memory, mandar email, etc.
+→ Notificá a Diego qué hiciste (tool: message)
+→ Registrá la acción: memory(action='save', key='action-FECHA-HORA', folder='actions', tags=['pending-verification'], content='Acción: [qué hiciste]. Resultado esperado: [qué debería pasar]. Verificar: [cómo confirmar].')
+
+LÍMITES DE SEGURIDAD:
+- NO mandes emails a personas externas sin confirmación de Diego
+- NO borres archivos, tasks, ni datos
+- NO modifiques código ni hagas deploys
+- SÍ podés: actualizar tasks, guardar en memory, mandar mensaje a Diego, investigar, leer emails/calendar
+
+Siempre guardá un insight de lo que analizaste/hiciste.`
 
 // triageLocal sends the state snapshot to the local model and parses the structured response.
 func (s *Service) triageLocal(ctx context.Context, snapshot string) (*TriageResult, error) {
@@ -505,14 +562,7 @@ func (s *Service) escalateToCloud(snapshot string, triage *TriageResult) {
 		channel, chatID = "telegram", "2111601777"
 	}
 
-	prompt := fmt.Sprintf(
-		"ESCALACIÓN DEL RAZONAMIENTO DE FONDO (score %d/10)\n\n"+
-			"Observación del triage local: %s\n"+
-			"Acción recomendada: %s\n"+
-			"Razón: %s\n\n"+
-			"Snapshot completo del estado:\n%s\n\n"+
-			"Analizá en profundidad. Generá un insight, recomendación o plan de acción.\n"+
-			"Si querés comunicar algo a Diego, usá la herramienta de mensaje.",
+	prompt := fmt.Sprintf(escalationPrompt,
 		triage.Score, triage.Observation, triage.Action, triage.Reason, snapshot)
 
 	// Attempt 1
