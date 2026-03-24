@@ -55,7 +55,19 @@ type Config struct {
 	Council   CouncilConfig   `json:"council"`
 	Admin     AdminConfig     `json:"admin"`
 	Briefing  BriefingConfig  `json:"briefing"`
+	Privacy   PrivacyConfig   `json:"privacy"`
 	mu        sync.RWMutex
+}
+
+// PrivacyConfig controls the privacy router that prevents sensitive data from leaving the Pi.
+type PrivacyConfig struct {
+	Enabled            bool     `json:"enabled" env:"PICOCLAW_PRIVACY_ENABLED"`                          // Enable privacy routing
+	Tier2Enabled       bool     `json:"tier2_enabled" env:"PICOCLAW_PRIVACY_TIER2_ENABLED"`              // Use local LLM for ambiguous cases
+	AlwaysPrivateMedia bool     `json:"always_private_media" env:"PICOCLAW_PRIVACY_ALWAYS_PRIVATE_MEDIA"` // Images/docs never go to cloud
+	ExtraKeywords      []string `json:"extra_keywords,omitempty"`                                         // User-configurable sensitive keywords
+	ExtraPatterns      []string `json:"extra_patterns,omitempty"`                                         // User-configurable regex patterns
+	FailClosed         bool     `json:"fail_closed" env:"PICOCLAW_PRIVACY_FAIL_CLOSED"`                  // If unsure, route local
+	LogDecisions       bool     `json:"log_decisions" env:"PICOCLAW_PRIVACY_LOG_DECISIONS"`              // Log routing decisions (no content)
 }
 
 type BriefingConfig struct {
@@ -428,6 +440,13 @@ func DefaultConfig() *Config {
 		Admin: AdminConfig{
 			Enabled: false,
 			Token:   "",
+		},
+		Privacy: PrivacyConfig{
+			Enabled:            false,
+			Tier2Enabled:       false,
+			AlwaysPrivateMedia: true,
+			FailClosed:         true,
+			LogDecisions:       true,
 		},
 	}
 }

@@ -139,7 +139,9 @@ func (ms *MemoryStore) GetRecentDailyNotes(days int) string {
 }
 
 // maxMemoryChars is the maximum character length for the memory context.
-const maxMemoryChars = 6000
+// With 128k+ context models, 6000 was too restrictive. 12000 allows richer memory injection
+// while still leaving plenty of room for history, tools, and system prompt.
+const maxMemoryChars = 12000
 
 // GetMemoryContext returns formatted memory context for the agent prompt.
 func (ms *MemoryStore) GetMemoryContext() string {

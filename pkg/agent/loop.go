@@ -15,9 +15,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
-	"unicode/utf8"
-
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
@@ -43,6 +40,7 @@ type AgentLoop struct {
 	state          *state.Manager
 	contextBuilder *ContextBuilder
 	tools          *tools.ToolRegistry
+	memoryTool     *tools.MemoryTool // Direct reference for programmatic access (distillation, relevance search)
 	running        atomic.Bool
 	summarizing    sync.Map // Tracks which sessions are currently being summarized
 	cfg            *config.Config // Reference to config for runtime updates
@@ -65,110 +63,6 @@ type processOptions struct {
 	Feature         string   // Telemetry feature label (chat, heartbeat, cron, summarize)
 }
 
-// createToolRegistry creates a tool registry with common tools.
-// This is shared between main agent and subagents.
-func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msgBus *bus.MessageBus) *tools.ToolRegistry {
-	registry := tools.NewToolRegistry()
-
-	// File system tools
-	registry.Register(tools.NewReadFileTool(workspace, restrict))
-	registry.Register(tools.NewWriteFileTool(workspace, restrict))
-	registry.Register(tools.NewListDirTool(workspace, restrict))
-	registry.Register(tools.NewEditFileTool(workspace, restrict))
-	registry.Register(tools.NewAppendFileTool(workspace, restrict))
-
-	// Shell execution
-	registry.Register(tools.NewExecTool(workspace, restrict))
-
-	// Host execution via nsenter (requires --privileged --pid=host)
-	registry.Register(tools.NewHostExecTool())
-
-	if searchTool := tools.NewWebSearchTool(tools.WebSearchToolOptions{
-		SerperAPIKey:         cfg.Tools.Web.Serper.APIKey,
-		SerperMaxResults:     cfg.Tools.Web.Serper.MaxResults,
-		SerperEnabled:        cfg.Tools.Web.Serper.Enabled,
-		BraveAPIKey:          cfg.Tools.Web.Brave.APIKey,
-		BraveMaxResults:      cfg.Tools.Web.Brave.MaxResults,
-		BraveEnabled:         cfg.Tools.Web.Brave.Enabled,
-		DuckDuckGoMaxResults: cfg.Tools.Web.DuckDuckGo.MaxResults,
-		DuckDuckGoEnabled:    cfg.Tools.Web.DuckDuckGo.Enabled,
-	}); searchTool != nil {
-		registry.Register(searchTool)
-	}
-	registry.Register(tools.NewWebFetchTool(50000))
-
-	// Hardware tools (I2C, SPI) - Linux only, returns error on other platforms
-	registry.Register(tools.NewI2CTool())
-	registry.Register(tools.NewSPITool())
-
-	// Memory - persistent notes
-	registry.Register(tools.NewMemoryTool(workspace))
-
-	// Image generation
-	registry.Register(tools.NewImageGenTool())
-
-	// YouTube transcript
-	registry.Register(tools.NewYouTubeTool())
-
-	// Weather
-	registry.Register(tools.NewWeatherTool())
-
-	// Reminder (needs message bus for notifications)
-	reminderTool := tools.NewReminderTool(workspace, msgBus)
-	reminderTool.StartPendingReminders()
-	registry.Register(reminderTool)
-
-	// Tasks - persistent task/goal tracking
-	registry.Register(tools.NewTasksTool(workspace))
-
-	// Snippets
-	registry.Register(tools.NewSnippetTool(workspace))
-
-	// Smart lights (Magic Home WiFi)
-	registry.Register(tools.NewLightsTool(workspace))
-
-	// Self-modification (AGENTS.md editing)
-	registry.Register(tools.NewSelfTool(workspace))
-
-	// Translator
-	registry.Register(tools.NewTranslateTool())
-
-	// GitHub (gh CLI)
-	registry.Register(tools.NewGithubTool())
-
-	// HTTP request
-	registry.Register(tools.NewHTTPRequestTool())
-
-	// Google Workspace tools (Gmail, Calendar, Drive)
-	if cfg.Tools.Google.ServiceAccountFile != "" && cfg.Tools.Google.ImpersonateEmail != "" {
-		saFile := cfg.Tools.Google.ServiceAccountFile
-		email := cfg.Tools.Google.ImpersonateEmail
-		if t := tools.NewGmailTool(saFile, email); t != nil {
-			registry.Register(t)
-		}
-		if t := tools.NewCalendarTool(saFile, email); t != nil {
-			registry.Register(t)
-		}
-		if t := tools.NewGDriveTool(saFile, email); t != nil {
-			registry.Register(t)
-		}
-	}
-
-	// Message tool - available to both agent and subagent
-	// Subagent uses it to communicate directly with user
-	messageTool := tools.NewMessageTool()
-	messageTool.SetSendCallback(func(channel, chatID, content string) error {
-		msgBus.PublishOutbound(bus.OutboundMessage{
-			Channel: channel,
-			ChatID:  chatID,
-			Content: content,
-		})
-		return nil
-	})
-	registry.Register(messageTool)
-
-	return registry
-}
 
 func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers.LLMProvider, configPath string) *AgentLoop {
 	workspace := cfg.WorkspacePath()
@@ -177,13 +71,14 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	restrict := cfg.Agents.Defaults.RestrictToWorkspace
 
 	// Create tool registry for main agent
-	toolsRegistry := createToolRegistry(workspace, restrict, cfg, msgBus)
+	toolsResult := createToolRegistry(workspace, restrict, cfg, msgBus)
+	toolsRegistry := toolsResult.registry
 
 	// Create subagent manager with its own tool registry
 	subagentManager := tools.NewSubagentManager(provider, cfg.Agents.Defaults.Model, workspace, msgBus)
-	subagentTools := createToolRegistry(workspace, restrict, cfg, msgBus)
+	subagentToolsResult := createToolRegistry(workspace, restrict, cfg, msgBus)
 	// Subagent doesn't need spawn/subagent tools to avoid recursion
-	subagentManager.SetTools(subagentTools)
+	subagentManager.SetTools(subagentToolsResult.registry)
 
 	// Register spawn tool (for main agent)
 	spawnTool := tools.NewSpawnTool(subagentManager)
@@ -212,9 +107,10 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	contextBuilder.SetModel(cfg.Agents.Defaults.Model)
 	contextBuilder.SetKnowledgeLoader(knowledgeLoader)
 	contextBuilder.SetExperiments(experimentsStore)
+	contextBuilder.SetMemoryTool(toolsResult.memoryTool)
 
 	// Wire system prompt builder so subagents inherit the main agent's personality
-	subagentManager.SetSystemPromptBuilder(contextBuilder.BuildSystemPrompt)
+	subagentManager.SetSystemPromptBuilder(func() string { return contextBuilder.BuildSystemPrompt() })
 
 	return &AgentLoop{
 		bus:            msgBus,
@@ -227,6 +123,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		state:          stateManager,
 		contextBuilder: contextBuilder,
 		tools:          toolsRegistry,
+		memoryTool:     toolsResult.memoryTool,
 		summarizing:    sync.Map{},
 		cfg:            cfg,
 		configPath:     configPath,
@@ -465,132 +362,6 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 	return "", nil
 }
 
-// handleModelCommand handles the /model command to view or change the current model at runtime.
-// Returns the response string and true if the command was handled.
-func (al *AgentLoop) handleModelCommand(content string) (string, bool) {
-	trimmed := strings.TrimSpace(content)
-
-	if trimmed == "/model" {
-		return fmt.Sprintf("Current model: %s", al.model), true
-	}
-
-	if strings.HasPrefix(trimmed, "/model ") {
-		newModel := strings.TrimSpace(strings.TrimPrefix(trimmed, "/model "))
-		if newModel == "" {
-			return fmt.Sprintf("Current model: %s", al.model), true
-		}
-
-		oldModel := al.model
-		al.model = newModel
-		al.contextBuilder.SetModel(newModel)
-
-		// Update config and persist
-		al.cfg.Agents.Defaults.Model = newModel
-		if al.configPath != "" {
-			if err := config.SaveConfig(al.configPath, al.cfg); err != nil {
-				logger.WarnCF("agent", "Failed to persist model change",
-					map[string]interface{}{"error": err.Error()})
-				return fmt.Sprintf("Model changed: %s → %s (warning: failed to save config: %v)", oldModel, newModel, err), true
-			}
-		}
-
-		logger.InfoCF("agent", "Model changed via /model command",
-			map[string]interface{}{
-				"old_model": oldModel,
-				"new_model": newModel,
-			})
-
-		return fmt.Sprintf("Model changed: %s → %s", oldModel, newModel), true
-	}
-
-	return "", false
-}
-
-// defaultProviderModels maps provider names to their default model.
-var defaultProviderModels = map[string]string{
-	"openai":     "gpt-5",
-	"openrouter": "anthropic/claude-sonnet-4",
-	"groq":       "llama-3.3-70b-versatile",
-	"anthropic":  "claude-sonnet-4-20250514",
-	"deepseek":   "deepseek-chat",
-	"gemini":     "gemini-2.5-flash",
-}
-
-// handleProviderCommand handles the /provider command to view or change the current provider at runtime.
-// Returns the response string and true if the command was handled.
-func (al *AgentLoop) handleProviderCommand(content string) (string, bool) {
-	trimmed := strings.TrimSpace(content)
-
-	if trimmed == "/provider" {
-		return fmt.Sprintf("Current provider: %s (model: %s)", al.cfg.Agents.Defaults.Provider, al.model), true
-	}
-
-	if !strings.HasPrefix(trimmed, "/provider ") {
-		return "", false
-	}
-
-	newProvider := strings.TrimSpace(strings.TrimPrefix(trimmed, "/provider "))
-	if newProvider == "" {
-		return fmt.Sprintf("Current provider: %s (model: %s)", al.cfg.Agents.Defaults.Provider, al.model), true
-	}
-	newProvider = strings.ToLower(newProvider)
-
-	oldProvider := al.cfg.Agents.Defaults.Provider
-	oldModel := al.model
-
-	// Save old values for rollback
-	savedProvider := al.cfg.Agents.Defaults.Provider
-	savedModel := al.cfg.Agents.Defaults.Model
-
-	// Update config for CreateProvider
-	al.cfg.Agents.Defaults.Provider = newProvider
-
-	// Set default model for the new provider
-	newModel := oldModel
-	if dm, ok := defaultProviderModels[newProvider]; ok {
-		newModel = dm
-	}
-	al.cfg.Agents.Defaults.Model = newModel
-
-	// Try creating the new provider
-	newProv, err := providers.CreateProvider(al.cfg)
-	if err != nil {
-		// Rollback
-		al.cfg.Agents.Defaults.Provider = savedProvider
-		al.cfg.Agents.Defaults.Model = savedModel
-		return fmt.Sprintf("Error al cambiar a %s: %v", newProvider, err), true
-	}
-
-	// Swap provider and model
-	al.provider = newProv
-	al.model = newModel
-	al.contextBuilder.SetModel(newModel)
-
-	// Propagate to subagent manager
-	if al.subagentMgr != nil {
-		al.subagentMgr.SetProvider(newProv)
-		al.subagentMgr.SetDefaultModel(newModel)
-	}
-
-	// Persist config
-	if al.configPath != "" {
-		if err := config.SaveConfig(al.configPath, al.cfg); err != nil {
-			logger.WarnCF("agent", "Failed to persist provider change",
-				map[string]interface{}{"error": err.Error()})
-			return fmt.Sprintf("Provider: %s → %s, Model: %s → %s (warning: no se pudo guardar config)", oldProvider, newProvider, oldModel, newModel), true
-		}
-	}
-
-	logger.InfoCF("agent", "Provider changed via /provider command",
-		map[string]interface{}{
-			"old_provider": oldProvider,
-			"new_provider": newProvider,
-			"old_model":    oldModel,
-			"new_model":    newModel,
-		})
-
-	return fmt.Sprintf("Provider: %s → %s\nModel: %s → %s", oldProvider, newProvider, oldModel, newModel), true
-}
 
 // runAgentLoop is the core message processing logic.
 // It handles context building, LLM calls, tool execution, and response handling.
@@ -624,6 +395,21 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		opts.Channel,
 		opts.ChatID,
 	)
+
+	// 2b. Topic shift detection — inject hint if user changed subject
+	if len(history) >= 3 && opts.UserMessage != "" {
+		if detectTopicShift(opts.UserMessage, history) {
+			// Insert a system hint just before the user message to signal the LLM
+			topicHint := providers.Message{
+				Role:    "system",
+				Content: "⚡ The user has shifted to a new topic. Focus your response on the new subject. Do not carry over context from the previous topic unless explicitly relevant.",
+			}
+			messages = append(messages[:len(messages)-1], topicHint, messages[len(messages)-1])
+			logger.DebugCF("agent", "Topic shift detected", map[string]interface{}{
+				"session": opts.SessionKey,
+			})
+		}
+	}
 
 	// 3. Save user message to session
 	al.sessions.AddMessage(opts.SessionKey, "user", opts.UserMessage)
@@ -888,21 +674,6 @@ func (al *AgentLoop) updateToolContexts(channel, chatID string) {
 	}
 }
 
-// maybeSummarize triggers summarization if the session history exceeds thresholds.
-func (al *AgentLoop) maybeSummarize(sessionKey string) {
-	newHistory := al.sessions.GetHistory(sessionKey)
-	tokenEstimate := al.estimateTokens(newHistory)
-	threshold := al.contextWindow * 75 / 100
-
-	if len(newHistory) > 20 || tokenEstimate > threshold {
-		if _, loading := al.summarizing.LoadOrStore(sessionKey, true); !loading {
-			go func() {
-				defer al.summarizing.Delete(sessionKey)
-				al.summarizeSession(sessionKey)
-			}()
-		}
-	}
-}
 
 // GetStartupInfo returns information about loaded tools and skills for logging.
 func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
@@ -921,173 +692,9 @@ func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
 	return info
 }
 
-// formatMessagesForLog formats messages for logging using strings.Builder.
-func formatMessagesForLog(messages []providers.Message) string {
-	if len(messages) == 0 {
-		return "[]"
-	}
 
-	var b strings.Builder
-	b.WriteString("[\n")
-	for i, msg := range messages {
-		fmt.Fprintf(&b, "  [%d] Role: %s\n", i, msg.Role)
-		if len(msg.ToolCalls) > 0 {
-			b.WriteString("  ToolCalls:\n")
-			for _, tc := range msg.ToolCalls {
-				fmt.Fprintf(&b, "    - ID: %s, Type: %s, Name: %s\n", tc.ID, tc.Type, tc.Name)
-				if tc.Function != nil {
-					fmt.Fprintf(&b, "      Arguments: %s\n", utils.Truncate(tc.Function.Arguments, 200))
-				}
-			}
-		}
-		if msg.Content != "" {
-			fmt.Fprintf(&b, "  Content: %s\n", utils.Truncate(msg.Content, 200))
-		}
-		if msg.ToolCallID != "" {
-			fmt.Fprintf(&b, "  ToolCallID: %s\n", msg.ToolCallID)
-		}
-		b.WriteByte('\n')
-	}
-	b.WriteByte(']')
-	return b.String()
-}
 
-// formatToolsForLog formats tool definitions for logging
-func formatToolsForLog(tools []providers.ToolDefinition) string {
-	if len(tools) == 0 {
-		return "[]"
-	}
 
-	var result string
-	result += "[\n"
-	for i, tool := range tools {
-		result += fmt.Sprintf("  [%d] Type: %s, Name: %s\n", i, tool.Type, tool.Function.Name)
-		result += fmt.Sprintf("      Description: %s\n", tool.Function.Description)
-		if len(tool.Function.Parameters) > 0 {
-			result += fmt.Sprintf("      Parameters: %s\n", utils.Truncate(fmt.Sprintf("%v", tool.Function.Parameters), 200))
-		}
-	}
-	result += "]"
-	return result
-}
 
-// summarizeSession summarizes the conversation history for a session.
-func (al *AgentLoop) summarizeSession(sessionKey string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
 
-	history := al.sessions.GetHistory(sessionKey)
-	summary := al.sessions.GetSummary(sessionKey)
 
-	// Keep last 4 messages for continuity
-	if len(history) <= 4 {
-		return
-	}
-
-	toSummarize := history[:len(history)-4]
-
-	// Oversized Message Guard
-	// Skip messages larger than 50% of context window to prevent summarizer overflow
-	maxMessageTokens := al.contextWindow / 2
-	validMessages := make([]providers.Message, 0)
-	omitted := false
-
-	for _, m := range toSummarize {
-		if m.Role != "user" && m.Role != "assistant" {
-			continue
-		}
-		// Estimate tokens for this message
-		msgTokens := len(m.Content) / 4
-		if msgTokens > maxMessageTokens {
-			omitted = true
-			continue
-		}
-		validMessages = append(validMessages, m)
-	}
-
-	if len(validMessages) == 0 {
-		return
-	}
-
-	// Multi-Part Summarization
-	// Split into two parts if history is significant
-	var finalSummary string
-	if len(validMessages) > 10 {
-		mid := len(validMessages) / 2
-		part1 := validMessages[:mid]
-		part2 := validMessages[mid:]
-
-		s1, err1 := al.summarizeBatch(ctx, part1, "")
-		s2, err2 := al.summarizeBatch(ctx, part2, "")
-
-		if err1 != nil && err2 != nil {
-			logger.WarnCF("agent", "Both summarize batches failed", map[string]interface{}{
-				"err1": err1.Error(), "err2": err2.Error(),
-			})
-			return
-		}
-
-		// Merge them
-		mergePrompt := fmt.Sprintf("Merge these two conversation summaries into one cohesive summary:\n\n1: %s\n\n2: %s", s1, s2)
-		resp, err := al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: mergePrompt}}, nil, al.model, map[string]interface{}{
-			"max_tokens":  1024,
-			"temperature": 0.3,
-		})
-		if resp != nil && resp.Usage != nil && al.tracker != nil {
-			al.tracker.Record(telemetry.FeatureSummarize, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
-		}
-		if err == nil {
-			finalSummary = resp.Content
-		} else {
-			finalSummary = s1 + " " + s2
-		}
-	} else {
-		finalSummary, _ = al.summarizeBatch(ctx, validMessages, summary)
-	}
-
-	if omitted && finalSummary != "" {
-		finalSummary += "\n[Note: Some oversized messages were omitted from this summary for efficiency.]"
-	}
-
-	if finalSummary != "" {
-		al.sessions.SetSummary(sessionKey, finalSummary)
-		al.sessions.TruncateHistory(sessionKey, 4)
-		al.sessions.Save(sessionKey)
-	}
-}
-
-// summarizeBatch summarizes a batch of messages.
-func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Message, existingSummary string) (string, error) {
-	prompt := "Provide a concise summary of this conversation segment, preserving core context and key points.\n"
-	if existingSummary != "" {
-		prompt += "Existing context: " + existingSummary + "\n"
-	}
-	prompt += "\nCONVERSATION:\n"
-	for _, m := range batch {
-		prompt += fmt.Sprintf("%s: %s\n", m.Role, m.Content)
-	}
-
-	response, err := al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.model, map[string]interface{}{
-		"max_tokens":  1024,
-		"temperature": 0.3,
-	})
-	if response != nil && response.Usage != nil && al.tracker != nil {
-		al.tracker.Record(telemetry.FeatureSummarize, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
-	}
-	if err != nil {
-		return "", err
-	}
-	return response.Content, nil
-}
-
-// estimateTokens estimates the number of tokens in a message list.
-// Uses rune count instead of byte length so that CJK and other multi-byte
-// characters are not over-counted (a Chinese character is 3 bytes but roughly
-// one token).
-func (al *AgentLoop) estimateTokens(messages []providers.Message) int {
-	total := 0
-	for _, m := range messages {
-		total += utf8.RuneCountInString(m.Content) / 3
-	}
-	return total
-}

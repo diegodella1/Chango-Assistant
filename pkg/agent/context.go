@@ -20,6 +20,7 @@ type ContextBuilder struct {
 	workspace       string
 	skillsLoader    *skills.SkillsLoader
 	memory          *MemoryStore
+	memoryTool      *tools.MemoryTool // For relevance-based memory search (TF-IDF)
 	tools           *tools.ToolRegistry // Direct reference to tool registry
 	model           string
 	knowledgeLoader *knowledge.Loader
@@ -66,6 +67,11 @@ func (cb *ContextBuilder) SetKnowledgeLoader(loader *knowledge.Loader) {
 // SetExperiments sets the experiments store for behavioral adjustments.
 func (cb *ContextBuilder) SetExperiments(store *experiments.Store) {
 	cb.experiments = store
+}
+
+// SetMemoryTool sets the memory tool for relevance-based memory injection.
+func (cb *ContextBuilder) SetMemoryTool(mt *tools.MemoryTool) {
+	cb.memoryTool = mt
 }
 
 func (cb *ContextBuilder) getIdentity() string {
@@ -129,7 +135,9 @@ func (cb *ContextBuilder) buildToolsSection() string {
 	return sb.String()
 }
 
-func (cb *ContextBuilder) BuildSystemPrompt() string {
+// BuildSystemPrompt builds the system prompt. If currentMessage is provided,
+// memory injection uses TF-IDF relevance matching instead of blind loading.
+func (cb *ContextBuilder) BuildSystemPrompt(currentMessage ...string) string {
 	parts := []string{}
 
 	// Core identity section
@@ -159,14 +167,99 @@ The following skills extend your capabilities. To use a skill, read its SKILL.md
 %s`, skillsSummary))
 	}
 
-	// Memory context
-	memoryContext := cb.memory.GetMemoryContext()
+	// Memory context — relevance-based if we have a query and memoryTool
+	query := ""
+	if len(currentMessage) > 0 {
+		query = currentMessage[0]
+	}
+	memoryContext := cb.buildMemoryContext(query)
 	if memoryContext != "" {
 		parts = append(parts, "# Memory\n\n"+memoryContext)
 	}
 
+	// Intent detection reinforcement — reminds the LLM to classify before acting
+	parts = append(parts, `# Behavioral Reminder
+
+Before responding, classify the user's intent: INFORMATIONAL or ACTIONABLE.
+- If informational: analyze, connect dots, give perspective, challenge if needed. Do NOT use tools to create tasks/events/reminders.
+- If actionable: execute with tools as appropriate.
+- If you disagree with the user, say so directly. You have permission and obligation to challenge.
+- Use your memory to connect current conversation with past context.`)
+
 	// Join with "---" separator
 	return strings.Join(parts, "\n\n---\n\n")
+}
+
+// buildMemoryContext assembles memory with relevance-based selection when a query is available.
+func (cb *ContextBuilder) buildMemoryContext(query string) string {
+	var parts []string
+
+	// 1. Core preferences — always injected (capped at 3000 chars)
+	longTerm := cb.memory.ReadLongTerm()
+	if longTerm != "" {
+		if len(longTerm) > 3000 {
+			longTerm = longTerm[:3000] + "..."
+		}
+		parts = append(parts, "## Core Preferences\n\n"+longTerm)
+	}
+
+	// 2. Relevant notes via TF-IDF search (if we have a query and memoryTool)
+	if query != "" && cb.memoryTool != nil {
+		relevant := cb.memoryTool.SearchNotes(query, 10)
+		if len(relevant) > 0 {
+			var relevantParts []string
+			totalChars := 0
+			for _, note := range relevant {
+				body := note.Content
+				if len(body) > 300 {
+					body = body[:300] + "..."
+				}
+				line := fmt.Sprintf("- **%s** [%s]: %s", note.Key, note.Folder, strings.ReplaceAll(body, "\n", " "))
+				if totalChars+len(line) > 4000 {
+					break
+				}
+				relevantParts = append(relevantParts, line)
+				totalChars += len(line)
+			}
+			if len(relevantParts) > 0 {
+				parts = append(parts, "## Relevant Notes\n\n"+strings.Join(relevantParts, "\n"))
+			}
+		}
+	} else {
+		// Fallback: blind load of insights/decisions (original behavior)
+		for _, folder := range []string{"insights", "decisions"} {
+			folderNotes := cb.memory.readFolderSummary(folder, 10)
+			if folderNotes != "" {
+				title := strings.ToUpper(folder[:1]) + folder[1:]
+				parts = append(parts, fmt.Sprintf("## %s\n\n%s", title, folderNotes))
+			}
+		}
+	}
+
+	// 3. Recent daily notes (last 3 days) — always injected
+	recentNotes := cb.memory.GetRecentDailyNotes(3)
+	if recentNotes != "" {
+		parts = append(parts, "## Recent Daily Notes\n\n"+recentNotes)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	var result string
+	for i, part := range parts {
+		if i > 0 {
+			result += "\n\n---\n\n"
+		}
+		result += part
+	}
+	result = fmt.Sprintf("# Memory (Obsidian Vault)\n\n%s", result)
+
+	if len(result) > maxMemoryChars {
+		result = result[:maxMemoryChars] + "\n\n[...memory truncated for context efficiency]"
+	}
+
+	return result
 }
 
 func (cb *ContextBuilder) LoadBootstrapFiles() string {
@@ -191,7 +284,7 @@ func (cb *ContextBuilder) LoadBootstrapFiles() string {
 func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary string, currentMessage string, media []string, channel, chatID string) []providers.Message {
 	messages := []providers.Message{}
 
-	systemPrompt := cb.BuildSystemPrompt()
+	systemPrompt := cb.BuildSystemPrompt(currentMessage)
 
 	// Inject knowledge context based on user message
 	if cb.knowledgeLoader != nil && currentMessage != "" {

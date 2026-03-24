@@ -146,6 +146,69 @@ func (t *MemoryTool) Execute(ctx context.Context, args map[string]interface{}) *
 	}
 }
 
+// SaveNote is the public API for programmatic note saving (used by auto-distillation).
+func (t *MemoryTool) SaveNote(key, content string, tags []string, folder string) error {
+	if key == "" || content == "" {
+		return fmt.Errorf("key and content are required")
+	}
+
+	slug := vaultSlugify(key)
+	if folder == "" {
+		folder = inferFolder(slug, tags)
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	links := extractWikilinks(content)
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	existing := t.index[slug]
+	created := now
+	if existing != nil {
+		created = existing.Created
+	}
+
+	note := &VaultNote{
+		Key:     slug,
+		Tags:    tags,
+		Folder:  folder,
+		Created: created,
+		Updated: now,
+		Links:   links,
+		Content: content,
+	}
+
+	if err := writeVaultNote(t.vaultDir, note); err != nil {
+		return err
+	}
+
+	if existing != nil && existing.Folder != folder {
+		oldPath := filepath.Join(t.vaultDir, existing.Folder, slug+".md")
+		os.Remove(oldPath)
+	}
+
+	t.index[slug] = note
+	t.tfidf.addDocument(slug, slug+" "+content+" "+strings.Join(tags, " "))
+	return nil
+}
+
+// SearchNotes searches the vault using TF-IDF and returns matching notes with content.
+// Used by the memory context builder for relevance-based injection.
+func (t *MemoryTool) SearchNotes(query string, maxResults int) []VaultNote {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	results := t.tfidf.search(query, maxResults)
+	var notes []VaultNote
+	for _, r := range results {
+		if note, ok := t.index[r.Key]; ok {
+			notes = append(notes, *note)
+		}
+	}
+	return notes
+}
+
 // --- Actions ---
 
 func (t *MemoryTool) save(args map[string]interface{}) *ToolResult {

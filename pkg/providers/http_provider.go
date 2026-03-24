@@ -515,10 +515,52 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 			logger.WarnCF("provider", "LlamaCpp fallback configured but failed to create", map[string]interface{}{
 				"error": err.Error(),
 			})
-			return primary, nil
+			return wrapWithPrivacy(primary, cfg)
 		}
-		return NewFallbackProvider(primary, fallback), nil
+		wrapped := NewFallbackProvider(primary, fallback)
+		return wrapWithPrivacy(wrapped, cfg)
 	}
 
-	return primary, nil
+	return wrapWithPrivacy(primary, cfg)
+}
+
+// wrapWithPrivacy wraps a provider with the PrivacyRouter if enabled and a local model is available.
+func wrapWithPrivacy(provider LLMProvider, cfg *config.Config) (LLMProvider, error) {
+	if !cfg.Privacy.Enabled || !cfg.Providers.LlamaCpp.Enabled {
+		return provider, nil
+	}
+
+	localProv, err := CreateLlamaCppProvider(cfg)
+	if err != nil {
+		logger.WarnCF("provider", "Privacy router enabled but local provider failed — routing all to cloud", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return provider, nil
+	}
+
+	classifierCfg := PrivacyClassifierConfig{
+		Tier2Enabled:       cfg.Privacy.Tier2Enabled,
+		AlwaysPrivateMedia: cfg.Privacy.AlwaysPrivateMedia,
+		FailClosed:         cfg.Privacy.FailClosed,
+		ExtraKeywords:      cfg.Privacy.ExtraKeywords,
+		ExtraPatterns:      cfg.Privacy.ExtraPatterns,
+	}
+
+	// For Tier 2, reuse the same local provider (classification is just a short prompt)
+	var tier2LLM LLMProvider
+	if cfg.Privacy.Tier2Enabled {
+		tier2LLM = localProv
+	}
+
+	classifier := NewPrivacyClassifier(classifierCfg, tier2LLM)
+	router := NewPrivacyRouter(provider, localProv, classifier, cfg.Privacy.LogDecisions)
+
+	logger.InfoCF("provider", "Privacy router enabled", map[string]interface{}{
+		"tier2":          cfg.Privacy.Tier2Enabled,
+		"fail_closed":    cfg.Privacy.FailClosed,
+		"private_media":  cfg.Privacy.AlwaysPrivateMedia,
+		"extra_keywords": len(cfg.Privacy.ExtraKeywords),
+	})
+
+	return router, nil
 }
