@@ -609,6 +609,9 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		finalContent = opts.DefaultResponse
 	}
 
+	// 5b. Identity guard: if the LLM denied a capability Chango has, correct it
+	finalContent = al.guardIdentity(finalContent, opts.UserMessage)
+
 	// 6. Save final assistant message to session
 	al.sessions.AddMessage(opts.SessionKey, "assistant", finalContent)
 	al.sessions.Save(opts.SessionKey)
