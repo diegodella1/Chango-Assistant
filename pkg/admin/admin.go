@@ -30,6 +30,9 @@ var staticFS embed.FS
 //go:embed static/home.html
 var homeFS embed.FS
 
+//go:embed static/about.html
+var aboutFS embed.FS
+
 // Editable files whitelist (relative to workspace)
 var allowedFiles = []string{
 	"SOUL.md",
@@ -115,6 +118,7 @@ func (h *Handler) SetVersion(v string)                   { h.version = v }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", h.serveHome)
+	mux.HandleFunc("/about", h.serveAbout)
 	mux.HandleFunc("/admin", h.serveSPA)
 	mux.HandleFunc("/api/public/status", h.publicStatus)
 	mux.HandleFunc("/api/public/events", h.sseEvents)
@@ -177,6 +181,16 @@ func (h *Handler) serveHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := homeFS.ReadFile("static/home.html")
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
+}
+
+func (h *Handler) serveAbout(w http.ResponseWriter, r *http.Request) {
+	data, err := aboutFS.ReadFile("static/about.html")
 	if err != nil {
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return

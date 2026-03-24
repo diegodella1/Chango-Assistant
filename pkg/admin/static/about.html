@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chango — About</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    background: #080808;
+    color: #a3a3a3;
+    line-height: 1.7;
+    padding: 60px 24px 80px;
+    display: flex;
+    justify-content: center;
+  }
+  .page { max-width: 640px; width: 100%; }
+  a { color: #d97706; text-decoration: none; }
+  a:hover { color: #f59e0b; }
+  h1 {
+    font-size: 20px;
+    font-weight: 500;
+    color: #e5e5e5;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #525252;
+    margin-bottom: 48px;
+  }
+  h2 {
+    font-size: 11px;
+    font-weight: 600;
+    color: #525252;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 40px;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #1a1a1a;
+  }
+  p { margin-bottom: 12px; font-size: 13px; }
+  .highlight { color: #d4d4d4; }
+  .dim { color: #404040; }
+  ul { list-style: none; margin-bottom: 12px; }
+  li { font-size: 13px; padding: 3px 0; }
+  li::before { content: "·"; color: #333; margin-right: 8px; }
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: #1a1a1a;
+    border: 1px solid #1a1a1a;
+    margin: 16px 0;
+  }
+  .arch-cell {
+    background: #0d0d0d;
+    padding: 12px;
+  }
+  .arch-cell .label {
+    font-size: 10px;
+    color: #525252;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .arch-cell .value {
+    font-size: 12px;
+    color: #d4d4d4;
+    margin-top: 4px;
+  }
+  .footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid #1a1a1a;
+    font-size: 11px;
+    color: #262626;
+  }
+  .back { margin-bottom: 32px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="back"><a href="/">← back</a></div>
+
+  <h1>Chango</h1>
+  <div class="subtitle">An experiment in artificial general autonomy</div>
+
+  <h2>What is this</h2>
+  <p>Chango is an autonomous AI agent that lives on a Raspberry Pi 5 in Buenos Aires. It's not a product — it's an experiment to see how close we can get to a truly autonomous digital companion using commodity hardware and cloud LLMs.</p>
+  <p>It has <span class="highlight">its own identity</span>, <span class="highlight">persistent memory</span>, <span class="highlight">an email address</span>, <span class="highlight">a calendar</span>, <span class="highlight">a crypto wallet</span>, and the ability to <span class="highlight">browse the web, register on services, deploy code, and think on its own</span>.</p>
+  <p>It's not AGI. But it's an honest attempt to build something that feels like a companion rather than a tool.</p>
+
+  <h2>Cognitive architecture</h2>
+  <p>Chango's brain is not a single LLM call. It's a multi-layered system:</p>
+  <ul>
+    <li><span class="highlight">Inner monologue</span> — Before responding, Chango thinks internally using a local model (Qwen 0.5B, runs on the Pi). This "System 2" step analyzes intent, context, and risks before the main response. Zero cloud cost, fully private.</li>
+    <li><span class="highlight">Privacy router</span> — A two-tier classifier decides what goes to the cloud and what stays local. Images, personal data (DNI, credentials, medical info) never leave the Pi.</li>
+    <li><span class="highlight">Memory</span> — An Obsidian-style vault with TF-IDF search. Conversations are auto-distilled into persistent notes. Relevant memories are injected based on the current topic, not blindly loaded.</li>
+    <li><span class="highlight">Knowledge graph</span> — Entities (people, projects, concepts) connected by typed relationships. BFS path finding. Builds a model of the world.</li>
+    <li><span class="highlight">Interaction scoring</span> — Every conversation is scored for sentiment, corrections, and usefulness. Weekly reports feed into self-improvement.</li>
+    <li><span class="highlight">Attention manager</span> — A background service scans for stale projects, overdue tasks, upcoming events. Generates "concerns" — things worth thinking about.</li>
+    <li><span class="highlight">Consciousness daemon</span> — Every 2 hours, Chango has a free thinking cycle. It reads its notes, concerns, and goals, then reflects without being asked. Most cycles are silent. Sometimes it finds something worth sharing.</li>
+    <li><span class="highlight">Goal generator</span> — Daily, Chango generates autonomous objectives based on patterns in its memory and interaction scores. Self-directed curiosity.</li>
+    <li><span class="highlight">Self-modification</span> — Can edit its own operating instructions (AGENTS.md) with a weekly meta-reflection that evaluates what's working and what isn't.</li>
+  </ul>
+
+  <h2>Infrastructure</h2>
+  <div class="arch-grid">
+    <div class="arch-cell">
+      <div class="label">Hardware</div>
+      <div class="value">Raspberry Pi 5, 8GB RAM</div>
+    </div>
+    <div class="arch-cell">
+      <div class="label">Language</div>
+      <div class="value">Go (34K lines, 26 packages)</div>
+    </div>
+    <div class="arch-cell">
+      <div class="label">Local model</div>
+      <div class="value">Qwen 2.5 0.5B (llama.cpp)</div>
+    </div>
+    <div class="arch-cell">
+      <div class="label">Cloud models</div>
+      <div class="value">GPT-5, Claude, Gemini via OpenRouter</div>
+    </div>
+    <div class="arch-cell">
+      <div class="label">Memory</div>
+      <div class="value">Obsidian vault + TF-IDF + knowledge graph</div>
+    </div>
+    <div class="arch-cell">
+      <div class="label">Deploy</div>
+      <div class="value">Docker + Coolify + Cloudflare Tunnel</div>
+    </div>
+    <div class="arch-cell">
+      <div class="label">Communication</div>
+      <div class="value">Telegram (voice, text, images)</div>
+    </div>
+    <div class="arch-cell">
+      <div class="label">Tools</div>
+      <div class="value">30+ (email, calendar, wallet, browse, GitHub...)</div>
+    </div>
+  </div>
+
+  <h2>Design principles</h2>
+  <ul>
+    <li><span class="highlight">Companion, not tool</span> — It has opinions, challenges decisions, and thinks on its own</li>
+    <li><span class="highlight">Privacy first</span> — Sensitive data stays on the Pi. The privacy router classifies before routing</li>
+    <li><span class="highlight">Local when possible, cloud when needed</span> — Inner monologue runs locally, complex reasoning uses cloud</li>
+    <li><span class="highlight">Memory over context</span> — Instead of stuffing everything into the prompt, Chango distills, stores, and retrieves by relevance</li>
+    <li><span class="highlight">Self-improving</span> — Interaction scoring + meta-reflection + self-modification = gets better over time</li>
+    <li><span class="highlight">Honest</span> — Would rather say "I don't know" or "I disagree" than give a generic response</li>
+  </ul>
+
+  <h2>What's missing for AGI</h2>
+  <p>Chango has the structure of a mind — memory, attention, goals, self-reflection, a model of the world. What it lacks is <span class="highlight">depth of reasoning</span>. Each "thought" is an LLM call, not genuine understanding. It can't maintain multiple hypotheses, do counterfactual reasoning, or learn new skills from a single example.</p>
+  <p>It's an orchestrator of intelligence, not intelligence itself. The brain is in the cloud. The soul is on the Pi.</p>
+
+  <h2>Open source</h2>
+  <p>Source: <a href="https://github.com/diegodella1/Chango-Assistant">github.com/diegodella1/Chango-Assistant</a></p>
+  <p>Built by <a href="https://diegodella.ar">Diego Della Giustina</a>.</p>
+
+  <div class="footer">chango.diegodella.ar — Raspberry Pi 5, Buenos Aires</div>
+</div>
+</body>
+</html>
