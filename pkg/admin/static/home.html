@@ -86,7 +86,18 @@
     color: #2a2a2a;
   }
   .activity .event.active {
-    color: #d97706;
+    color: #60a5fa;
+  }
+  .desc {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 0;
+    text-align: center;
+    padding-bottom: 160px;
+    font-size: 11px;
+    color: #333;
+    letter-spacing: 0.04em;
+    pointer-events: none;
   }
 </style>
 </head>
@@ -95,6 +106,7 @@
 <div class="activity">
   <div class="event" id="ev">idle</div>
 </div>
+<div class="desc">each neuron is a real-time event — everything you see is live</div>
 <div class="ui">
   <div class="inner">
     <div class="name">Chango</div>
@@ -162,7 +174,7 @@
       vy: (Math.random() - 0.5) * 0.00012,
       base: 0.25 + Math.random() * 0.15, // brighter base for contrast
       glow: 0,
-      size: 0.5 + Math.random() * 0.6,
+      size: 1.2 + Math.random() * 0.8,
     });
   }
 
@@ -277,7 +289,7 @@
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(160,120,40,0.08)';
+      ctx.strokeStyle = 'rgba(100,140,200,0.06)';
       ctx.stroke();
     }
 
@@ -296,7 +308,7 @@
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(230,180,60,' + (alpha * 0.4) + ')';
+      ctx.strokeStyle = 'rgba(100,160,255,' + (alpha * 0.4) + ')';
       ctx.lineWidth = 2.5;
       ctx.stroke();
       ctx.restore();
@@ -304,7 +316,7 @@
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(255,230,140,' + (alpha * 0.6) + ')';
+      ctx.strokeStyle = 'rgba(180,210,255,' + (alpha * 0.6) + ')';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
@@ -321,9 +333,9 @@
       ctx.save();
       if (n.glow > 0.2) ctx.filter = 'blur(2px)';
       const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
-      grad.addColorStop(0, 'rgba(230,180,50,' + glowAlpha + ')');
-      grad.addColorStop(0.3, 'rgba(210,150,30,' + (glowAlpha * 0.4) + ')');
-      grad.addColorStop(1, 'rgba(180,120,20,0)');
+      grad.addColorStop(0, 'rgba(140,180,255,' + glowAlpha + ')');
+      grad.addColorStop(0.3, 'rgba(80,130,220,' + (glowAlpha * 0.4) + ')');
+      grad.addColorStop(1, 'rgba(40,80,180,0)');
       ctx.beginPath();
       ctx.arc(p.x, p.y, glowRadius, 0, Math.PI * 2);
       ctx.fillStyle = grad;
@@ -335,13 +347,13 @@
       ctx.arc(p.x, p.y, r * 1.1, 0, Math.PI * 2);
       const coreAlpha = Math.min(brightness * 1.4, 1);
       if (n.glow > 0.3) {
-        // Hot white-yellow core when firing
-        ctx.fillStyle = 'rgba(255,245,200,' + coreAlpha + ')';
+        // Bright white core when firing
+        ctx.fillStyle = 'rgba(220,235,255,' + coreAlpha + ')';
       } else {
-        // Warm amber at rest — visible against dark bg
-        const cr = Math.round(180 + brightness * 60);
-        const cg = Math.round(120 + brightness * 50);
-        const cb = Math.round(20 + brightness * 20);
+        // Cool blue-white at rest — visible against dark bg
+        const cr = Math.round(120 + brightness * 60);
+        const cg = Math.round(150 + brightness * 50);
+        const cb = Math.round(200 + brightness * 40);
         ctx.fillStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + coreAlpha + ')';
       }
       ctx.fill();
