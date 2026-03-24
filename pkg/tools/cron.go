@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -10,6 +11,12 @@ import (
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/utils"
 )
+
+// commandExecutor is the interface for executing shell commands.
+// Both ExecTool and HostExecTool satisfy this.
+type commandExecutor interface {
+	Execute(ctx context.Context, args map[string]interface{}) *ToolResult
+}
 
 // JobExecutor is the interface for executing cron jobs through the agent
 type JobExecutor interface {
@@ -21,19 +28,27 @@ type CronTool struct {
 	cronService *cron.CronService
 	executor    JobExecutor
 	msgBus      *bus.MessageBus
-	execTool    *ExecTool
+	cmdExec     commandExecutor
 	channel     string
 	chatID      string
 	mu          sync.RWMutex
 }
 
-// NewCronTool creates a new CronTool
+// NewCronTool creates a new CronTool.
+// Auto-detects container environment: uses HostExecTool (nsenter) when /hostfs
+// is available, otherwise falls back to ExecTool for bare-metal execution.
 func NewCronTool(cronService *cron.CronService, executor JobExecutor, msgBus *bus.MessageBus, workspace string) *CronTool {
+	var cmdExec commandExecutor
+	if _, err := os.Stat("/hostfs/proc/1/ns/mnt"); err == nil {
+		cmdExec = NewHostExecTool()
+	} else {
+		cmdExec = NewExecTool(workspace, false)
+	}
 	return &CronTool{
 		cronService: cronService,
 		executor:    executor,
 		msgBus:      msgBus,
-		execTool:    NewExecTool(workspace, false),
+		cmdExec:     cmdExec,
 	}
 }
 
@@ -279,12 +294,12 @@ func (t *CronTool) ExecuteJob(ctx context.Context, job *cron.CronJob) string {
 			"command": job.Payload.Command,
 		}
 
-		result := t.execTool.Execute(ctx, args)
+		result := t.cmdExec.Execute(ctx, args)
 		var output string
 		if result.IsError {
-			output = fmt.Sprintf("Error executing scheduled command: %s", result.ForLLM)
+			output = fmt.Sprintf("⚠ Scheduled command failed:\n%s", result.ForLLM)
 		} else {
-			output = fmt.Sprintf("Scheduled command '%s' executed:\n%s", job.Payload.Command, result.ForLLM)
+			output = result.ForLLM
 		}
 
 		t.msgBus.PublishOutbound(bus.OutboundMessage{
