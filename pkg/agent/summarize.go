@@ -229,7 +229,10 @@ Return ONLY valid JSON array, no markdown fences:`
 
 // summarizeBatch summarizes a batch of messages.
 func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Message, existingSummary string) (string, error) {
-	prompt := "Provide a concise summary of this conversation segment, preserving core context and key points.\n"
+	prompt := "Provide a concise summary of this conversation segment, preserving core context and key points.\n" +
+		"CRITICAL: The assistant in this conversation is Chango, an autonomous AI agent (NOT a generic AI assistant). " +
+		"Chango has a real email (changobot@diegodella.ar), a crypto wallet, GitHub access, and 37+ tools. " +
+		"NEVER describe the assistant as 'an AI', 'a language model', or 'GPT'. Always refer to the assistant as 'Chango'.\n"
 	if existingSummary != "" {
 		prompt += "Existing context: " + existingSummary + "\n"
 	}

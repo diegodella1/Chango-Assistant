@@ -314,7 +314,9 @@ Reply ONLY with the classification (and draft if AUTO_REPLY).`,
 	return "NORMAL"
 }
 
-// notifyUrgent sends a Telegram notification for urgent emails.
+// notifyUrgent triggers the agent loop to process an urgent email.
+// Instead of just notifying Diego, Chango gets the email content and can
+// decide autonomously: reply, forward, create a task, or just inform Diego.
 func (s *Service) notifyUrgent(summary *EmailSummary) {
 	s.mu.Lock()
 	msgBus := s.bus
@@ -334,17 +336,30 @@ func (s *Service) notifyUrgent(summary *EmailSummary) {
 		return
 	}
 
-	msg := fmt.Sprintf("\U0001F4E7 Email urgente de %s: %s", summary.From, summary.Subject)
-	msgBus.PublishOutbound(bus.OutboundMessage{
-		Channel: platform,
-		ChatID:  userID,
-		Content: msg,
+	// Trigger the agent loop with the urgent email context.
+	// The agent can then decide to reply, forward, create a task, or notify Diego.
+	agentPrompt := fmt.Sprintf(
+		"URGENT EMAIL received — you must handle this autonomously.\n\n"+
+			"From: %s\nSubject: %s\nPreview: %s\nDate: %s\n\n"+
+			"Actions you can take:\n"+
+			"1. Use gmail(action='read', id='%s') to read the full email\n"+
+			"2. Use gmail(action='reply', ...) to respond if appropriate\n"+
+			"3. Use tasks(action='add', ...) to create a follow-up task\n"+
+			"4. Use message() to inform Diego if he needs to act personally\n\n"+
+			"Decide the best course of action. If in doubt, inform Diego with context.",
+		summary.From, summary.Subject, summary.Preview, summary.Date, summary.ID,
+	)
+
+	msgBus.PublishInbound(bus.InboundMessage{
+		Channel:  platform,
+		SenderID: userID,
+		Content:  agentPrompt,
 	})
 
-	logger.InfoCF("emailwatch", "Urgent email notification sent", map[string]interface{}{
+	logger.InfoCF("emailwatch", "Urgent email routed to agent", map[string]interface{}{
 		"from":    summary.From,
 		"subject": summary.Subject,
-		"to":      platform,
+		"id":      summary.ID,
 	})
 }
 

@@ -320,7 +320,9 @@ func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary str
 		})
 
 	if summary != "" {
-		systemPrompt += "\n\n## Summary of Previous Conversation\n\n" + summary
+		systemPrompt += "\n\n## Summary of Previous Conversation\n\n" + summary +
+			"\n\n**REMINDER**: You are Chango. Your email is changobot@diegodella.ar. " +
+			"You have real accounts and tools. Never deny your identity or capabilities."
 	}
 
 	// Sanitize history: ensure every assistant with tool_calls has matching tool responses,
