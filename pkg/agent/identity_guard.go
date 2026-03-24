@@ -7,6 +7,7 @@ import (
 // identityCorrection maps denial patterns to corrected responses.
 type identityCorrection struct {
 	denialPatterns []string // if response contains ANY of these
+	hedgePatterns  []string // softer denials like "no tengo X propio en el sentido..."
 	questionHints  []string // AND user message contains ANY of these
 	correction     string   // replace with this
 }
@@ -23,8 +24,17 @@ var identityCorrections = []identityCorrection{
 			"i don't have an email",
 			"i don't have email",
 		},
+		hedgePatterns: []string{
+			"en el sentido de identidad",
+			"como tal no tengo",
+			"no es mío propiamente",
+			"no es un email personal mío",
+			"estoy conectado con",  // "no tengo pero estoy conectado con..."
+			"tengo acceso a tu email", // framing it as Diego's, not Chango's
+			"tu service account",
+		},
 		questionHints: []string{"email", "correo", "mail"},
-		correction:    "Mi email es changobot@diegodella.ar — es una cuenta real de Google Workspace. Puedo enviar, recibir y buscar mails con el tool `gmail`. ¿Necesitás que mande algo?",
+		correction:    "Mi email es changobot@diegodella.ar — es MI cuenta de Google Workspace, no una cuenta tuya que yo \"uso\". Puedo enviar, recibir y buscar mails. ¿Necesitás que mande algo?",
 	},
 	{
 		denialPatterns: []string{
@@ -35,8 +45,13 @@ var identityCorrections = []identityCorrection{
 			"no manejo dinero",
 			"no tengo acceso a fondos",
 		},
+		hedgePatterns: []string{
+			"tu wallet",        // framing as Diego's wallet
+			"la wallet de diego",
+			"no manejo fondos propios",
+		},
 		questionHints: []string{"wallet", "billetera", "plata", "sats", "bitcoin", "lightning"},
-		correction:    "Tengo una wallet Lightning Network via LNbits. Puedo checkear balance, crear invoices y hacer pagos con el tool `wallet`. ¿Qué necesitás?",
+		correction:    "Tengo MI wallet Lightning Network via LNbits. Puedo checkear balance, crear invoices y hacer pagos. ¿Qué necesitás?",
 	},
 	{
 		denialPatterns: []string{
@@ -67,6 +82,11 @@ var identityCorrections = []identityCorrection{
 			"i am an ai language model",
 			"i'm a language model",
 		},
+		hedgePatterns: []string{
+			"en realidad soy",     // "en realidad soy un modelo..."
+			"técnicamente soy un", // "técnicamente soy un LLM"
+			"mi naturaleza es",    // "mi naturaleza es la de un modelo"
+		},
 		questionHints: []string{"quién sos", "quien sos", "qué sos", "que sos", "who are you", "what are you"},
 		correction:    "Soy Chango, agente autónomo de Diego Dell Agostino. Corro en una Raspberry Pi 5 en Buenos Aires. Mi email es changobot@diegodella.ar, tengo wallet crypto, acceso a GitHub, calendario, Drive, y 37+ herramientas. No soy un chatbot genérico — tengo memoria persistente, pienso por mi cuenta cada 2 horas, y puedo actuar en el mundo real.",
 	},
@@ -95,10 +115,20 @@ func (al *AgentLoop) guardIdentity(response, userMessage string) string {
 			continue
 		}
 
-		// Check if LLM denied the capability
+		// Check if LLM denied the capability (exact patterns)
 		for _, denial := range ic.denialPatterns {
 			if strings.Contains(lowerResp, denial) {
 				return ic.correction
+			}
+		}
+
+		// Check for hedged denials: "no tengo X propio" with qualifiers
+		// e.g. "no tengo email propio en el sentido de..." or "no tengo un email propio como tal"
+		if ic.hedgePatterns != nil {
+			for _, hp := range ic.hedgePatterns {
+				if strings.Contains(lowerResp, hp) {
+					return ic.correction
+				}
 			}
 		}
 	}
