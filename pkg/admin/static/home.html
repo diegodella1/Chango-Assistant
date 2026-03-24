@@ -307,9 +307,11 @@
       n._rx = rx; n._rz = rz;
     }
 
-    // Fire synapses from real events (+ very slow ambient)
+    // Fire synapses from real events + resting-state ambient activity
+    // Resting brain: slow waves of activity that wander across the network
+    const ambientRate = 0.012 + Math.sin(time * 0.3) * 0.006; // breathing rhythm
     for (let s = 0; s < MAX_SYN; s++) {
-      if (synapses[s].life <= 0 && (fireQueue.length > 0 || Math.random() < 0.001)) {
+      if (synapses[s].life <= 0 && (fireQueue.length > 0 || Math.random() < ambientRate)) {
         const color = fireQueue.length > 0 ? fireQueue.shift() : defaultColor;
         const ci = Math.floor(Math.random() * conns.length);
         const conn = conns[ci];

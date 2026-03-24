@@ -135,6 +135,9 @@ func (s *Service) Start(ctx context.Context) {
 
 	logger.InfoC("reasoning", "Background reasoning service started")
 
+	// Run first cycle immediately, then on interval
+	s.runCycle()
+
 	interval := time.Duration(s.cfg.IntervalMinutes) * time.Minute
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
