@@ -8,8 +8,9 @@ import (
 
 // createToolRegistryResult holds the registry and direct tool references needed by AgentLoop.
 type createToolRegistryResult struct {
-	registry   *tools.ToolRegistry
-	memoryTool *tools.MemoryTool
+	registry       *tools.ToolRegistry
+	memoryTool     *tools.MemoryTool
+	knowledgeGraph *tools.KnowledgeGraphTool
 }
 
 // createToolRegistry creates a tool registry with common tools.
@@ -82,7 +83,8 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	registry.Register(tools.NewLightsTool(workspace))
 
 	// Knowledge graph (entity relationships)
-	registry.Register(tools.NewKnowledgeGraphTool(workspace))
+	kgTool := tools.NewKnowledgeGraphTool(workspace)
+	registry.Register(kgTool)
 
 	// Self-modification (AGENTS.md editing)
 	registry.Register(tools.NewSelfTool(workspace))
@@ -138,5 +140,5 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	})
 	registry.Register(messageTool)
 
-	return createToolRegistryResult{registry: registry, memoryTool: memoryTool}
+	return createToolRegistryResult{registry: registry, memoryTool: memoryTool, knowledgeGraph: kgTool}
 }

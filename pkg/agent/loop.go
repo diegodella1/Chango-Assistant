@@ -40,7 +40,8 @@ type AgentLoop struct {
 	state          *state.Manager
 	contextBuilder *ContextBuilder
 	tools          *tools.ToolRegistry
-	memoryTool     *tools.MemoryTool // Direct reference for programmatic access (distillation, relevance search)
+	memoryTool     *tools.MemoryTool          // Direct reference for programmatic access (distillation, relevance search)
+	knowledgeGraph *tools.KnowledgeGraphTool // Direct reference for analogical reasoning (graph search)
 	running        atomic.Bool
 	summarizing    sync.Map // Tracks which sessions are currently being summarized
 	cfg            *config.Config // Reference to config for runtime updates
@@ -51,6 +52,7 @@ type AgentLoop struct {
 	localProvider  providers.LLMProvider // local model for inner monologue (zero cost, private)
 	onEvent        func(string) // callback for real-time activity events (SSE)
 	tokenBudget    *telemetry.TokenBudget
+	scratchpad     *Scratchpad // per-session working memory (active thoughts)
 }
 
 // SetLocalProvider sets a local LLM provider for inner monologue (zero cost, private).
@@ -155,12 +157,14 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		contextBuilder: contextBuilder,
 		tools:          toolsRegistry,
 		memoryTool:     toolsResult.memoryTool,
+		knowledgeGraph: toolsResult.knowledgeGraph,
 		summarizing:    sync.Map{},
 		cfg:            cfg,
 		configPath:     configPath,
 		subagentMgr:    subagentManager,
 		scoring:        NewScoringEngine(workspace),
 		tokenBudget:    tokenBudget,
+		scratchpad:     NewScratchpad(),
 	}
 }
 
@@ -429,7 +433,20 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		opts.ChatID,
 	)
 
-	// 2b. Topic shift detection — inject hint if user changed subject
+	// 2b. Working memory scratchpad — inject active thoughts for this session
+	if !opts.NoHistory {
+		scratchpadText := al.scratchpad.Format(opts.SessionKey)
+		if scratchpadText != "" {
+			scratchpadMsg := providers.Message{
+				Role:    "system",
+				Content: scratchpadText,
+			}
+			// Insert before the last message (user message)
+			messages = append(messages[:len(messages)-1], scratchpadMsg, messages[len(messages)-1])
+		}
+	}
+
+	// 2c. Topic shift detection — inject hint if user changed subject
 	if len(history) >= 3 && opts.UserMessage != "" {
 		if detectTopicShift(opts.UserMessage, history) {
 			// Insert a system hint just before the user message to signal the LLM
@@ -444,29 +461,93 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		}
 	}
 
-	// 2c. Inner monologue — plan before responding (System 2 thinking)
+	// 2d. Inner monologue — plan before responding (System 2 thinking)
 	// Skip for heartbeat, cron, short messages, and /commands
+	var monologueResult string
 	if !opts.NoHistory && len(opts.UserMessage) > 20 && !strings.HasPrefix(opts.UserMessage, "/") && opts.Feature == telemetry.FeatureChat {
-		monologue := al.innerMonologue(ctx, opts.UserMessage, history)
-		if monologue != "" {
+		monologueResult = al.innerMonologue(ctx, opts.UserMessage, history)
+		if monologueResult != "" {
 			// Inject the monologue as a system message just before the user message
 			// This guides the LLM's response without being visible to the user
 			hint := providers.Message{
 				Role:    "system",
-				Content: "## Internal Analysis (not visible to user)\n\n" + monologue,
+				Content: "## Internal Analysis (not visible to user)\n\n" + monologueResult,
 			}
 			// Insert before the last message (which is the user message)
 			messages = append(messages[:len(messages)-1], hint, messages[len(messages)-1])
 		}
 	}
 
+	// 2e. Analogical reasoning — search KG and memory for similar past experiences
+	// Skip for heartbeat, cron, and /commands
+	if !opts.NoHistory && opts.UserMessage != "" && !strings.HasPrefix(opts.UserMessage, "/") {
+		analogies := al.findAnalogies(opts.UserMessage)
+		if analogies != "" {
+			analogyMsg := providers.Message{
+				Role:    "system",
+				Content: analogies,
+			}
+			// Insert before the last message (which is the user message)
+			messages = append(messages[:len(messages)-1], analogyMsg, messages[len(messages)-1])
+			logger.DebugCF("agent", "Analogical reasoning injected", map[string]interface{}{
+				"session": opts.SessionKey,
+				"length":  len(analogies),
+			})
+		}
+	}
+
 	// 3. Save user message to session
 	al.sessions.AddMessage(opts.SessionKey, "user", opts.UserMessage)
 
-	// 4. Run LLM iteration loop
-	finalContent, iteration, media, err := al.runLLMIteration(ctx, messages, opts)
-	if err != nil {
-		return "", nil, err
+	// 4. Run LLM iteration loop (or Tree of Thought for complex decisions)
+	var finalContent string
+	var iteration int
+	var media []string
+	var err error
+
+	// 4a. Tree of Thought for complex decisions (chat only)
+	totUsed := false
+	if opts.Feature == telemetry.FeatureChat && !opts.NoHistory && shouldUseToT(opts.UserMessage, monologueResult) {
+		totResponse, totErr := al.treeOfThought(ctx, messages, opts)
+		if totErr == nil && totResponse != "" {
+			finalContent = totResponse
+			totUsed = true
+			logger.InfoCF("agent", "Tree of Thought produced response", map[string]interface{}{
+				"chars": len(finalContent),
+			})
+		}
+	}
+
+	// 4b. Normal LLM iteration (if ToT was not used or failed)
+	if !totUsed {
+		finalContent, iteration, media, err = al.runLLMIteration(ctx, messages, opts)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+
+	// 4c. Self-critique: catch low-quality responses before sending (chat only)
+	if opts.Feature == telemetry.FeatureChat && !opts.NoHistory && finalContent != "" {
+		if critiqueHint := al.selfCritique(ctx, opts.UserMessage, finalContent); critiqueHint != "" {
+			logger.InfoCF("agent", "Self-critique triggered revision", map[string]interface{}{
+				"hint": critiqueHint,
+			})
+			// Re-run with the critique as guidance
+			critiqueMsg := providers.Message{
+				Role:    "system",
+				Content: "REVISION NEEDED: " + critiqueHint + "\nRewrite your response addressing this feedback.",
+			}
+			reviseMsgs := make([]providers.Message, len(messages))
+			copy(reviseMsgs, messages)
+			reviseMsgs = append(reviseMsgs,
+				providers.Message{Role: "assistant", Content: finalContent},
+				critiqueMsg,
+			)
+			revised, _, _, revErr := al.runLLMIteration(ctx, reviseMsgs, opts)
+			if revErr == nil && revised != "" {
+				finalContent = revised
+			}
+		}
 	}
 
 	// If last tool had ForUser content and we already sent it, we might not need to send final response
@@ -480,6 +561,11 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	// 6. Save final assistant message to session
 	al.sessions.AddMessage(opts.SessionKey, "assistant", finalContent)
 	al.sessions.Save(opts.SessionKey)
+
+	// 6b. Update working memory scratchpad with this exchange
+	if !opts.NoHistory {
+		al.scratchpad.Update(opts.SessionKey, opts.UserMessage, finalContent)
+	}
 
 	// 7. Optional: summarization
 	if opts.EnableSummary {

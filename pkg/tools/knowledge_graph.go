@@ -635,6 +635,92 @@ func (t *KnowledgeGraphTool) removeEdge(args map[string]interface{}) *ToolResult
 	return SilentResult(fmt.Sprintf("Removed edge %s -> %s", from, to))
 }
 
+// SearchNodes searches for nodes matching a query string.
+// Matches against node ID, name, type, and property values.
+// Returns up to max matching nodes. Thread-safe.
+func (t *KnowledgeGraphTool) SearchNodes(query string, max int) []KnowledgeNode {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	g, err := t.load()
+	if err != nil || len(g.Nodes) == 0 {
+		return nil
+	}
+
+	queryLower := strings.ToLower(query)
+	tokens := strings.Fields(queryLower)
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	var matches []KnowledgeNode
+	for _, n := range g.Nodes {
+		haystack := strings.ToLower(n.ID + " " + n.Name + " " + n.Type)
+		for _, v := range n.Properties {
+			haystack += " " + strings.ToLower(v)
+		}
+		for _, tok := range tokens {
+			if strings.Contains(haystack, tok) {
+				matches = append(matches, n)
+				break
+			}
+		}
+		if len(matches) >= max {
+			break
+		}
+	}
+	return matches
+}
+
+// QueryNode returns a node and its connected edges by ID.
+// Returns nil, nil if the node is not found.
+func (t *KnowledgeGraphTool) QueryNode(id string) (*KnowledgeNode, []KnowledgeEdge) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	g, err := t.load()
+	if err != nil {
+		return nil, nil
+	}
+
+	var node *KnowledgeNode
+	for _, n := range g.Nodes {
+		if n.ID == id {
+			n2 := n
+			node = &n2
+			break
+		}
+	}
+	if node == nil {
+		return nil, nil
+	}
+
+	var edges []KnowledgeEdge
+	for _, e := range g.Edges {
+		if e.From == id || e.To == id {
+			edges = append(edges, e)
+		}
+	}
+	return node, edges
+}
+
+// GetNodeName returns the human-readable name for a node ID, or the ID itself if not found.
+func (t *KnowledgeGraphTool) GetNodeName(id string) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	g, err := t.load()
+	if err != nil {
+		return id
+	}
+	for _, n := range g.Nodes {
+		if n.ID == id {
+			return n.Name
+		}
+	}
+	return id
+}
+
 // toStringMap converts a map[string]interface{} to map[string]string.
 func toStringMap(m map[string]interface{}) map[string]string {
 	result := map[string]string{}
