@@ -72,6 +72,9 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	// Snippets
 	registry.Register(tools.NewSnippetTool(workspace))
 
+	// Credentials vault (encrypted)
+	registry.Register(tools.NewCredentialsTool(workspace, cfg.Tools.Credentials.MasterKey))
+
 	// Smart lights (Magic Home WiFi)
 	registry.Register(tools.NewLightsTool(workspace))
 
@@ -86,6 +89,9 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 
 	// HTTP request
 	registry.Register(tools.NewHTTPRequestTool())
+
+	// Structured web browsing (session-persistent, form extraction/submit)
+	registry.Register(tools.NewBrowseTool())
 
 	// Google Workspace tools (Gmail, Calendar, Drive)
 	if cfg.Tools.Google.ServiceAccountFile != "" && cfg.Tools.Google.ImpersonateEmail != "" {

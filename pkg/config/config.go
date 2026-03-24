@@ -297,9 +297,14 @@ type GoogleConfig struct {
 	ImpersonateEmail   string `json:"impersonate_email"`
 }
 
+type CredentialsConfig struct {
+	MasterKey string `json:"master_key" env:"PICOCLAW_CREDENTIALS_MASTER_KEY"`
+}
+
 type ToolsConfig struct {
-	Web    WebToolsConfig `json:"web"`
-	Google GoogleConfig   `json:"google"`
+	Web         WebToolsConfig    `json:"web"`
+	Google      GoogleConfig      `json:"google"`
+	Credentials CredentialsConfig `json:"credentials"`
 }
 
 func DefaultConfig() *Config {
