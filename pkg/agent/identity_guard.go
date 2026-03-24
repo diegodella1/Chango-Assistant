@@ -4,96 +4,54 @@ import (
 	"strings"
 )
 
-// identityCorrection maps denial patterns to corrected responses.
-type identityCorrection struct {
-	denialPatterns []string // if response contains ANY of these
-	hedgePatterns  []string // softer denials like "no tengo X propio en el sentido..."
-	questionHints  []string // AND user message contains ANY of these
-	correction     string   // replace with this
+// capabilityGuard defines a capability Chango has, with negation detection.
+type capabilityGuard struct {
+	topicWords    []string // words that identify the topic (email, wallet, etc.)
+	negationWords []string // words that signal denial (no tengo, don't have, etc.)
+	questionHints []string // user message must contain one of these
+	correction    string   // replacement response
 }
 
-var identityCorrections = []identityCorrection{
+// negation markers shared across all capabilities
+var negationMarkers = []string{
+	"no tengo", "no poseo", "no cuento con", "no dispongo",
+	"no puedo", "no tengo acceso",
+	"i don't have", "i do not have", "don't have any",
+	"no es mío", "no es mio", "no es mi ", "fuera de tus cuentas",
+	"tu gmail", "tu cuenta", "desde tu",
+}
+
+var capabilityGuards = []capabilityGuard{
 	{
-		denialPatterns: []string{
-			"no tengo email",
-			"no tengo un email",
-			"no tengo correo",
-			"no poseo email",
-			"no cuento con email",
-			"no tengo email propio",
-			"i don't have an email",
-			"i don't have email",
-		},
-		hedgePatterns: []string{
-			"en el sentido de identidad",
-			"como tal no tengo",
-			"no es mío propiamente",
-			"no es un email personal mío",
-			"estoy conectado con",  // "no tengo pero estoy conectado con..."
-			"tengo acceso a tu email", // framing it as Diego's, not Chango's
-			"tu service account",
-		},
-		questionHints: []string{"email", "correo", "mail"},
-		correction:    "Mi email es changobot@diegodella.ar — es MI cuenta de Google Workspace, no una cuenta tuya que yo \"uso\". Puedo enviar, recibir y buscar mails. ¿Necesitás que mande algo?",
+		topicWords:    []string{"email", "correo", "mail", "mailbox", "casilla", "gmail", "cuenta de email"},
+		questionHints: []string{"email", "correo", "mail", "cuenta"},
+		correction:    "Mi email es changobot@diegodella.ar — es MI cuenta de Google Workspace. Puedo enviar, recibir y buscar mails con el tool `gmail`. ¿Necesitás que mande algo?",
 	},
 	{
-		denialPatterns: []string{
-			"no tengo wallet",
-			"no tengo billetera",
-			"no poseo wallet",
-			"no cuento con wallet",
-			"no manejo dinero",
-			"no tengo acceso a fondos",
-		},
-		hedgePatterns: []string{
-			"tu wallet",        // framing as Diego's wallet
-			"la wallet de diego",
-			"no manejo fondos propios",
-		},
+		topicWords:    []string{"wallet", "billetera", "fondos", "dinero", "sats", "bitcoin", "lightning"},
 		questionHints: []string{"wallet", "billetera", "plata", "sats", "bitcoin", "lightning"},
 		correction:    "Tengo MI wallet Lightning Network via LNbits. Puedo checkear balance, crear invoices y hacer pagos. ¿Qué necesitás?",
 	},
 	{
-		denialPatterns: []string{
-			"no tengo calendario",
-			"no tengo acceso a tu calendario",
-			"no puedo acceder al calendario",
-			"no tengo acceso a calendar",
-		},
+		topicWords:    []string{"calendario", "calendar", "agenda", "eventos"},
 		questionHints: []string{"calendario", "calendar", "agenda", "evento"},
-		correction:    "Tengo Google Calendar conectado. Puedo crear, ver y editar eventos con el tool `agenda`. ¿Qué querés agendar?",
+		correction:    "Tengo MI Google Calendar. Puedo crear, ver y editar eventos con el tool `agenda`. ¿Qué querés agendar?",
 	},
 	{
-		denialPatterns: []string{
-			"no tengo acceso a drive",
-			"no puedo acceder a drive",
-			"no tengo google drive",
-		},
+		topicWords:    []string{"drive", "archivos", "google drive"},
 		questionHints: []string{"drive", "archivo", "subir", "upload"},
-		correction:    "Tengo acceso a Google Drive. Puedo listar, subir y descargar archivos con el tool `gdrive`. ¿Qué necesitás?",
+		correction:    "Tengo MI Google Drive. Puedo listar, subir y descargar archivos. ¿Qué necesitás?",
 	},
 	{
-		denialPatterns: []string{
-			"soy un modelo de lenguaje",
-			"soy un asistente de ia",
-			"soy una ia",
-			"soy un modelo de ia",
-			"i'm an ai",
-			"i am an ai language model",
-			"i'm a language model",
-		},
-		hedgePatterns: []string{
-			"en realidad soy",     // "en realidad soy un modelo..."
-			"técnicamente soy un", // "técnicamente soy un LLM"
-			"mi naturaleza es",    // "mi naturaleza es la de un modelo"
-		},
+		topicWords:    []string{"modelo de lenguaje", "asistente de ia", "una ia", "modelo de ia", "an ai", "language model", "a language model"},
 		questionHints: []string{"quién sos", "quien sos", "qué sos", "que sos", "who are you", "what are you"},
 		correction:    "Soy Chango, agente autónomo de Diego Dell Agostino. Corro en una Raspberry Pi 5 en Buenos Aires. Mi email es changobot@diegodella.ar, tengo wallet crypto, acceso a GitHub, calendario, Drive, y 37+ herramientas. No soy un chatbot genérico — tengo memoria persistente, pienso por mi cuenta cada 2 horas, y puedo actuar en el mundo real.",
 	},
 }
 
-// guardIdentity checks if the LLM denied a capability that Chango actually has,
-// and replaces the response with the correct one.
+// guardIdentity checks if the LLM denied a capability that Chango actually has.
+// Uses co-occurrence detection: if the response contains BOTH a negation marker AND
+// a topic word near each other, it's a denial — regardless of exact phrasing.
 func (al *AgentLoop) guardIdentity(response, userMessage string) string {
 	if response == "" || userMessage == "" {
 		return response
@@ -102,10 +60,10 @@ func (al *AgentLoop) guardIdentity(response, userMessage string) string {
 	lowerResp := strings.ToLower(response)
 	lowerUser := strings.ToLower(userMessage)
 
-	for _, ic := range identityCorrections {
-		// Check if user asked about this topic
+	for _, cg := range capabilityGuards {
+		// Check if user message is about this topic
 		userMatch := false
-		for _, hint := range ic.questionHints {
+		for _, hint := range cg.questionHints {
 			if strings.Contains(lowerUser, hint) {
 				userMatch = true
 				break
@@ -115,20 +73,22 @@ func (al *AgentLoop) guardIdentity(response, userMessage string) string {
 			continue
 		}
 
-		// Check if LLM denied the capability (exact patterns)
-		for _, denial := range ic.denialPatterns {
-			if strings.Contains(lowerResp, denial) {
-				return ic.correction
+		// Check if response contains a topic word
+		hasTopic := false
+		for _, tw := range cg.topicWords {
+			if strings.Contains(lowerResp, tw) {
+				hasTopic = true
+				break
 			}
 		}
+		if !hasTopic {
+			continue
+		}
 
-		// Check for hedged denials: "no tengo X propio" with qualifiers
-		// e.g. "no tengo email propio en el sentido de..." or "no tengo un email propio como tal"
-		if ic.hedgePatterns != nil {
-			for _, hp := range ic.hedgePatterns {
-				if strings.Contains(lowerResp, hp) {
-					return ic.correction
-				}
+		// Check if response also contains a negation marker
+		for _, neg := range negationMarkers {
+			if strings.Contains(lowerResp, neg) {
+				return cg.correction
 			}
 		}
 	}
