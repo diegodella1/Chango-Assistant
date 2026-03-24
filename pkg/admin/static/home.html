@@ -217,18 +217,6 @@
     }
   }
 
-  // --- Active synapses (soft pulses, color-coded) ---
-  const MAX_SYN = 60;
-  const synapses = [];
-  for (let i = 0; i < MAX_SYN; i++) {
-    synapses.push({ ci: -1, life: 0, max: 0, color: defaultColor });
-  }
-
-  // --- SSE: real activity with color-coded cognitive processes ---
-  let pending = 0;
-  let lastEvent = 'idle';
-  const burst = { think: 12, tool: 8, memory: 18, browse: 10, learn: 25, cron: 5, heartbeat: 4, reasoning: 15 };
-
   // Color palette per cognitive process — [R, G, B]
   const eventColors = {
     think:     [129, 140, 248],  // indigo — reasoning/reflection
@@ -241,6 +229,18 @@
     heartbeat: [251, 113, 133],  // rose — vital signs
   };
   const defaultColor = [160, 180, 220]; // neutral blue-white
+
+  // --- Active synapses (soft pulses, color-coded) ---
+  const MAX_SYN = 60;
+  const synapses = [];
+  for (let i = 0; i < MAX_SYN; i++) {
+    synapses.push({ ci: -1, life: 0, max: 0, color: defaultColor });
+  }
+
+  // --- SSE: real activity with color-coded cognitive processes ---
+  let pending = 0;
+  let lastEvent = 'idle';
+  const burst = { think: 12, tool: 8, memory: 18, browse: 10, learn: 25, cron: 5, heartbeat: 4, reasoning: 15 };
 
   // Queue of pending fires with their color
   const fireQueue = [];
