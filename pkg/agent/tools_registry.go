@@ -81,6 +81,9 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	// Smart lights (Magic Home WiFi)
 	registry.Register(tools.NewLightsTool(workspace))
 
+	// Knowledge graph (entity relationships)
+	registry.Register(tools.NewKnowledgeGraphTool(workspace))
+
 	// Self-modification (AGENTS.md editing)
 	registry.Register(tools.NewSelfTool(workspace))
 

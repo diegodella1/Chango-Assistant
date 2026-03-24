@@ -47,6 +47,7 @@ type AgentLoop struct {
 	configPath     string         // Path to config.json for persistence
 	tracker        *telemetry.Tracker
 	subagentMgr    *tools.SubagentManager
+	scoring        *ScoringEngine
 	onEvent        func(string) // callback for real-time activity events (SSE)
 }
 
@@ -140,6 +141,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		cfg:            cfg,
 		configPath:     configPath,
 		subagentMgr:    subagentManager,
+		scoring:        NewScoringEngine(workspace),
 	}
 }
 
@@ -423,6 +425,22 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		}
 	}
 
+	// 2c. Inner monologue — plan before responding (System 2 thinking)
+	// Skip for heartbeat, cron, short messages, and /commands
+	if !opts.NoHistory && len(opts.UserMessage) > 20 && !strings.HasPrefix(opts.UserMessage, "/") && opts.Feature == telemetry.FeatureChat {
+		monologue := al.innerMonologue(ctx, opts.UserMessage, history)
+		if monologue != "" {
+			// Inject the monologue as a system message just before the user message
+			// This guides the LLM's response without being visible to the user
+			hint := providers.Message{
+				Role:    "system",
+				Content: "## Internal Analysis (not visible to user)\n\n" + monologue,
+			}
+			// Insert before the last message (which is the user message)
+			messages = append(messages[:len(messages)-1], hint, messages[len(messages)-1])
+		}
+	}
+
 	// 3. Save user message to session
 	al.sessions.AddMessage(opts.SessionKey, "user", opts.UserMessage)
 
@@ -467,6 +485,12 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 			"iterations":   iteration,
 			"final_length": len(finalContent),
 		})
+
+	// 10. Score interaction quality (non-blocking)
+	if al.scoring != nil && !opts.NoHistory {
+		sessionHistory := al.sessions.GetHistory(opts.SessionKey)
+		go al.scoring.Score(opts.SessionKey, sessionHistory)
+	}
 
 	return finalContent, media, nil
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/admin"
 	"github.com/sipeed/picoclaw/pkg/agent"
+	"github.com/sipeed/picoclaw/pkg/attention"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/channels"
 	"github.com/sipeed/picoclaw/pkg/config"
@@ -257,6 +258,12 @@ func gatewayCmd() {
 		fmt.Println("✓ Sentinel service started")
 	}
 
+	// Attention manager
+	attentionService := attention.NewService(cfg.WorkspacePath(), stateManager)
+	attentionService.SetBus(msgBus)
+	go attentionService.Start(ctx)
+	fmt.Println("✓ Attention manager started")
+
 	if err := channelManager.StartAll(ctx); err != nil {
 		fmt.Printf("Error starting channels: %v\n", err)
 	}
@@ -313,6 +320,7 @@ func gatewayCmd() {
 	cancel()
 	healthServer.Close()
 	tracker.Stop()
+	attentionService.Stop()
 	sentinelService.Stop()
 	deviceService.Stop()
 	heartbeatService.Stop()
