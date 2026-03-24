@@ -55,6 +55,11 @@ type AgentLoop struct {
 	scratchpad     *Scratchpad // per-session working memory (active thoughts)
 }
 
+// GetMemoryTool returns the memory tool for programmatic vault access (used by reasoning service).
+func (al *AgentLoop) GetMemoryTool() *tools.MemoryTool {
+	return al.memoryTool
+}
+
 // SetLocalProvider sets a local LLM provider for inner monologue (zero cost, private).
 func (al *AgentLoop) SetLocalProvider(p providers.LLMProvider) {
 	al.localProvider = p

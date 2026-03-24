@@ -43,6 +43,7 @@ type MemoryTool struct {
 var vaultFolders = []string{
 	"daily", "people", "preferences", "insights",
 	"decisions", "projects", "blog", "state", "inbox",
+	"observations",
 }
 
 func NewMemoryTool(workspace string) *MemoryTool {
@@ -747,6 +748,28 @@ func containsTag(tags []string, tag string) bool {
 		}
 	}
 	return false
+}
+
+// ListNotesByFolder returns notes from a specific folder, sorted by most recent first.
+func (t *MemoryTool) ListNotesByFolder(folder string, limit int) []VaultNote {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	var notes []VaultNote
+	for _, note := range t.index {
+		if note.Folder == folder {
+			notes = append(notes, *note)
+		}
+	}
+
+	sort.Slice(notes, func(i, j int) bool {
+		return notes[i].Updated > notes[j].Updated
+	})
+
+	if limit > 0 && len(notes) > limit {
+		notes = notes[:limit]
+	}
+	return notes
 }
 
 func truncate(s string, max int) string {

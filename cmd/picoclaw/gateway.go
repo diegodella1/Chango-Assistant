@@ -26,6 +26,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/sentinel"
 	"github.com/sipeed/picoclaw/pkg/services/emailwatch"
 	"github.com/sipeed/picoclaw/pkg/services/healthcheck"
+	"github.com/sipeed/picoclaw/pkg/services/reasoning"
 	"github.com/sipeed/picoclaw/pkg/services/rsswatch"
 	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/telemetry"
@@ -307,6 +308,24 @@ func gatewayCmd() {
 		fmt.Println("✓ Health check service started")
 	}
 
+	// Background reasoning service
+	var reasoningService *reasoning.Service
+	if cfg.Reasoning.Enabled {
+		var localProv providers.LLMProvider
+		if cfg.Providers.LlamaCpp.Enabled {
+			localProv, _ = providers.CreateLlamaCppProvider(cfg)
+		}
+		reasoningService = reasoning.NewService(
+			cfg.Reasoning, cfg.WorkspacePath(), stateManager,
+			localProv, agentLoop.GetMemoryTool(), nil,
+		)
+		reasoningService.SetBus(msgBus)
+		reasoningService.SetAgentLoop(agentLoop)
+		go reasoningService.Start(ctx)
+		defer reasoningService.Stop()
+		fmt.Println("✓ Background reasoning service started")
+	}
+
 	// RSS reader service
 	if cfg.RSS.Enabled && len(cfg.RSS.Feeds) > 0 {
 		var localProv providers.LLMProvider
@@ -347,6 +366,9 @@ func gatewayCmd() {
 		adminHandler.Register(healthMux)
 		// Connect agent activity events to admin SSE for real-time visualization
 		agentLoop.SetEventCallback(adminHandler.EmitEvent)
+		if reasoningService != nil {
+			reasoningService.SetEventCallback(adminHandler.EmitEvent)
+		}
 		fmt.Println("✓ Admin panel enabled at /admin")
 	}
 

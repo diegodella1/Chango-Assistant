@@ -61,6 +61,7 @@ type Config struct {
 	Health      HealthConfig      `json:"health"`
 	RSS         RSSConfig         `json:"rss"`
 	Background  BackgroundConfig  `json:"background"`
+	Reasoning   ReasoningConfig   `json:"reasoning"`
 	mu          sync.RWMutex
 }
 
@@ -94,6 +95,15 @@ type RSSFeed struct {
 // BackgroundConfig controls token optimization for background processes.
 type BackgroundConfig struct {
 	PreferLocal bool `json:"prefer_local" env:"PICOCLAW_BACKGROUND_PREFER_LOCAL"` // default true
+}
+
+// ReasoningConfig controls the background reasoning loop (local triage + cloud escalation).
+type ReasoningConfig struct {
+	Enabled              bool `json:"enabled" env:"PICOCLAW_REASONING_ENABLED"`
+	IntervalMinutes      int  `json:"interval_minutes" env:"PICOCLAW_REASONING_INTERVAL"`        // default 30
+	EscalationThreshold  int  `json:"escalation_threshold" env:"PICOCLAW_REASONING_THRESHOLD"`    // default 7
+	MaxObservationsPerDay int  `json:"max_observations_per_day"`                                   // default 48
+	NotifyOnInsight      bool `json:"notify_on_insight"`                                           // default true
 }
 
 // PrivacyConfig controls the privacy router that prevents sensitive data from leaving the Pi.
@@ -513,6 +523,13 @@ func DefaultConfig() *Config {
 		},
 		Background: BackgroundConfig{
 			PreferLocal: true,
+		},
+		Reasoning: ReasoningConfig{
+			Enabled:              false,
+			IntervalMinutes:      30,
+			EscalationThreshold:  7,
+			MaxObservationsPerDay: 48,
+			NotifyOnInsight:      true,
 		},
 	}
 }

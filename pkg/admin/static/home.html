@@ -85,9 +85,26 @@
     transition: color 0.3s;
     color: #2a2a2a;
   }
-  .activity .event.active {
-    color: #60a5fa;
+  .legend {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 9px;
+    opacity: 0.25;
+    transition: opacity 0.5s;
   }
+  .legend:hover { opacity: 0.7; }
+  .legend span { white-space: nowrap; }
+  .activity .event.active { color: #60a5fa; }
+  .activity .event.active[data-type="think"]     { color: #818cf8; }
+  .activity .event.active[data-type="memory"]    { color: #34d399; }
+  .activity .event.active[data-type="learn"]     { color: #fbbf24; }
+  .activity .event.active[data-type="browse"]    { color: #38bdf8; }
+  .activity .event.active[data-type="tool"]      { color: #f472b6; }
+  .activity .event.active[data-type="reasoning"] { color: #c084fc; }
+  .activity .event.active[data-type="cron"]      { color: #94a3b8; }
+  .activity .event.active[data-type="heartbeat"] { color: #fb7185; }
   .desc {
     position: fixed;
     bottom: 0; left: 0; right: 0;
@@ -105,6 +122,14 @@
 <canvas id="c"></canvas>
 <div class="activity">
   <div class="event" id="ev">idle</div>
+  <div class="legend" id="legend">
+    <span style="color:#818cf8">● think</span>
+    <span style="color:#34d399">● memory</span>
+    <span style="color:#fbbf24">● learn</span>
+    <span style="color:#38bdf8">● browse</span>
+    <span style="color:#f472b6">● tool</span>
+    <span style="color:#c084fc">● reasoning</span>
+  </div>
 </div>
 <div class="desc">each neuron is a real-time event — everything you see is live</div>
 <div class="ui">
@@ -172,8 +197,9 @@
       nx, ny, nz,
       vx: (Math.random() - 0.5) * 0.00012,
       vy: (Math.random() - 0.5) * 0.00012,
-      base: 0.25 + Math.random() * 0.15, // brighter base for contrast
+      base: 0.25 + Math.random() * 0.15,
       glow: 0,
+      glowColor: null,
       size: 1.2 + Math.random() * 0.8,
     });
   }
@@ -191,30 +217,51 @@
     }
   }
 
-  // --- Active synapses (soft pulses, no bolts) ---
+  // --- Active synapses (soft pulses, color-coded) ---
   const MAX_SYN = 60;
   const synapses = [];
   for (let i = 0; i < MAX_SYN; i++) {
-    synapses.push({ ci: -1, life: 0, max: 0 });
+    synapses.push({ ci: -1, life: 0, max: 0, color: defaultColor });
   }
 
-  // --- SSE: real activity ---
+  // --- SSE: real activity with color-coded cognitive processes ---
   let pending = 0;
   let lastEvent = 'idle';
-  const burst = { think: 12, tool: 8, memory: 18, browse: 10, learn: 25, cron: 5, heartbeat: 4 };
+  const burst = { think: 12, tool: 8, memory: 18, browse: 10, learn: 25, cron: 5, heartbeat: 4, reasoning: 15 };
+
+  // Color palette per cognitive process — [R, G, B]
+  const eventColors = {
+    think:     [129, 140, 248],  // indigo — reasoning/reflection
+    memory:    [52,  211, 153],  // emerald — knowledge storage/retrieval
+    learn:     [251, 191, 36],   // amber — learning/growth
+    browse:    [56,  189, 248],  // sky — external research
+    tool:      [244, 114, 182],  // pink — tool execution
+    reasoning: [192, 132, 252],  // purple — background reasoning loop
+    cron:      [148, 163, 184],  // slate — scheduled tasks
+    heartbeat: [251, 113, 133],  // rose — vital signs
+  };
+  const defaultColor = [160, 180, 220]; // neutral blue-white
+
+  // Queue of pending fires with their color
+  const fireQueue = [];
   const evEl = document.getElementById('ev');
   let evTimeout;
 
   try {
     const es = new EventSource(location.origin + '/api/public/events');
     es.onmessage = function(e) {
-      pending += (burst[e.data] || 6);
-      lastEvent = e.data;
-      evEl.textContent = e.data;
+      const type = e.data;
+      const count = burst[type] || 6;
+      const color = eventColors[type] || defaultColor;
+      for (let i = 0; i < count; i++) fireQueue.push(color);
+      lastEvent = type;
+      evEl.textContent = type;
+      evEl.setAttribute('data-type', type);
       evEl.classList.add('active');
       clearTimeout(evTimeout);
       evTimeout = setTimeout(() => {
         evEl.classList.remove('active');
+        evEl.removeAttribute('data-type');
         evEl.textContent = 'idle';
       }, 3000);
     };
@@ -262,20 +309,25 @@
 
     // Fire synapses from real events (+ very slow ambient)
     for (let s = 0; s < MAX_SYN; s++) {
-      if (synapses[s].life <= 0 && (pending > 0 || Math.random() < 0.001)) {
-        if (pending > 0) pending--;
+      if (synapses[s].life <= 0 && (fireQueue.length > 0 || Math.random() < 0.001)) {
+        const color = fireQueue.length > 0 ? fireQueue.shift() : defaultColor;
         const ci = Math.floor(Math.random() * conns.length);
         const conn = conns[ci];
         const na = neurons[conn.a], nb = neurons[conn.b];
         synapses[s].ci = ci;
         synapses[s].max = 25 + Math.random() * 35;
         synapses[s].life = synapses[s].max;
-        // Light up endpoint neurons
+        synapses[s].color = color;
+        // Light up endpoint neurons with process color
         na.glow = 1; nb.glow = 1;
+        na.glowColor = color; nb.glowColor = color;
         // Cascade: light up nearby neurons
         for (let k = 0; k < N; k++) {
           const dx = neurons[k].nx - na.nx, dy = neurons[k].ny - na.ny;
-          if (dx*dx + dy*dy < 0.02) neurons[k].glow = Math.max(neurons[k].glow, 0.6);
+          if (dx*dx + dy*dy < 0.02) {
+            neurons[k].glow = Math.max(neurons[k].glow, 0.6);
+            neurons[k].glowColor = color;
+          }
         }
       }
       if (synapses[s].life > 0) synapses[s].life--;
@@ -293,7 +345,7 @@
       ctx.stroke();
     }
 
-    // Draw active synapse pulses (soft glowing lines, no bolts)
+    // Draw active synapse pulses (color-coded by cognitive process)
     for (let s = 0; s < MAX_SYN; s++) {
       if (synapses[s].life <= 0) continue;
       const conn = conns[synapses[s].ci];
@@ -302,55 +354,67 @@
       const pb = getScreenPos(neurons[conn.b]);
       const t = synapses[s].life / synapses[s].max;
       const alpha = Math.sin(t * Math.PI);
-      // Soft glow line
+      const [cr, cg, cb] = synapses[s].color;
+      // Soft glow line (process color, desaturated)
       ctx.save();
       ctx.filter = 'blur(3px)';
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(100,160,255,' + (alpha * 0.4) + ')';
+      ctx.strokeStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.4) + ')';
       ctx.lineWidth = 2.5;
       ctx.stroke();
       ctx.restore();
-      // Bright core
+      // Bright core (lighter version of process color)
+      const lr = Math.min(255, cr + 80), lg = Math.min(255, cg + 60), lb = Math.min(255, cb + 40);
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(180,210,255,' + (alpha * 0.6) + ')';
+      ctx.strokeStyle = 'rgba(' + lr + ',' + lg + ',' + lb + ',' + (alpha * 0.6) + ')';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
 
-    // Draw neurons with multi-layer glow
+    // Draw neurons with multi-layer glow (color-coded by last cognitive process)
     for (const n of neurons) {
       const p = getScreenPos(n);
       const brightness = n.base + n.glow * 0.85;
       const r = n.size;
+      // Active color from process, or default blue-white
+      const gc = n.glowColor || defaultColor;
+      const hasColor = n.glow > 0.15 && n.glowColor;
 
-      // Layer 1: wide soft glow (always visible, stronger when active)
+      // Layer 1: wide soft glow (process-colored when active)
       const glowRadius = r * (8 + n.glow * 12);
       const glowAlpha = 0.06 + n.glow * 0.45;
       ctx.save();
       if (n.glow > 0.2) ctx.filter = 'blur(2px)';
       const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
-      grad.addColorStop(0, 'rgba(140,180,255,' + glowAlpha + ')');
-      grad.addColorStop(0.3, 'rgba(80,130,220,' + (glowAlpha * 0.4) + ')');
-      grad.addColorStop(1, 'rgba(40,80,180,0)');
+      if (hasColor) {
+        grad.addColorStop(0, 'rgba(' + gc[0] + ',' + gc[1] + ',' + gc[2] + ',' + glowAlpha + ')');
+        grad.addColorStop(0.3, 'rgba(' + gc[0]*0.6 + ',' + gc[1]*0.6 + ',' + gc[2]*0.6 + ',' + (glowAlpha*0.4) + ')');
+        grad.addColorStop(1, 'rgba(' + gc[0]*0.3 + ',' + gc[1]*0.3 + ',' + gc[2]*0.3 + ',0)');
+      } else {
+        grad.addColorStop(0, 'rgba(140,180,255,' + glowAlpha + ')');
+        grad.addColorStop(0.3, 'rgba(80,130,220,' + (glowAlpha * 0.4) + ')');
+        grad.addColorStop(1, 'rgba(40,80,180,0)');
+      }
       ctx.beginPath();
       ctx.arc(p.x, p.y, glowRadius, 0, Math.PI * 2);
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.restore();
 
-      // Layer 2: core dot (bright when active)
+      // Layer 2: core dot (process-colored when firing, blue-white at rest)
       ctx.beginPath();
       ctx.arc(p.x, p.y, r * 1.1, 0, Math.PI * 2);
       const coreAlpha = Math.min(brightness * 1.4, 1);
-      if (n.glow > 0.3) {
-        // Bright white core when firing
-        ctx.fillStyle = 'rgba(220,235,255,' + coreAlpha + ')';
+      if (hasColor && n.glow > 0.3) {
+        // Bright core in process color
+        const lr = Math.min(255, gc[0] + 70), lg = Math.min(255, gc[1] + 50), lb = Math.min(255, gc[2] + 30);
+        ctx.fillStyle = 'rgba(' + lr + ',' + lg + ',' + lb + ',' + coreAlpha + ')';
       } else {
-        // Cool blue-white at rest — visible against dark bg
+        // Cool blue-white at rest
         const cr = Math.round(120 + brightness * 60);
         const cg = Math.round(150 + brightness * 50);
         const cb = Math.round(200 + brightness * 40);
