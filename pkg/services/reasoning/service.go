@@ -35,10 +35,12 @@ type TriageResult struct {
 
 // reasoningState tracks daily counters and last run time.
 type reasoningState struct {
-	LastRun           time.Time `json:"last_run"`
-	ObservationsToday int       `json:"observations_today"`
-	EscalationsToday  int       `json:"escalations_today"`
-	LastResetDate     string    `json:"last_reset_date"`
+	LastRun            time.Time    `json:"last_run"`
+	ObservationsToday  int          `json:"observations_today"`
+	EscalationsToday   int          `json:"escalations_today"`
+	LastResetDate      string       `json:"last_reset_date"`
+	PendingEscalation  *TriageResult `json:"pending_escalation,omitempty"`
+	PendingSnapshot    string        `json:"pending_snapshot,omitempty"`
 }
 
 // Service implements the background reasoning loop.
@@ -135,9 +137,6 @@ func (s *Service) Start(ctx context.Context) {
 
 	logger.InfoC("reasoning", "Background reasoning service started")
 
-	// Run first cycle immediately, then on interval
-	s.runCycle()
-
 	interval := time.Duration(s.cfg.IntervalMinutes) * time.Minute
 
 	// Run first cycle after a short warmup (give llama-server time to load)
@@ -189,6 +188,16 @@ func (s *Service) runCycle() {
 		return
 	}
 	s.mu.Unlock()
+
+	// Retry pending escalation from previous cycle
+	s.mu.Lock()
+	pendingTriage := s.runState.PendingEscalation
+	pendingSnapshot := s.runState.PendingSnapshot
+	s.mu.Unlock()
+	if pendingTriage != nil && pendingSnapshot != "" {
+		logger.InfoC("reasoning", "Retrying pending escalation from previous cycle")
+		s.escalateToCloud(pendingSnapshot, pendingTriage)
+	}
 
 	// Phase 1: gather state (pure Go, 0 tokens)
 	snapshot := s.gatherState()
@@ -280,6 +289,44 @@ func (s *Service) gatherState() string {
 		}
 	}
 
+	// Pending and overdue tasks
+	tasksPath := filepath.Join(s.workspace, "tasks", "tasks.json")
+	if data, err := os.ReadFile(tasksPath); err == nil {
+		var tasks []struct {
+			Title    string `json:"title"`
+			Status   string `json:"status"`
+			Priority string `json:"priority"`
+			DueDate  string `json:"due_date"`
+		}
+		if json.Unmarshal(data, &tasks) == nil {
+			today := time.Now().Format("2006-01-02")
+			var pending, overdue []string
+			for _, t := range tasks {
+				if t.Status == "done" || t.Status == "cancelled" {
+					continue
+				}
+				label := fmt.Sprintf("- [%s] %s", t.Priority, t.Title)
+				if t.DueDate != "" && t.DueDate < today {
+					overdue = append(overdue, label)
+				} else {
+					pending = append(pending, label)
+				}
+			}
+			if len(overdue) > 0 {
+				if len(overdue) > 5 {
+					overdue = overdue[:5]
+				}
+				parts = append(parts, fmt.Sprintf("Tareas VENCIDAS (%d):\n%s", len(overdue), strings.Join(overdue, "\n")))
+			}
+			if len(pending) > 0 {
+				if len(pending) > 5 {
+					pending = pending[:5]
+				}
+				parts = append(parts, fmt.Sprintf("Tareas pendientes (%d):\n%s", len(pending), strings.Join(pending, "\n")))
+			}
+		}
+	}
+
 	// Last interaction time
 	if lastChannel := s.stateMgr.GetLastChannel(); lastChannel != "" {
 		lastUpdate := s.stateMgr.GetTimestamp()
@@ -338,12 +385,15 @@ Guía de scores:
 - 7-8: Patrón significativo o preocupación, escalar para análisis profundo
 - 9-10: Urgente, necesita atención inmediata
 
+Si hay tareas VENCIDAS, subí el score (+2 por 1 vencida, +4 por 3+ vencidas).
+
 Ejemplos:
 - Diego inactivo 2hs, nada pendiente, sistema estable → score 1
 - RAM subió 15%% en los últimos checks → score 5
-- Tarea pendiente hace 3 días + Diego la mencionó hoy → score 8
+- Tarea vencida hace 3 días + Diego la mencionó hoy → score 8
 - Disco al 95%% + deploy programado → score 9
 - Patrón repetitivo detectado en observaciones anteriores → score 7
+- 3 tareas vencidas sin atención → score 7
 
 Respondé SOLO con JSON válido, sin markdown ni explicaciones:
 {"score": N, "observation": "qué notás", "action": "none|notify|investigate|execute", "reason": "por qué este score"}`
@@ -430,6 +480,7 @@ func (s *Service) saveObservation(triage *TriageResult) {
 }
 
 // escalateToCloud sends the triage result + full context to the cloud LLM via ProcessHeartbeat.
+// Retries once after 30s on failure; saves as pending if both attempts fail.
 func (s *Service) escalateToCloud(snapshot string, triage *TriageResult) {
 	s.mu.Lock()
 	al := s.agentLoop
@@ -438,20 +489,20 @@ func (s *Service) escalateToCloud(snapshot string, triage *TriageResult) {
 
 	if al == nil {
 		logger.WarnC("reasoning", "No agent loop available for cloud escalation")
+		s.savePendingEscalation(snapshot, triage)
 		return
 	}
 
-	// Check token budget before cloud call
 	if budget != nil && !budget.CanSpend(2000, true) {
-		logger.InfoC("reasoning", "Token budget exceeded, skipping cloud escalation")
+		logger.InfoC("reasoning", "Token budget exceeded, saving escalation as pending")
+		s.savePendingEscalation(snapshot, triage)
 		return
 	}
 
-	// Get channel info for message delivery
 	lastChannel := s.stateMgr.GetLastChannel()
 	channel, chatID := parseChannel(lastChannel)
 	if channel == "" {
-		channel, chatID = "telegram", "2111601777" // fallback to Diego's Telegram
+		channel, chatID = "telegram", "2111601777"
 	}
 
 	prompt := fmt.Sprintf(
@@ -464,18 +515,39 @@ func (s *Service) escalateToCloud(snapshot string, triage *TriageResult) {
 			"Si querés comunicar algo a Diego, usá la herramienta de mensaje.",
 		triage.Score, triage.Observation, triage.Action, triage.Reason, snapshot)
 
-	ctx, cancel := context.WithTimeout(s.ctx, 60*time.Second)
-	defer cancel()
+	// Attempt 1
+	ctx1, cancel1 := context.WithTimeout(s.ctx, 60*time.Second)
+	response, err := al.ProcessHeartbeat(ctx1, prompt, channel, chatID)
+	cancel1()
 
-	response, err := al.ProcessHeartbeat(ctx, prompt, channel, chatID)
 	if err != nil {
-		logger.WarnCF("reasoning", "Cloud escalation failed", map[string]interface{}{
+		logger.WarnCF("reasoning", "Cloud escalation attempt 1 failed, retrying in 30s", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return
+
+		select {
+		case <-s.ctx.Done():
+			s.savePendingEscalation(snapshot, triage)
+			return
+		case <-time.After(30 * time.Second):
+		}
+
+		// Attempt 2
+		ctx2, cancel2 := context.WithTimeout(s.ctx, 60*time.Second)
+		response, err = al.ProcessHeartbeat(ctx2, prompt, channel, chatID)
+		cancel2()
+
+		if err != nil {
+			logger.WarnCF("reasoning", "Cloud escalation attempt 2 failed, saving as pending", map[string]interface{}{
+				"error": err.Error(),
+			})
+			s.savePendingEscalation(snapshot, triage)
+			return
+		}
 	}
 
-	// Save insight to vault
+	// Success
+	s.clearPendingEscalation()
 	s.saveInsight(triage, response)
 
 	s.mu.Lock()
@@ -486,6 +558,21 @@ func (s *Service) escalateToCloud(snapshot string, triage *TriageResult) {
 		"score":    triage.Score,
 		"response": truncate(response, 100),
 	})
+}
+
+func (s *Service) savePendingEscalation(snapshot string, triage *TriageResult) {
+	s.mu.Lock()
+	s.runState.PendingEscalation = triage
+	s.runState.PendingSnapshot = snapshot
+	s.mu.Unlock()
+	s.saveState()
+}
+
+func (s *Service) clearPendingEscalation() {
+	s.mu.Lock()
+	s.runState.PendingEscalation = nil
+	s.runState.PendingSnapshot = ""
+	s.mu.Unlock()
 }
 
 // saveInsight writes a cloud escalation result as an insight note.
