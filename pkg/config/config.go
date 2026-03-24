@@ -55,10 +55,45 @@ type Config struct {
 	Council   CouncilConfig   `json:"council"`
 	Admin     AdminConfig     `json:"admin"`
 	Briefing  BriefingConfig  `json:"briefing"`
-	Privacy   PrivacyConfig   `json:"privacy"`
+	Privacy     PrivacyConfig     `json:"privacy"`
 	Wallet      WalletConfig      `json:"wallet"`
 	TokenBudget TokenBudgetConfig `json:"token_budget"`
+	Health      HealthConfig      `json:"health"`
+	RSS         RSSConfig         `json:"rss"`
+	Background  BackgroundConfig  `json:"background"`
 	mu          sync.RWMutex
+}
+
+// HealthConfig configures the service health monitor (pure Go, zero tokens).
+type HealthConfig struct {
+	Enabled   bool             `json:"enabled" env:"PICOCLAW_HEALTH_ENABLED"`
+	Endpoints []HealthEndpoint `json:"endpoints"`
+	Interval  int              `json:"interval_seconds" env:"PICOCLAW_HEALTH_INTERVAL"` // default 300
+}
+
+type HealthEndpoint struct {
+	Name         string `json:"name"`
+	URL          string `json:"url"`
+	ExpectStatus int    `json:"expect_status"` // default 200
+	Container    string `json:"container"`     // docker container to restart on failure
+}
+
+// RSSConfig configures the RSS/news reader (Go fetch + Qwen local filter).
+type RSSConfig struct {
+	Enabled   bool      `json:"enabled" env:"PICOCLAW_RSS_ENABLED"`
+	Feeds     []RSSFeed `json:"feeds"`
+	Interests []string  `json:"interests"` // topics to filter for relevance
+	Interval  int       `json:"interval_seconds" env:"PICOCLAW_RSS_INTERVAL"` // default 14400
+}
+
+type RSSFeed struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// BackgroundConfig controls token optimization for background processes.
+type BackgroundConfig struct {
+	PreferLocal bool `json:"prefer_local" env:"PICOCLAW_BACKGROUND_PREFER_LOCAL"` // default true
 }
 
 // PrivacyConfig controls the privacy router that prevents sensitive data from leaving the Pi.
@@ -467,6 +502,17 @@ func DefaultConfig() *Config {
 			AlwaysPrivateMedia: true,
 			FailClosed:         true,
 			LogDecisions:       true,
+		},
+		Health: HealthConfig{
+			Enabled:  false,
+			Interval: 300,
+		},
+		RSS: RSSConfig{
+			Enabled:  false,
+			Interval: 14400,
+		},
+		Background: BackgroundConfig{
+			PreferLocal: true,
 		},
 	}
 }

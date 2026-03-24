@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/state"
 )
 
@@ -38,6 +40,7 @@ type Service struct {
 	workspace string
 	bus       *bus.MessageBus
 	state     *state.Manager
+	local     providers.LLMProvider
 	concerns  []Concern
 	mu        sync.RWMutex
 	ctx       context.Context
@@ -50,6 +53,13 @@ func NewService(workspace string, stateMgr *state.Manager) *Service {
 		workspace: workspace,
 		state:     stateMgr,
 	}
+}
+
+// SetLocalProvider sets the local LLM provider for zero-cost suggestions.
+func (s *Service) SetLocalProvider(p providers.LLMProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.local = p
 }
 
 // SetBus sets the message bus for sending urgent alerts.
@@ -143,6 +153,14 @@ func (s *Service) check() {
 	// 4. Interaction patterns (high correction rate)
 	if patterns := s.checkInteractionPatterns(); len(patterns) > 0 {
 		newConcerns = append(newConcerns, patterns...)
+	}
+
+	// 5. Auto-deploy detection (pure Go, zero tokens)
+	s.checkAutoDeploy()
+
+	// 6. Git project tracker (stale repos in ~/Documents/)
+	if gitStale := s.checkGitProjects(); len(gitStale) > 0 {
+		newConcerns = append(newConcerns, gitStale...)
 	}
 
 	// Merge with existing: keep unresolved old ones that are still valid,
@@ -508,6 +526,258 @@ func parseLastChannel(lastChannel string) (platform, userID string) {
 		return "", ""
 	}
 	return parts[0], parts[1]
+}
+
+// deployState tracks the last deploy time.
+type deployState struct {
+	LastDeploy time.Time `json:"last_deploy"`
+}
+
+// selfChangelog tracks self-tool modifications.
+type selfChangelog struct {
+	Entries []struct {
+		File      string    `json:"file"`
+		Timestamp time.Time `json:"timestamp"`
+	} `json:"entries"`
+}
+
+// checkAutoDeploy detects when AGENTS.md was modified by the self tool
+// and auto-deploys if build checks pass. Pure Go exec, zero tokens.
+func (s *Service) checkAutoDeploy() {
+	agentsPath := filepath.Join(s.workspace, "AGENTS.md")
+	info, err := os.Stat(agentsPath)
+	if err != nil {
+		return
+	}
+
+	// Load last deploy time
+	deployPath := filepath.Join(s.workspace, "state", "last_deploy.json")
+	var deploy deployState
+	if data, err := os.ReadFile(deployPath); err == nil {
+		json.Unmarshal(data, &deploy)
+	}
+
+	// Check if AGENTS.md was modified after last deploy
+	if !info.ModTime().After(deploy.LastDeploy) {
+		return
+	}
+
+	// Check if modification was by the self tool
+	changelogPath := filepath.Join(s.workspace, "state", "self_changelog.json")
+	changelogData, err := os.ReadFile(changelogPath)
+	if err != nil {
+		return
+	}
+
+	var changelog selfChangelog
+	if err := json.Unmarshal(changelogData, &changelog); err != nil {
+		return
+	}
+
+	// Look for a self_changelog entry for AGENTS.md after last deploy
+	selfModified := false
+	for _, entry := range changelog.Entries {
+		if strings.Contains(entry.File, "AGENTS.md") && entry.Timestamp.After(deploy.LastDeploy) {
+			selfModified = true
+			break
+		}
+	}
+
+	if !selfModified {
+		return
+	}
+
+	logger.InfoC("attention", "AGENTS.md modified by self tool, running build checks...")
+
+	// Find the project root (parent of workspace)
+	projectRoot := filepath.Dir(s.workspace)
+	// The workspace is typically ~/.picoclaw/workspace, but the Go source is the picoclaw project
+	// We need the source tree. Check if go.mod exists at common locations.
+	sourceRoot := ""
+	candidates := []string{
+		"/home/diego/Documents/picoclaw",
+		projectRoot,
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(filepath.Join(c, "go.mod")); err == nil {
+			sourceRoot = c
+			break
+		}
+	}
+	if sourceRoot == "" {
+		logger.DebugCF("attention", "Cannot find Go source root for auto-deploy", nil)
+		return
+	}
+
+	// Run go build
+	buildCmd := exec.CommandContext(s.ctx, "go", "build", "./...")
+	buildCmd.Dir = sourceRoot
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		logger.ErrorCF("attention", "Auto-deploy build failed", map[string]interface{}{
+			"error":  err.Error(),
+			"output": string(output),
+		})
+		return
+	}
+
+	// Run go vet
+	vetCmd := exec.CommandContext(s.ctx, "go", "vet", "./...")
+	vetCmd.Dir = sourceRoot
+	if output, err := vetCmd.CombinedOutput(); err != nil {
+		logger.ErrorCF("attention", "Auto-deploy vet failed", map[string]interface{}{
+			"error":  err.Error(),
+			"output": string(output),
+		})
+		return
+	}
+
+	logger.InfoC("attention", "Build checks passed, auto-committing and deploying...")
+
+	// Auto-commit
+	gitAddCmd := exec.CommandContext(s.ctx, "git", "add", "-A")
+	gitAddCmd.Dir = sourceRoot
+	if _, err := gitAddCmd.CombinedOutput(); err != nil {
+		logger.ErrorCF("attention", "Auto-deploy git add failed", map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	commitCmd := exec.CommandContext(s.ctx, "git", "commit", "-m", "chore: auto-deploy AGENTS.md update (self-modified)")
+	commitCmd.Dir = sourceRoot
+	if output, err := commitCmd.CombinedOutput(); err != nil {
+		// If nothing to commit, that's fine
+		if !strings.Contains(string(output), "nothing to commit") {
+			logger.ErrorCF("attention", "Auto-deploy commit failed", map[string]interface{}{
+				"error":  err.Error(),
+				"output": string(output),
+			})
+			return
+		}
+	}
+
+	// Push to fork remote
+	pushCmd := exec.CommandContext(s.ctx, "git", "push", "fork", "main")
+	pushCmd.Dir = sourceRoot
+	if output, err := pushCmd.CombinedOutput(); err != nil {
+		logger.ErrorCF("attention", "Auto-deploy push failed", map[string]interface{}{
+			"error":  err.Error(),
+			"output": string(output),
+		})
+		return
+	}
+
+	// Trigger Coolify deploy via script (if available)
+	deployScript := filepath.Join(sourceRoot, "scripts", "deploy.sh")
+	if _, err := os.Stat(deployScript); err == nil {
+		deployExec := exec.CommandContext(s.ctx, "bash", deployScript)
+		deployExec.Dir = sourceRoot
+		if output, err := deployExec.CombinedOutput(); err != nil {
+			logger.ErrorCF("attention", "Auto-deploy Coolify trigger failed", map[string]interface{}{
+				"error":  err.Error(),
+				"output": string(output),
+			})
+		} else {
+			logger.InfoC("attention", "Coolify deploy triggered successfully")
+		}
+	}
+
+	// Save deploy time
+	deploy.LastDeploy = time.Now()
+	if data, err := json.MarshalIndent(deploy, "", "  "); err == nil {
+		stateDir := filepath.Join(s.workspace, "state")
+		os.MkdirAll(stateDir, 0755)
+		tmpPath := deployPath + ".tmp"
+		if err := os.WriteFile(tmpPath, data, 0644); err == nil {
+			os.Rename(tmpPath, deployPath)
+		}
+	}
+
+	logger.InfoC("attention", "Auto-deploy complete")
+}
+
+// checkGitProjects scans ~/Documents/ for git repos with stale commits (>7 days).
+func (s *Service) checkGitProjects() []Concern {
+	documentsDir := "/home/diego/Documents"
+	entries, err := os.ReadDir(documentsDir)
+	if err != nil {
+		return nil
+	}
+
+	now := time.Now()
+	threshold := 7 * 24 * time.Hour
+	var concerns []Concern
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		gitDir := filepath.Join(documentsDir, entry.Name(), ".git")
+		if _, err := os.Stat(gitDir); err != nil {
+			continue
+		}
+
+		// Get last commit date
+		projectPath := filepath.Join(documentsDir, entry.Name())
+		cmd := exec.CommandContext(s.ctx, "git", "-C", projectPath, "log", "--oneline", "-1", "--format=%ci")
+		output, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+
+		dateStr := strings.TrimSpace(string(output))
+		if dateStr == "" {
+			continue
+		}
+
+		commitTime, err := time.Parse("2006-01-02 15:04:05 -0700", dateStr)
+		if err != nil {
+			continue
+		}
+
+		age := now.Sub(commitTime)
+		if age <= threshold {
+			continue
+		}
+
+		days := int(age.Hours() / 24)
+		summary := fmt.Sprintf("Proyecto '%s' sin commits hace %d dias", entry.Name(), days)
+
+		// Use Qwen local for a suggestion (~30 tokens, zero cloud cost)
+		s.mu.RLock()
+		local := s.local
+		s.mu.RUnlock()
+
+		suggestion := ""
+		if local != nil {
+			prompt := fmt.Sprintf("Project %s inactive %d days. Suggest next step in <10 words.", entry.Name(), days)
+			msgs := []providers.Message{
+				{Role: "user", Content: prompt},
+			}
+			resp, err := local.Chat(s.ctx, msgs, nil, local.GetDefaultModel(), map[string]interface{}{
+				"max_tokens":  30,
+				"temperature": 0.3,
+			})
+			if err == nil && resp.Content != "" {
+				suggestion = strings.TrimSpace(resp.Content)
+			}
+		}
+
+		contextStr := fmt.Sprintf("Ultimo commit: %s", commitTime.Format("2006-01-02"))
+		if suggestion != "" {
+			contextStr += " | " + suggestion
+		}
+
+		concerns = append(concerns, Concern{
+			ID:        fmt.Sprintf("stale-git-%s", entry.Name()),
+			Type:      "stale_project",
+			Priority:  2,
+			Summary:   summary,
+			Context:   contextStr,
+			CreatedAt: now,
+		})
+	}
+
+	return concerns
 }
 
 // parseFlexTime tries multiple time formats.

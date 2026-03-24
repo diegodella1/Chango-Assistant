@@ -505,6 +505,21 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	var media []string
 	var err error
 
+	// Background token optimization: prefer local model for cron/heartbeat
+	useLocal := al.localProvider != nil && al.cfg.Background.PreferLocal &&
+		(opts.Feature == telemetry.FeatureCron || opts.Feature == telemetry.FeatureHeartbeat)
+	var origProvider providers.LLMProvider
+	var origModel string
+	if useLocal {
+		origProvider = al.provider
+		origModel = al.model
+		al.provider = al.localProvider
+		al.model = ""
+		logger.DebugCF("agent", "Using local provider for background task", map[string]interface{}{
+			"feature": opts.Feature,
+		})
+	}
+
 	// 4a. Tree of Thought for complex decisions (chat only)
 	totUsed := false
 	if opts.Feature == telemetry.FeatureChat && !opts.NoHistory && shouldUseToT(opts.UserMessage, monologueResult) {
@@ -522,7 +537,38 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	if !totUsed {
 		finalContent, iteration, media, err = al.runLLMIteration(ctx, messages, opts)
 		if err != nil {
-			return "", nil, err
+			// If local provider failed, escalate to cloud
+			if useLocal {
+				logger.InfoCF("agent", "Local provider failed, escalating to cloud", map[string]interface{}{
+					"error": err.Error(),
+				})
+				al.provider = origProvider
+				al.model = origModel
+				useLocal = false // prevent double restore below
+				finalContent, iteration, media, err = al.runLLMIteration(ctx, messages, opts)
+			}
+			if err != nil {
+				return "", nil, err
+			}
+		}
+	}
+
+	// Restore original provider if we swapped to local
+	if useLocal {
+		// Check if local response is too short or low quality — escalate to cloud
+		needsEscalation := len(strings.TrimSpace(finalContent)) < 20 ||
+			strings.Contains(strings.ToLower(finalContent), "i don't know") ||
+			strings.Contains(strings.ToLower(finalContent), "no puedo")
+		al.provider = origProvider
+		al.model = origModel
+		if needsEscalation {
+			logger.InfoCF("agent", "Local response too short/uncertain, escalating to cloud", map[string]interface{}{
+				"local_response_len": len(finalContent),
+			})
+			finalContent, iteration, media, err = al.runLLMIteration(ctx, messages, opts)
+			if err != nil {
+				return "", nil, err
+			}
 		}
 	}
 

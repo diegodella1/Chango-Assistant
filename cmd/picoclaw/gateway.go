@@ -24,6 +24,9 @@ import (
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/sentinel"
+	"github.com/sipeed/picoclaw/pkg/services/emailwatch"
+	"github.com/sipeed/picoclaw/pkg/services/healthcheck"
+	"github.com/sipeed/picoclaw/pkg/services/rsswatch"
 	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/telemetry"
 	"github.com/sipeed/picoclaw/pkg/tools"
@@ -270,8 +273,52 @@ func gatewayCmd() {
 	// Attention manager
 	attentionService := attention.NewService(cfg.WorkspacePath(), stateManager)
 	attentionService.SetBus(msgBus)
+	if cfg.Providers.LlamaCpp.Enabled {
+		if localProv, err := providers.CreateLlamaCppProvider(cfg); err == nil {
+			attentionService.SetLocalProvider(localProv)
+		}
+	}
 	go attentionService.Start(ctx)
 	fmt.Println("✓ Attention manager started")
+
+	// Email watcher service
+	if cfg.Tools.Google.ServiceAccountFile != "" && cfg.Tools.Google.ImpersonateEmail != "" {
+		var localProv providers.LLMProvider
+		if cfg.Providers.LlamaCpp.Enabled {
+			localProv, _ = providers.CreateLlamaCppProvider(cfg)
+		}
+		emailWatcher := emailwatch.NewService(
+			cfg.Tools.Google.ServiceAccountFile,
+			cfg.Tools.Google.ImpersonateEmail,
+			cfg.WorkspacePath(), stateManager, localProv,
+		)
+		emailWatcher.SetBus(msgBus)
+		go emailWatcher.Start(ctx)
+		defer emailWatcher.Stop()
+		fmt.Println("✓ Email watcher started")
+	}
+
+	// Health check service
+	if cfg.Health.Enabled && len(cfg.Health.Endpoints) > 0 {
+		healthService := healthcheck.NewService(cfg.Health, cfg.WorkspacePath(), stateManager)
+		healthService.SetBus(msgBus)
+		go healthService.Start(ctx)
+		defer healthService.Stop()
+		fmt.Println("✓ Health check service started")
+	}
+
+	// RSS reader service
+	if cfg.RSS.Enabled && len(cfg.RSS.Feeds) > 0 {
+		var localProv providers.LLMProvider
+		if cfg.Providers.LlamaCpp.Enabled {
+			localProv, _ = providers.CreateLlamaCppProvider(cfg)
+		}
+		rssService := rsswatch.NewService(cfg.RSS, cfg.WorkspacePath(), stateManager, localProv)
+		rssService.SetBus(msgBus)
+		go rssService.Start(ctx)
+		defer rssService.Stop()
+		fmt.Println("✓ RSS reader service started")
+	}
 
 	if err := channelManager.StartAll(ctx); err != nil {
 		fmt.Printf("Error starting channels: %v\n", err)
