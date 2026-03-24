@@ -55,7 +55,15 @@ User's message: ` + userMessage
 
 	al.emitEvent("think") // emit event for neural visualization
 
-	resp, err := al.provider.Chat(monologueCtx, contextMsgs, nil, al.model, map[string]interface{}{
+	// Use local provider if available (zero cost, private, faster for short prompts)
+	monologueProvider := al.provider
+	monologueModel := al.model
+	if al.localProvider != nil {
+		monologueProvider = al.localProvider
+		monologueModel = "" // use local model's default
+	}
+
+	resp, err := monologueProvider.Chat(monologueCtx, contextMsgs, nil, monologueModel, map[string]interface{}{
 		"max_tokens":  256,
 		"temperature": 0.3,
 	})

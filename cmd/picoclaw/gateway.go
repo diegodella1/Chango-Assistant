@@ -59,6 +59,15 @@ func gatewayCmd() {
 	msgBus := bus.NewMessageBus()
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider, getConfigPath())
 
+	// Set up local provider for inner monologue (zero cost, private)
+	if cfg.Providers.LlamaCpp.Enabled {
+		localProv, err := providers.CreateLlamaCppProvider(cfg)
+		if err == nil {
+			agentLoop.SetLocalProvider(localProv)
+			fmt.Println("✓ Local provider set for inner monologue (zero cost)")
+		}
+	}
+
 	// Print agent startup info
 	fmt.Println("\n📦 Agent Status:")
 	startupInfo := agentLoop.GetStartupInfo()

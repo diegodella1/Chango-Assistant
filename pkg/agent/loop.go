@@ -48,7 +48,13 @@ type AgentLoop struct {
 	tracker        *telemetry.Tracker
 	subagentMgr    *tools.SubagentManager
 	scoring        *ScoringEngine
+	localProvider  providers.LLMProvider // local model for inner monologue (zero cost, private)
 	onEvent        func(string) // callback for real-time activity events (SSE)
+}
+
+// SetLocalProvider sets a local LLM provider for inner monologue (zero cost, private).
+func (al *AgentLoop) SetLocalProvider(p providers.LLMProvider) {
+	al.localProvider = p
 }
 
 // SetEventCallback sets a function called on agent activity events (think, tool, memory, etc.)
