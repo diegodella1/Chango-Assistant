@@ -26,6 +26,9 @@ import (
 //go:embed static/index.html
 var staticFS embed.FS
 
+//go:embed static/home.html
+var homeFS embed.FS
+
 // Editable files whitelist (relative to workspace)
 var allowedFiles = []string{
 	"SOUL.md",
@@ -64,7 +67,9 @@ func (h *Handler) SetReloadFn(fn func() error)          { h.reloadFn = fn }
 func (h *Handler) SetVersion(v string)                   { h.version = v }
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/", h.serveHome)
 	mux.HandleFunc("/admin", h.serveSPA)
+	mux.HandleFunc("/api/public/status", h.publicStatus)
 	mux.HandleFunc("/api/health", h.withAuth(h.systemHealth))
 	mux.HandleFunc("/api/swap/free", h.withAuth(h.freeSwap))
 	mux.HandleFunc("/api/wifi/scan", h.withAuth(h.wifiScan))
@@ -118,6 +123,20 @@ func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func (h *Handler) serveHome(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := homeFS.ReadFile("static/home.html")
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
+}
+
 func (h *Handler) serveSPA(w http.ResponseWriter, r *http.Request) {
 	data, err := staticFS.ReadFile("static/index.html")
 	if err != nil {
@@ -126,6 +145,84 @@ func (h *Handler) serveSPA(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
+}
+
+func (h *Handler) publicStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	result := map[string]interface{}{
+		"status":  "ok",
+		"version": h.version,
+	}
+
+	// Uptime from sentinel
+	sentinelData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "sentinel.json"))
+	if err == nil {
+		var s map[string]interface{}
+		if json.Unmarshal(sentinelData, &s) == nil {
+			if up, ok := s["uptime_seconds"].(float64); ok {
+				hrs := int(up) / 3600
+				mins := (int(up) % 3600) / 60
+				if hrs > 24 {
+					d := hrs / 24
+					result["uptime_short"] = fmt.Sprintf("%dd", d)
+					result["uptime"] = fmt.Sprintf("%dd %dh", d, hrs%24)
+				} else if hrs > 0 {
+					result["uptime_short"] = fmt.Sprintf("%dh", hrs)
+					result["uptime"] = fmt.Sprintf("%dh %dm", hrs, mins)
+				} else {
+					result["uptime_short"] = fmt.Sprintf("%dm", mins)
+					result["uptime"] = fmt.Sprintf("%dm", mins)
+				}
+			}
+		}
+	}
+
+	// Model from config
+	if h.config != nil && h.config.Agents.Defaults.Model != "" {
+		result["model"] = h.config.Agents.Defaults.Model
+	}
+
+	// Count vault notes
+	vaultDir := filepath.Join(h.workspacePath, "obsidian")
+	folders := []string{"daily", "people", "preferences", "insights", "decisions", "projects", "blog", "state", "inbox"}
+	totalNotes := 0
+	for _, f := range folders {
+		dir := filepath.Join(vaultDir, f)
+		entries, err := os.ReadDir(dir)
+		if err == nil {
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+					totalNotes++
+				}
+			}
+		}
+	}
+	result["notes"] = totalNotes
+
+	// Cron jobs count
+	if h.cronService != nil {
+		jobsFile := filepath.Join(h.workspacePath, "cron", "jobs.json")
+		if data, err := os.ReadFile(jobsFile); err == nil {
+			var jobs []map[string]interface{}
+			if json.Unmarshal(data, &jobs) == nil {
+				count := 0
+				for _, j := range jobs {
+					if enabled, ok := j["enabled"].(bool); ok && enabled {
+						count++
+					}
+				}
+				result["cron_jobs"] = count
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(result)
 }
 
 // fileInfo is the JSON shape returned by the list endpoint.

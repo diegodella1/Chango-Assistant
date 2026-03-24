@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chango</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+    background: #111;
+    color: #d4d4d4;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 64px 24px;
+    line-height: 1.6;
+  }
+  .container {
+    width: 100%;
+    max-width: 640px;
+  }
+  .header {
+    margin-bottom: 48px;
+  }
+  .name {
+    font-size: 24px;
+    font-weight: 600;
+    color: #fafafa;
+    letter-spacing: -0.02em;
+  }
+  .tagline {
+    font-size: 14px;
+    color: #737373;
+    margin-top: 4px;
+  }
+  .status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #737373;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #525252;
+    flex-shrink: 0;
+  }
+  .dot.online { background: #22c55e; }
+  .section {
+    margin-bottom: 40px;
+  }
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #525252;
+    margin-bottom: 16px;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: #262626;
+    border: 1px solid #262626;
+  }
+  .stat {
+    background: #111;
+    padding: 16px;
+  }
+  .stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fafafa;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: #525252;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .meta-list {
+    list-style: none;
+  }
+  .meta-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #1a1a1a;
+    font-size: 13px;
+  }
+  .meta-item:last-child { border-bottom: none; }
+  .meta-key { color: #525252; }
+  .meta-value { color: #d4d4d4; text-align: right; }
+  .links {
+    display: flex;
+    gap: 24px;
+  }
+  .links a {
+    color: #737373;
+    text-decoration: none;
+    font-size: 13px;
+    transition: color 0.15s;
+  }
+  .links a:hover { color: #d4d4d4; }
+  .footer {
+    margin-top: 64px;
+    font-size: 11px;
+    color: #333;
+  }
+  @media (max-width: 480px) {
+    body { padding: 40px 16px; }
+    .stats { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="name">Chango</div>
+    <div class="tagline">Autonomous AI agent</div>
+    <div class="status-line">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">checking...</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Stats</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value" id="uptime">--</div>
+        <div class="stat-label">Uptime</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="notes">--</div>
+        <div class="stat-label">Memory notes</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="cronJobs">--</div>
+        <div class="stat-label">Cron jobs</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">System</div>
+    <ul class="meta-list">
+      <li class="meta-item">
+        <span class="meta-key">Model</span>
+        <span class="meta-value" id="model">--</span>
+      </li>
+      <li class="meta-item">
+        <span class="meta-key">Version</span>
+        <span class="meta-value" id="version">--</span>
+      </li>
+      <li class="meta-item">
+        <span class="meta-key">Host</span>
+        <span class="meta-value" id="host">Raspberry Pi 5</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Links</div>
+    <div class="links">
+      <a href="/admin">Admin</a>
+      <a href="/pitch/">Pitch</a>
+    </div>
+  </div>
+
+  <div class="footer">chango.diegodella.ar</div>
+</div>
+
+<script>
+(function() {
+  const API = window.location.origin;
+
+  fetch(API + '/api/public/status')
+    .then(r => r.ok ? r.json() : Promise.reject('offline'))
+    .then(d => {
+      // Status
+      document.getElementById('statusDot').classList.add('online');
+      document.getElementById('statusText').textContent = 'online' + (d.uptime ? ' \u00b7 ' + d.uptime : '');
+
+      // Stats
+      if (d.uptime) document.getElementById('uptime').textContent = d.uptime_short || d.uptime;
+      if (d.notes !== undefined) document.getElementById('notes').textContent = d.notes;
+      if (d.cron_jobs !== undefined) document.getElementById('cronJobs').textContent = d.cron_jobs;
+
+      // Meta
+      if (d.model) document.getElementById('model').textContent = d.model;
+      if (d.version) document.getElementById('version').textContent = d.version;
+    })
+    .catch(() => {
+      document.getElementById('statusText').textContent = 'offline';
+    });
+})();
+</script>
+</body>
+</html>
