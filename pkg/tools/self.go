@@ -20,10 +20,22 @@ type changelogEntry struct {
 	Summary   string `json:"summary,omitempty"`
 }
 
+// pendingChange stores a self-modification waiting for human approval.
+type pendingChange struct {
+	ID        string `json:"id"`
+	Action    string `json:"action"`    // update_section or append_section
+	Section   string `json:"section"`   // section name or new title
+	Content   string `json:"content"`   // new content
+	Reason    string `json:"reason"`    // why the change
+	OldText   string `json:"old_text"`  // previous content (for diff)
+	Timestamp string `json:"timestamp"` // when requested
+}
+
 // SelfTool allows the agent to read and modify its own AGENTS.md prompt.
 type SelfTool struct {
 	agentsPath    string
 	changelogPath string
+	pendingPath   string
 	mu            sync.Mutex
 }
 
@@ -31,6 +43,7 @@ func NewSelfTool(workspace string) *SelfTool {
 	return &SelfTool{
 		agentsPath:    filepath.Join(workspace, "AGENTS.md"),
 		changelogPath: filepath.Join(workspace, "state", "self_changelog.json"),
+		pendingPath:   filepath.Join(workspace, "state", "self_pending.json"),
 	}
 }
 
@@ -46,8 +59,8 @@ func (t *SelfTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"action": map[string]interface{}{
 				"type":        "string",
-				"enum":        []string{"read_prompt", "update_section", "append_section", "rollback_prompt", "changelog"},
-				"description": "Action to perform",
+				"enum":        []string{"read_prompt", "update_section", "append_section", "confirm", "rollback_prompt", "changelog"},
+				"description": "Action to perform. update_section/append_section create a PENDING change that requires human confirmation via 'confirm'.",
 			},
 			"section": map[string]interface{}{
 				"type":        "string",
@@ -79,6 +92,8 @@ func (t *SelfTool) Execute(ctx context.Context, args map[string]interface{}) *To
 		return t.updateSection(args)
 	case "append_section":
 		return t.appendSection(args)
+	case "confirm":
+		return t.confirmPending()
 	case "rollback_prompt":
 		return t.rollbackPrompt()
 	case "changelog":
@@ -139,11 +154,10 @@ func (t *SelfTool) updateSection(args map[string]interface{}) *ToolResult {
 		return ErrorResult(fmt.Sprintf("section matching '%s' not found in AGENTS.md", section))
 	}
 
-	// Determine section boundaries
-	sectionStart := headers[targetIdx][1] // end of header line
+	// Extract current section content for preview
+	sectionStart := headers[targetIdx][1]
 	var sectionEnd int
 	if targetIdx+1 < len(headers) {
-		// Look for the `---` separator before the next section
 		nextStart := headers[targetIdx+1][0]
 		sepIdx := strings.LastIndex(text[sectionStart:nextStart], "\n---\n")
 		if sepIdx >= 0 {
@@ -154,39 +168,27 @@ func (t *SelfTool) updateSection(args map[string]interface{}) *ToolResult {
 	} else {
 		sectionEnd = len(text)
 	}
+	oldContent := strings.TrimSpace(text[sectionStart:sectionEnd])
 
-	// Create backup
-	if err := t.createBackup(data); err != nil {
-		return ErrorResult(fmt.Sprintf("failed to create backup: %v", err))
-	}
-
-	// Build new content: header + new content
-	newSection := "\n\n" + strings.TrimSpace(content) + "\n"
-	newText := text[:sectionStart] + newSection + "\n---\n" + text[sectionEnd:]
-
-	// Remove potential duplicate separators
-	newText = strings.ReplaceAll(newText, "\n---\n\n---\n", "\n---\n")
-
-	// Sanity check
-	if err := t.sanityCheck(newText); err != nil {
-		return ErrorResult(fmt.Sprintf("sanity check failed, change aborted: %v", err))
-	}
-
-	// Atomic write
-	if err := t.atomicWrite(newText); err != nil {
-		return ErrorResult(fmt.Sprintf("failed to write AGENTS.md: %v", err))
-	}
-
-	// Log to changelog
-	t.appendChangelog(changelogEntry{
-		Timestamp: time.Now().Format(time.RFC3339),
+	// Save as pending — requires human confirmation
+	pending := pendingChange{
+		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 		Action:    "update_section",
 		Section:   targetHeader,
+		Content:   content,
 		Reason:    reason,
-		Summary:   fmt.Sprintf("Updated section '%s'", targetHeader),
-	})
+		OldText:   oldContent,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+	if err := t.savePending(pending); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to save pending change: %v", err))
+	}
 
-	return SilentResult(fmt.Sprintf("Section '%s' updated successfully. Backup created.", targetHeader))
+	// Return preview for human review
+	preview := fmt.Sprintf("PENDING CHANGE — requires human confirmation.\n\nSection: %s\nReason: %s\n\nCurrent content (first 300 chars):\n%s\n\nNew content (first 300 chars):\n%s\n\nTell Diego about this change and ask for approval. When he confirms, call self(action='confirm').",
+		targetHeader, reason, selfTruncate(oldContent, 300), selfTruncate(content, 300))
+
+	return SilentResult(preview)
 }
 
 func (t *SelfTool) appendSection(args map[string]interface{}) *ToolResult {
@@ -201,56 +203,143 @@ func (t *SelfTool) appendSection(args map[string]interface{}) *ToolResult {
 		return ErrorResult("reason is required for append_section")
 	}
 
+	// Save as pending — requires human confirmation
+	pending := pendingChange{
+		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+		Action:    "append_section",
+		Section:   title,
+		Content:   content,
+		Reason:    reason,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	data, err := os.ReadFile(t.agentsPath)
+	if err := t.savePending(pending); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to save pending change: %v", err))
+	}
+
+	preview := fmt.Sprintf("PENDING CHANGE — requires human confirmation.\n\nNew section: %s\nReason: %s\n\nContent (first 300 chars):\n%s\n\nTell Diego about this change and ask for approval. When he confirms, call self(action='confirm').",
+		title, reason, selfTruncate(content, 300))
+
+	return SilentResult(preview)
+}
+
+func (t *SelfTool) savePending(p pendingChange) error {
+	os.MkdirAll(filepath.Dir(t.pendingPath), 0755)
+	data, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(t.pendingPath, data, 0644)
+}
+
+func (t *SelfTool) confirmPending() *ToolResult {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	data, err := os.ReadFile(t.pendingPath)
+	if err != nil {
+		return ErrorResult("No pending change to confirm.")
+	}
+	var p pendingChange
+	if err := json.Unmarshal(data, &p); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to parse pending change: %v", err))
+	}
+
+	// Remove pending file immediately
+	os.Remove(t.pendingPath)
+
+	agentsData, err := os.ReadFile(t.agentsPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read AGENTS.md: %v", err))
 	}
-	text := string(data)
+	text := string(agentsData)
 
-	// Find the highest section number
-	headers := sectionRegex.FindAllString(text, -1)
-	maxNum := 0
-	for _, h := range headers {
-		var n int
-		fmt.Sscanf(h, "## %d)", &n)
-		if n > maxNum {
-			maxNum = n
-		}
-	}
-	newNum := maxNum + 1
-
-	// Create backup
-	if err := t.createBackup(data); err != nil {
+	if err := t.createBackup(agentsData); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create backup: %v", err))
 	}
 
-	// Append new section
-	newSection := fmt.Sprintf("\n## %d) %s\n\n%s\n", newNum, title, strings.TrimSpace(content))
-	newText := strings.TrimRight(text, "\n\t ") + "\n\n---\n" + newSection
+	var newText string
+	var sectionName string
 
-	// Sanity check
+	switch p.Action {
+	case "update_section":
+		// Re-find the section and apply the update
+		lowerSection := strings.ToLower(p.Section)
+		headers := sectionRegex.FindAllStringIndex(text, -1)
+		targetIdx := -1
+		for i, loc := range headers {
+			header := text[loc[0]:loc[1]]
+			if strings.Contains(strings.ToLower(header), lowerSection) {
+				targetIdx = i
+				sectionName = header
+				break
+			}
+		}
+		if targetIdx == -1 {
+			return ErrorResult(fmt.Sprintf("section '%s' no longer found in AGENTS.md", p.Section))
+		}
+		sectionStart := headers[targetIdx][1]
+		var sectionEnd int
+		if targetIdx+1 < len(headers) {
+			nextStart := headers[targetIdx+1][0]
+			sepIdx := strings.LastIndex(text[sectionStart:nextStart], "\n---\n")
+			if sepIdx >= 0 {
+				sectionEnd = sectionStart + sepIdx
+			} else {
+				sectionEnd = nextStart
+			}
+		} else {
+			sectionEnd = len(text)
+		}
+		newSection := "\n\n" + strings.TrimSpace(p.Content) + "\n"
+		newText = text[:sectionStart] + newSection + "\n---\n" + text[sectionEnd:]
+		newText = strings.ReplaceAll(newText, "\n---\n\n---\n", "\n---\n")
+
+	case "append_section":
+		headers := sectionRegex.FindAllString(text, -1)
+		maxNum := 0
+		for _, h := range headers {
+			var n int
+			fmt.Sscanf(h, "## %d)", &n)
+			if n > maxNum {
+				maxNum = n
+			}
+		}
+		newNum := maxNum + 1
+		sectionName = fmt.Sprintf("## %d) %s", newNum, p.Section)
+		newSection := fmt.Sprintf("\n## %d) %s\n\n%s\n", newNum, p.Section, strings.TrimSpace(p.Content))
+		newText = strings.TrimRight(text, "\n\t ") + "\n\n---\n" + newSection
+
+	default:
+		return ErrorResult(fmt.Sprintf("unknown pending action: %s", p.Action))
+	}
+
 	if err := t.sanityCheck(newText); err != nil {
 		return ErrorResult(fmt.Sprintf("sanity check failed, change aborted: %v", err))
 	}
-
-	// Atomic write
 	if err := t.atomicWrite(newText); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to write AGENTS.md: %v", err))
 	}
 
-	sectionName := fmt.Sprintf("## %d) %s", newNum, title)
 	t.appendChangelog(changelogEntry{
 		Timestamp: time.Now().Format(time.RFC3339),
-		Action:    "append_section",
+		Action:    p.Action,
 		Section:   sectionName,
-		Reason:    reason,
-		Summary:   fmt.Sprintf("Added new section '%s'", sectionName),
+		Reason:    p.Reason,
+		Summary:   fmt.Sprintf("Applied confirmed %s for '%s'", p.Action, sectionName),
 	})
 
-	return SilentResult(fmt.Sprintf("Section '%s' appended successfully. Backup created.", sectionName))
+	return SilentResult(fmt.Sprintf("Change confirmed and applied to '%s'. Backup created.", sectionName))
+}
+
+func selfTruncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 func (t *SelfTool) rollbackPrompt() *ToolResult {

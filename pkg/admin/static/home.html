@@ -175,6 +175,11 @@
       <div><span class="val" id="mdl">--</span></div>
       <div><span class="val" id="tools">37</span> tools</div>
     </div>
+    <div class="stats" id="activity-row" style="margin-top:8px;display:none">
+      <div><span class="val" id="int24">--</span> interactions today</div>
+      <div><span class="val" id="tok">--</span> tokens</div>
+      <div><span class="val" id="obs">--</span> observations</div>
+    </div>
     <div class="links">
       <a href="/about">about</a>
       <a href="/admin">admin</a>
@@ -468,6 +473,22 @@ fetch(location.origin + '/api/public/status')
     if (d.uptime_short || d.uptime) document.getElementById('up').textContent = d.uptime_short || d.uptime;
     if (d.notes !== undefined) document.getElementById('mem').textContent = d.notes;
     if (d.model) document.getElementById('mdl').textContent = d.model;
+    // 24h activity stats
+    var hasActivity = false;
+    if (d.interactions_24h !== undefined) {
+      document.getElementById('int24').textContent = d.interactions_24h;
+      hasActivity = true;
+    }
+    if (d.tokens_today !== undefined) {
+      var t = d.tokens_today;
+      document.getElementById('tok').textContent = t >= 1000000 ? (t/1000000).toFixed(1)+'M' : t >= 1000 ? (t/1000).toFixed(0)+'K' : t;
+      hasActivity = true;
+    }
+    if (d.observations_today !== undefined) {
+      document.getElementById('obs').textContent = d.observations_today;
+      hasActivity = true;
+    }
+    if (hasActivity) document.getElementById('activity-row').style.display = 'flex';
   })
   .catch(() => { document.getElementById('st').textContent = 'offline'; });
 </script>

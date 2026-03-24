@@ -228,6 +228,46 @@ func (se *ScoringEngine) GetWeeklyReport() string {
 	return sb.String()
 }
 
+// GetCorrectionRate returns the fraction of interactions (0.0-1.0) that were
+// corrections for a given topic in the last N days. Returns 0 if no data.
+// Use topic="" to get the global correction rate across all topics.
+func (se *ScoringEngine) GetCorrectionRate(topic string, days int) float64 {
+	se.mu.RLock()
+	defer se.mu.RUnlock()
+
+	cutoff := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	total := 0
+	corrections := 0
+
+	for _, s := range se.scores {
+		t, err := time.Parse(time.RFC3339, s.Timestamp)
+		if err != nil || t.Before(cutoff) {
+			continue
+		}
+		if topic != "" {
+			found := false
+			for _, tag := range s.TopicTags {
+				if tag == topic {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		total++
+		if s.WasCorrected {
+			corrections++
+		}
+	}
+
+	if total == 0 {
+		return 0
+	}
+	return float64(corrections) / float64(total)
+}
+
 // detectSentiment classifies user sentiment from the message text.
 func detectSentiment(msg string) string {
 	lower := strings.ToLower(msg)

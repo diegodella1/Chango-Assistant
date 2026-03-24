@@ -285,6 +285,75 @@ func (h *Handler) publicStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// --- Last 24h activity stats ---
+
+	// Interaction count from interaction_scores.json
+	scoresData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "interaction_scores.json"))
+	if err == nil {
+		var scores []map[string]interface{}
+		if json.Unmarshal(scoresData, &scores) == nil {
+			cutoff := time.Now().UTC().Add(-24 * time.Hour)
+			count24h := 0
+			var lastActivity string
+			for _, s := range scores {
+				if ts, ok := s["timestamp"].(string); ok {
+					if t, err := time.Parse(time.RFC3339, ts); err == nil {
+						if t.After(cutoff) {
+							count24h++
+						}
+						if ts > lastActivity {
+							lastActivity = ts
+						}
+					}
+				}
+			}
+			result["interactions_24h"] = count24h
+			if lastActivity != "" {
+				result["last_activity"] = lastActivity
+			}
+		}
+	}
+
+	// Telemetry: today's tokens
+	telemetryData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "telemetry.json"))
+	if err == nil {
+		var telemetry map[string]interface{}
+		if json.Unmarshal(telemetryData, &telemetry) == nil {
+			today := time.Now().Format("2006-01-02")
+			if days, ok := telemetry["days"].([]interface{}); ok {
+				for _, d := range days {
+					if dm, ok := d.(map[string]interface{}); ok {
+						if dm["date"] == today {
+							if totals, ok := dm["totals"].(map[string]interface{}); ok {
+								if tt, ok := totals["total_tokens"].(float64); ok {
+									result["tokens_today"] = int64(tt)
+								}
+								if calls, ok := totals["calls"].(float64); ok {
+									result["calls_today"] = int(calls)
+								}
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Reasoning state: observations/escalations today
+	reasoningData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "reasoning_state.json"))
+	if err == nil {
+		var rs map[string]interface{}
+		if json.Unmarshal(reasoningData, &rs) == nil {
+			if obs, ok := rs["observations_today"].(float64); ok {
+				result["observations_today"] = int(obs)
+			}
+			if esc, ok := rs["escalations_today"].(float64); ok {
+				result["escalations_today"] = int(esc)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(result)
