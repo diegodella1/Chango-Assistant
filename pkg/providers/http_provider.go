@@ -313,7 +313,11 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 		case "openai", "gpt":
 			if cfg.Providers.OpenAI.APIKey != "" || cfg.Providers.OpenAI.AuthMethod != "" {
 				if cfg.Providers.OpenAI.AuthMethod == "oauth" || cfg.Providers.OpenAI.AuthMethod == "token" {
-					return createCodexAuthProvider()
+					p, err := createCodexAuthProvider()
+					if err != nil {
+						return nil, err
+					}
+					return wrapWithFallbackAndPrivacy(p, cfg)
 				}
 				apiKey = cfg.Providers.OpenAI.APIKey
 				apiBase = cfg.Providers.OpenAI.APIBase
@@ -324,7 +328,11 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 		case "anthropic", "claude":
 			if cfg.Providers.Anthropic.APIKey != "" || cfg.Providers.Anthropic.AuthMethod != "" {
 				if cfg.Providers.Anthropic.AuthMethod == "oauth" || cfg.Providers.Anthropic.AuthMethod == "token" {
-					return createClaudeAuthProvider()
+					p, err := createClaudeAuthProvider()
+					if err != nil {
+						return nil, err
+					}
+					return wrapWithFallbackAndPrivacy(p, cfg)
 				}
 				apiKey = cfg.Providers.Anthropic.APIKey
 				apiBase = cfg.Providers.Anthropic.APIBase
@@ -375,7 +383,7 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 			if workspace == "" {
 				workspace = "."
 			}
-			return NewClaudeCliProvider(workspace), nil
+			return wrapWithFallbackAndPrivacy(NewClaudeCliProvider(workspace), cfg)
 		case "deepseek":
 			if cfg.Providers.DeepSeek.APIKey != "" {
 				apiKey = cfg.Providers.DeepSeek.APIKey
@@ -393,7 +401,11 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 			} else {
 				apiBase = "localhost:4321"
 			}
-			return NewGitHubCopilotProvider(apiBase, cfg.Providers.GitHubCopilot.ConnectMode, model)
+			p, err := NewGitHubCopilotProvider(apiBase, cfg.Providers.GitHubCopilot.ConnectMode, model)
+			if err != nil {
+				return nil, err
+			}
+			return wrapWithFallbackAndPrivacy(p, cfg)
 
 		case "llamacpp", "llama", "local", "qwen":
 			return CreateLlamaCppProvider(cfg)
@@ -424,7 +436,11 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 
 		case (strings.Contains(lowerModel, "claude") || strings.HasPrefix(model, "anthropic/")) && (cfg.Providers.Anthropic.APIKey != "" || cfg.Providers.Anthropic.AuthMethod != ""):
 			if cfg.Providers.Anthropic.AuthMethod == "oauth" || cfg.Providers.Anthropic.AuthMethod == "token" {
-				return createClaudeAuthProvider()
+				p, err := createClaudeAuthProvider()
+				if err != nil {
+					return nil, err
+				}
+				return wrapWithFallbackAndPrivacy(p, cfg)
 			}
 			apiKey = cfg.Providers.Anthropic.APIKey
 			apiBase = cfg.Providers.Anthropic.APIBase
@@ -435,7 +451,11 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 
 		case (strings.Contains(lowerModel, "gpt") || strings.HasPrefix(model, "openai/")) && (cfg.Providers.OpenAI.APIKey != "" || cfg.Providers.OpenAI.AuthMethod != ""):
 			if cfg.Providers.OpenAI.AuthMethod == "oauth" || cfg.Providers.OpenAI.AuthMethod == "token" {
-				return createCodexAuthProvider()
+				p, err := createCodexAuthProvider()
+				if err != nil {
+					return nil, err
+				}
+				return wrapWithFallbackAndPrivacy(p, cfg)
 			}
 			apiKey = cfg.Providers.OpenAI.APIKey
 			apiBase = cfg.Providers.OpenAI.APIBase
@@ -508,21 +528,24 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 	}
 
 	primary := NewHTTPProvider(apiKey, apiBase, proxy)
+	return wrapWithFallbackAndPrivacy(primary, cfg)
+}
 
-	// Wrap with local fallback if configured
+// wrapWithFallbackAndPrivacy wraps any provider with local fallback (on 429/5xx/timeout)
+// and privacy router if configured. All cloud providers should go through this.
+func wrapWithFallbackAndPrivacy(provider LLMProvider, cfg *config.Config) (LLMProvider, error) {
 	if cfg.Providers.LlamaCpp.Enabled && cfg.Providers.LlamaCpp.Fallback {
 		fallback, err := CreateLlamaCppProvider(cfg)
 		if err != nil {
 			logger.WarnCF("provider", "LlamaCpp fallback configured but failed to create", map[string]interface{}{
 				"error": err.Error(),
 			})
-			return wrapWithPrivacy(primary, cfg)
+			return wrapWithPrivacy(provider, cfg)
 		}
-		wrapped := NewFallbackProvider(primary, fallback)
+		wrapped := NewFallbackProvider(provider, fallback)
 		return wrapWithPrivacy(wrapped, cfg)
 	}
-
-	return wrapWithPrivacy(primary, cfg)
+	return wrapWithPrivacy(provider, cfg)
 }
 
 // wrapWithPrivacy wraps a provider with the PrivacyRouter if enabled and a local model is available.

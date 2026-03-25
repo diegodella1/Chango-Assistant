@@ -339,16 +339,19 @@ func (f *FallbackProvider) Chat(ctx context.Context, messages []Message, tools [
 		return resp, nil
 	}
 
-	// Only fallback on network/server errors, not on bad requests
+	// Only fallback on network/server errors and rate limits, not on bad requests
 	errStr := err.Error()
-	isNetworkError := strings.Contains(errStr, "connection refused") ||
+	isRetryable := strings.Contains(errStr, "connection refused") ||
 		strings.Contains(errStr, "no such host") ||
 		strings.Contains(errStr, "timeout") ||
 		strings.Contains(errStr, "deadline exceeded") ||
 		strings.Contains(errStr, "status 5") ||
-		strings.Contains(errStr, "status 429")
+		strings.Contains(errStr, "status 429") ||
+		strings.Contains(errStr, "429") ||
+		strings.Contains(errStr, "usagelimitreached") ||
+		strings.Contains(errStr, "rate")
 
-	if !isNetworkError {
+	if !isRetryable {
 		return nil, err
 	}
 
