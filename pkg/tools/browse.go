@@ -16,7 +16,7 @@ import (
 const (
 	browseMaxBodySize = 500 * 1024 // 500KB
 	browseMaxText     = 5000
-	browseUserAgent   = "PicoClaw/1.0 (compatible; bot)"
+	browseUserAgent   = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
 // BrowseTool provides structured web browsing: fetch pages, extract links/forms, submit forms.
