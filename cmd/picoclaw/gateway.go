@@ -357,6 +357,8 @@ func gatewayCmd() {
 		adminHandler.Register(healthMux)
 		// Connect agent activity events to admin SSE for real-time visualization
 		agentLoop.SetEventCallback(adminHandler.EmitEvent)
+		heartbeatService.SetEventCallback(adminHandler.EmitEvent)
+		cronService.SetEventCallback(adminHandler.EmitEvent)
 		if reasoningService != nil {
 			reasoningService.SetEventCallback(adminHandler.EmitEvent)
 		}

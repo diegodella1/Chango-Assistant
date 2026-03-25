@@ -43,6 +43,7 @@ type HeartbeatService struct {
 	mu        sync.RWMutex
 	stopChan  chan struct{}
 	executing atomic.Bool
+	onEvent   func(string) // SSE event callback for neural visualization
 }
 
 // NewHeartbeatService creates a new heartbeat service
@@ -69,6 +70,13 @@ func (hs *HeartbeatService) SetBus(msgBus *bus.MessageBus) {
 	hs.mu.Lock()
 	defer hs.mu.Unlock()
 	hs.bus = msgBus
+}
+
+// SetEventCallback sets the SSE event callback for neural visualization.
+func (hs *HeartbeatService) SetEventCallback(fn func(string)) {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+	hs.onEvent = fn
 }
 
 // SetHandler sets the heartbeat handler.
@@ -151,6 +159,11 @@ func (hs *HeartbeatService) runLoop(stopChan chan struct{}) {
 
 // executeHeartbeat performs a single heartbeat check
 func (hs *HeartbeatService) executeHeartbeat() {
+	// Emit SSE event for neural visualization
+	if hs.onEvent != nil {
+		hs.onEvent("heartbeat")
+	}
+
 	// Prevent overlapping executions
 	if !hs.executing.CompareAndSwap(false, true) {
 		hs.logInfo("Heartbeat still running, skipping this tick")

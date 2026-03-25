@@ -65,6 +65,14 @@ type CronService struct {
 	running   bool
 	stopChan  chan struct{}
 	gronx     *gronx.Gronx
+	onEvent   func(string) // SSE event callback for neural visualization
+}
+
+// SetEventCallback sets the SSE event callback for neural visualization.
+func (cs *CronService) SetEventCallback(fn func(string)) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.onEvent = fn
 }
 
 func NewCronService(storePath string, onJob JobHandler) *CronService {
@@ -174,6 +182,11 @@ func (cs *CronService) checkJobs() {
 }
 
 func (cs *CronService) executeJobByID(jobID string) {
+	// Emit SSE event for neural visualization
+	if cs.onEvent != nil {
+		cs.onEvent("cron")
+	}
+
 	startTime := time.Now().UnixMilli()
 
 	cs.mu.RLock()
