@@ -349,7 +349,8 @@ func (f *FallbackProvider) Chat(ctx context.Context, messages []Message, tools [
 		strings.Contains(errStr, "status 429") ||
 		strings.Contains(errStr, "429") ||
 		strings.Contains(errStr, "usagelimitreached") ||
-		strings.Contains(errStr, "rate")
+		strings.Contains(errStr, "rate") ||
+		strings.Contains(errStr, "exceed") // context size exceeded → try cloud
 
 	if !isRetryable {
 		return nil, err

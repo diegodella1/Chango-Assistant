@@ -725,6 +725,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			errMsg := err.Error()
 			var userMsg string
 			switch {
+			case strings.Contains(errMsg, "exceed") && strings.Contains(errMsg, "context"):
+				userMsg = "El mensaje es demasiado largo para el modelo local. Probá con /model para usar uno con más contexto."
 			case strings.Contains(errMsg, "Loading model"):
 				userMsg = "El modelo local está cargando todavía. Esperá unos segundos y volvé a intentar."
 			case strings.Contains(errMsg, "429") || strings.Contains(errMsg, "rate"):

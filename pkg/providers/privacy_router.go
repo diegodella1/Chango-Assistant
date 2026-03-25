@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -108,6 +109,15 @@ func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, opt
 	// Local model: no tools (unreliable on small models), use its default model
 	resp, err := pr.local.Chat(ctx, sanitized, nil, "", options)
 	if err != nil {
+		// If local model can't handle the context size, escalate to cloud.
+		// Privacy is important but a total failure is worse.
+		errStr := err.Error()
+		if strings.Contains(errStr, "exceed") || strings.Contains(errStr, "context_size") {
+			logger.WarnCF("privacy", "Local model context exceeded, escalating to cloud", map[string]interface{}{
+				"error": errStr,
+			})
+			return pr.cloud.Chat(ctx, messages, nil, "", options)
+		}
 		return nil, err
 	}
 
