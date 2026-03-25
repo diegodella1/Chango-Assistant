@@ -79,7 +79,6 @@ func (p *LlamaCppProvider) chatServer(ctx context.Context, messages []Message, t
 	}
 
 	// Cap max_tokens to what the local model can handle.
-	// The global config may send 8192+ but our context window is much smaller.
 	maxTok := p.maxTokens()
 	if mt, ok := options["max_tokens"].(int); ok && mt > maxTok {
 		options["max_tokens"] = maxTok
@@ -87,11 +86,74 @@ func (p *LlamaCppProvider) chatServer(ctx context.Context, messages []Message, t
 		options["max_tokens"] = maxTok
 	}
 
+	// Truncate messages to fit within context window.
+	// Reserve tokens for output. Estimate ~4 chars per token.
+	ctxSize := p.cfg.ContextSize
+	if ctxSize <= 0 {
+		ctxSize = 2048
+	}
+	maxPromptChars := (ctxSize - maxTok) * 4
+	messages = truncateMessagesForContext(messages, maxPromptChars)
+
 	resp, err := p.httpProv.Chat(ctx, messages, tools, model, options)
 	if err != nil {
 		return nil, fmt.Errorf("llamacpp server: %w", err)
 	}
 	return resp, nil
+}
+
+// truncateMessagesForContext keeps the system message + as many recent messages
+// as fit within maxChars. Older messages are dropped first.
+func truncateMessagesForContext(messages []Message, maxChars int) []Message {
+	if maxChars <= 0 || len(messages) == 0 {
+		return messages
+	}
+
+	// Calculate total chars
+	total := 0
+	for _, m := range messages {
+		total += len(m.Content)
+	}
+	if total <= maxChars {
+		return messages
+	}
+
+	// Keep system message (first) + trim from oldest user/assistant messages
+	var system []Message
+	var rest []Message
+	for _, m := range messages {
+		if m.Role == "system" {
+			system = append(system, m)
+		} else {
+			rest = append(rest, m)
+		}
+	}
+
+	// Budget after system messages
+	budget := maxChars
+	for _, m := range system {
+		budget -= len(m.Content)
+	}
+	if budget <= 0 {
+		// System prompt alone exceeds context — truncate it
+		if len(system) > 0 {
+			system[0].Content = system[0].Content[:maxChars]
+		}
+		return system
+	}
+
+	// Keep recent messages, drop oldest
+	var kept []Message
+	for i := len(rest) - 1; i >= 0; i-- {
+		cost := len(rest[i].Content)
+		if budget-cost < 0 {
+			break
+		}
+		budget -= cost
+		kept = append([]Message{rest[i]}, kept...)
+	}
+
+	return append(system, kept...)
 }
 
 // chatBinary runs llama-cli as a subprocess with a ChatML prompt.
