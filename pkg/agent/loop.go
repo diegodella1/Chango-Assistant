@@ -55,6 +55,7 @@ type AgentLoop struct {
 	tokenBudget    *telemetry.TokenBudget
 	scratchpad     *Scratchpad // per-session working memory (active thoughts)
 	startedAt      time.Time  // when the agent loop was created (for uptime)
+	consecutiveFails int       // consecutive LLM failures for auto-recovery
 }
 
 // GetMemoryTool returns the memory tool for programmatic vault access (used by reasoning service).
@@ -740,8 +741,15 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			default:
 				userMsg = fmt.Sprintf("Error al comunicarme con la API: %s", errMsg)
 			}
+			al.consecutiveFails++
+			// Auto-recovery: if 3 consecutive failures, try switching provider
+			if al.consecutiveFails >= 3 {
+				al.tryAutoRecovery()
+			}
 			return userMsg, iteration, nil, fmt.Errorf("LLM call failed: %w", err)
 		}
+
+		al.consecutiveFails = 0 // Reset on successful LLM call
 
 		// Check if no tool calls - we're done
 		if len(response.ToolCalls) == 0 {

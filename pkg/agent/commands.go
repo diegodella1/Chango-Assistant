@@ -138,6 +138,55 @@ func (al *AgentLoop) handleProviderCommand(content string) (string, bool) {
 	return fmt.Sprintf("Provider: %s → %s\nModel: %s → %s", oldProvider, newProvider, oldModel, newModel), true
 }
 
+// tryAutoRecovery attempts to switch to a working provider after consecutive failures.
+// Cycles through known providers until one works.
+func (al *AgentLoop) tryAutoRecovery() {
+	currentProvider := al.cfg.Agents.Defaults.Provider
+	fallbackOrder := []string{"openrouter", "groq", "deepseek", "openai", "anthropic", "gemini"}
+
+	for _, candidate := range fallbackOrder {
+		if candidate == currentProvider {
+			continue
+		}
+
+		// Save for rollback
+		savedProvider := al.cfg.Agents.Defaults.Provider
+		savedModel := al.cfg.Agents.Defaults.Model
+
+		al.cfg.Agents.Defaults.Provider = candidate
+		if dm, ok := defaultProviderModels[candidate]; ok {
+			al.cfg.Agents.Defaults.Model = dm
+		}
+
+		newProv, err := providers.CreateProvider(al.cfg)
+		if err != nil {
+			// Rollback and try next
+			al.cfg.Agents.Defaults.Provider = savedProvider
+			al.cfg.Agents.Defaults.Model = savedModel
+			continue
+		}
+
+		// Success — switch
+		al.provider = newProv
+		al.model = al.cfg.Agents.Defaults.Model
+		al.contextBuilder.SetModel(al.model)
+		al.consecutiveFails = 0
+
+		if al.configPath != "" {
+			_ = config.SaveConfig(al.configPath, al.cfg)
+		}
+
+		logger.WarnCF("agent", "Auto-recovery: switched provider after consecutive failures", map[string]interface{}{
+			"from_provider": currentProvider,
+			"to_provider":   candidate,
+			"to_model":      al.model,
+		})
+		return
+	}
+
+	logger.ErrorCF("agent", "Auto-recovery failed: no working provider found", nil)
+}
+
 // handleStatusCommand handles the /status command to show system status.
 func (al *AgentLoop) handleStatusCommand(content string) (string, bool) {
 	if strings.TrimSpace(content) != "/status" {
@@ -158,8 +207,30 @@ func (al *AgentLoop) handleStatusCommand(content string) (string, bool) {
 		uptimeStr = fmt.Sprintf("%dm", int(uptime.Minutes()))
 	}
 
-	status := fmt.Sprintf("📊 Estado del sistema\n\nProvider: %s\nModelo: %s\nTools: %d activos\nUptime: %s",
-		provider, model, toolCount, uptimeStr)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "📊 Estado del sistema\n\n")
+	fmt.Fprintf(&sb, "Provider: %s\nModelo: %s\nTools: %d activos\nUptime: %s\n", provider, model, toolCount, uptimeStr)
 
-	return status, true
+	// Token usage today
+	if al.tracker != nil {
+		if bucket := al.tracker.GetToday(); bucket != nil {
+			fmt.Fprintf(&sb, "\n📈 Tokens hoy: %d en %d llamadas", bucket.Totals.TotalTokens, bucket.Totals.Calls)
+		} else {
+			fmt.Fprintf(&sb, "\n📈 Tokens hoy: 0")
+		}
+	}
+
+	// Token budget
+	if al.tokenBudget != nil {
+		used, bgUsed, limit, bgMax := al.tokenBudget.GetStatus()
+		if limit > 0 {
+			pct := float64(used) * 100 / float64(limit)
+			fmt.Fprintf(&sb, "\n💰 Budget: %d/%d (%.0f%%)", used, limit, pct)
+		}
+		if bgMax > 0 {
+			fmt.Fprintf(&sb, " | BG: %d/%d", bgUsed, bgMax)
+		}
+	}
+
+	return sb.String(), true
 }
