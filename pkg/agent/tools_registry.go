@@ -116,7 +116,7 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	}
 
 	// Structured web browsing (session-persistent, form extraction/submit)
-	registry.Register(tools.NewBrowseTool())
+	registry.Register(tools.NewBrowseTool(workspace))
 
 	// Google Workspace tools (Gmail, Calendar, Drive)
 	if cfg.Tools.Google.ServiceAccountFile != "" && cfg.Tools.Google.ImpersonateEmail != "" {

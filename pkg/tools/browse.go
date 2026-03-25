@@ -20,10 +20,12 @@ const (
 )
 
 // BrowseTool provides structured web browsing: fetch pages, extract links/forms, submit forms.
+// Actions: fetch/extract_links/extract_forms/submit use HTTP (fast). navigate/click/fill/screenshot/wait/eval use headless Chrome (JS-capable).
 type BrowseTool struct {
 	client      *http.Client
 	maxBodySize int
 	userAgent   string
+	browser     *cdpBrowser // lazy-initialized headless Chrome
 }
 
 // pageLink represents an extracted <a> element.
@@ -56,7 +58,7 @@ type pageData struct {
 	Forms    []pageForm
 }
 
-func NewBrowseTool() *BrowseTool {
+func NewBrowseTool(workspace string) *BrowseTool {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
 		Jar:     jar,
@@ -66,12 +68,21 @@ func NewBrowseTool() *BrowseTool {
 		client:      client,
 		maxBodySize: browseMaxBodySize,
 		userAgent:   browseUserAgent,
+		browser:     newCDPBrowser(workspace),
+	}
+}
+
+// Close releases browser resources. Call on shutdown.
+func (t *BrowseTool) Close() {
+	if t.browser != nil {
+		t.browser.Close()
 	}
 }
 
 func (t *BrowseTool) Name() string        { return "browse" }
 func (t *BrowseTool) Description() string {
-	return "Navigate web pages, extract links and forms, submit forms. Actions: fetch, extract_links, extract_forms, submit."
+	return "Browse web pages. HTTP actions (fast): fetch, extract_links, extract_forms, submit. " +
+		"Browser actions (JS-capable): navigate, click, fill, screenshot, wait, eval."
 }
 
 func (t *BrowseTool) Parameters() map[string]interface{} {
@@ -80,8 +91,8 @@ func (t *BrowseTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"action": map[string]interface{}{
 				"type":        "string",
-				"description": "Action: fetch, extract_links, extract_forms, submit",
-				"enum":        []string{"fetch", "extract_links", "extract_forms", "submit"},
+				"description": "Action: fetch/extract_links/extract_forms/submit (HTTP), navigate/click/fill/screenshot/wait/eval (browser+JS)",
+				"enum":        []string{"fetch", "extract_links", "extract_forms", "submit", "navigate", "click", "fill", "screenshot", "wait", "eval"},
 			},
 			"url": map[string]interface{}{
 				"type":        "string",
@@ -94,6 +105,22 @@ func (t *BrowseTool) Parameters() map[string]interface{} {
 			"fields": map[string]interface{}{
 				"type":        "object",
 				"description": "Form fields as key-value pairs for submit action",
+			},
+			"selector": map[string]interface{}{
+				"type":        "string",
+				"description": "CSS selector for click/fill/wait actions",
+			},
+			"value": map[string]interface{}{
+				"type":        "string",
+				"description": "Text value for fill action",
+			},
+			"script": map[string]interface{}{
+				"type":        "string",
+				"description": "JavaScript code for eval action",
+			},
+			"timeout": map[string]interface{}{
+				"type":        "number",
+				"description": "Timeout in seconds for browser actions (default: 30)",
 			},
 		},
 		"required": []string{"action", "url"},
@@ -122,7 +149,15 @@ func (t *BrowseTool) Execute(ctx context.Context, args map[string]interface{}) *
 		return ErrorResult("missing host in URL")
 	}
 
+	// Parse timeout for browser actions (default 30s)
+	timeoutSec := 30
+	if t, ok := args["timeout"].(float64); ok && t > 0 {
+		timeoutSec = int(t)
+	}
+	selector, _ := args["selector"].(string)
+
 	switch action {
+	// HTTP actions (fast, no JS)
 	case "fetch":
 		return t.doFetch(ctx, urlStr)
 	case "extract_links":
@@ -131,6 +166,35 @@ func (t *BrowseTool) Execute(ctx context.Context, args map[string]interface{}) *
 		return t.doExtractForms(ctx, urlStr)
 	case "submit":
 		return t.doSubmit(ctx, urlStr, args)
+
+	// Browser actions (headless Chrome, JS-capable)
+	case "navigate":
+		return t.doNavigate(ctx, urlStr, timeoutSec)
+	case "click":
+		if selector == "" {
+			return ErrorResult("selector is required for click action")
+		}
+		return t.doClick(ctx, urlStr, selector, timeoutSec)
+	case "fill":
+		if selector == "" {
+			return ErrorResult("selector is required for fill action")
+		}
+		value, _ := args["value"].(string)
+		return t.doFill(ctx, urlStr, selector, value, timeoutSec)
+	case "screenshot":
+		return t.doScreenshot(ctx, urlStr, timeoutSec)
+	case "wait":
+		if selector == "" {
+			return ErrorResult("selector is required for wait action")
+		}
+		return t.doWait(ctx, urlStr, selector, timeoutSec)
+	case "eval":
+		script, _ := args["script"].(string)
+		if script == "" {
+			return ErrorResult("script is required for eval action")
+		}
+		return t.doEval(ctx, urlStr, script, timeoutSec)
+
 	default:
 		return ErrorResult(fmt.Sprintf("unknown action: %s", action))
 	}
