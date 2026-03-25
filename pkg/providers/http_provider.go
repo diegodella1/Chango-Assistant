@@ -563,24 +563,16 @@ func wrapWithPrivacy(provider LLMProvider, cfg *config.Config) (LLMProvider, err
 	}
 
 	classifierCfg := PrivacyClassifierConfig{
-		Tier2Enabled:       cfg.Privacy.Tier2Enabled,
 		AlwaysPrivateMedia: cfg.Privacy.AlwaysPrivateMedia,
 		FailClosed:         cfg.Privacy.FailClosed,
 		ExtraKeywords:      cfg.Privacy.ExtraKeywords,
 		ExtraPatterns:      cfg.Privacy.ExtraPatterns,
 	}
 
-	// For Tier 2, reuse the same local provider (classification is just a short prompt)
-	var tier2LLM LLMProvider
-	if cfg.Privacy.Tier2Enabled {
-		tier2LLM = localProv
-	}
-
-	classifier := NewPrivacyClassifier(classifierCfg, tier2LLM)
+	classifier := NewPrivacyClassifier(classifierCfg)
 	router := NewPrivacyRouter(provider, localProv, classifier, cfg.Privacy.LogDecisions)
 
 	logger.InfoCF("provider", "Privacy router enabled", map[string]interface{}{
-		"tier2":          cfg.Privacy.Tier2Enabled,
 		"fail_closed":    cfg.Privacy.FailClosed,
 		"private_media":  cfg.Privacy.AlwaysPrivateMedia,
 		"extra_keywords": len(cfg.Privacy.ExtraKeywords),

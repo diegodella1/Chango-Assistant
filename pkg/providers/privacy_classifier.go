@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 	"strings"
-	"time"
 )
 
 // SensitivityLevel represents the privacy classification of a message.
@@ -18,8 +17,7 @@ const (
 // ClassifyResult holds the classification decision and metadata.
 type ClassifyResult struct {
 	Level  SensitivityLevel
-	Reason string  // e.g. "image_detected", "dni_pattern", "llm_classified"
-	Tier   int     // 1 or 2
+	Reason string  // e.g. "image_detected", "dni_pattern"
 	Score  float64 // weighted score from Tier 1
 }
 
@@ -29,19 +27,16 @@ type privacyPattern struct {
 	weight float64 // 1.0 = auto-sensitive, 0.5 = contributes to score
 }
 
-// PrivacyClassifier performs two-tier sensitivity classification.
-// Tier 1: fast regex/keyword matching (zero latency, zero cost)
-// Tier 2: optional local LLM classification for ambiguous cases
+// PrivacyClassifier performs regex/keyword sensitivity classification.
+// Fast, zero latency, zero cost.
 type PrivacyClassifier struct {
 	patterns []privacyPattern
 	keywords map[string]bool
-	localLLM LLMProvider // optional, for Tier 2
 	cfg      PrivacyClassifierConfig
 }
 
 // PrivacyClassifierConfig mirrors the fields needed from config.PrivacyConfig.
 type PrivacyClassifierConfig struct {
-	Tier2Enabled       bool
 	AlwaysPrivateMedia bool
 	FailClosed         bool
 	ExtraKeywords      []string
@@ -69,11 +64,10 @@ var builtinPatterns = []privacyPattern{
 }
 
 // NewPrivacyClassifier creates a classifier with built-in + custom patterns.
-func NewPrivacyClassifier(cfg PrivacyClassifierConfig, localLLM LLMProvider) *PrivacyClassifier {
+func NewPrivacyClassifier(cfg PrivacyClassifierConfig) *PrivacyClassifier {
 	pc := &PrivacyClassifier{
 		patterns: make([]privacyPattern, len(builtinPatterns)),
 		keywords: make(map[string]bool),
-		localLLM: localLLM,
 		cfg:      cfg,
 	}
 	copy(pc.patterns, builtinPatterns)
@@ -106,7 +100,7 @@ func (pc *PrivacyClassifier) Classify(ctx context.Context, messages []Message) C
 	}
 
 	if lastUserMsg == nil {
-		return ClassifyResult{Level: Safe, Reason: "no_user_message", Tier: 1}
+		return ClassifyResult{Level: Safe, Reason: "no_user_message"}
 	}
 
 	// Check for media (images/documents) — always sensitive if configured
@@ -120,7 +114,7 @@ func (pc *PrivacyClassifier) Classify(ctx context.Context, messages []Message) C
 		}
 	}
 	if hasMedia {
-		return ClassifyResult{Level: Sensitive, Reason: "image_detected", Tier: 1, Score: 1.0}
+		return ClassifyResult{Level: Sensitive, Reason: "image_detected", Score: 1.0}
 	}
 
 	// Tier 1: pattern matching
@@ -128,21 +122,15 @@ func (pc *PrivacyClassifier) Classify(ctx context.Context, messages []Message) C
 	score, reason := pc.tier1(content)
 
 	if score >= 1.0 {
-		return ClassifyResult{Level: Sensitive, Reason: reason, Tier: 1, Score: score}
+		return ClassifyResult{Level: Sensitive, Reason: reason, Score: score}
 	}
 
-	// Ambiguous zone (0.5 - 1.0) — try Tier 2 if enabled
-	if score >= 0.5 && pc.cfg.Tier2Enabled && pc.localLLM != nil {
-		tier2Result := pc.tier2(ctx, content)
-		return ClassifyResult{Level: tier2Result, Reason: "llm_classified", Tier: 2, Score: score}
-	}
-
-	// Ambiguous but no Tier 2 — fail-closed or safe
+	// Ambiguous zone (0.5 - 1.0) — fail-closed or safe
 	if score >= 0.5 && pc.cfg.FailClosed {
-		return ClassifyResult{Level: Sensitive, Reason: reason + "_fail_closed", Tier: 1, Score: score}
+		return ClassifyResult{Level: Sensitive, Reason: reason + "_fail_closed", Score: score}
 	}
 
-	return ClassifyResult{Level: Safe, Reason: "clean", Tier: 1, Score: score}
+	return ClassifyResult{Level: Safe, Reason: "clean", Score: score}
 }
 
 // tier1 runs regex patterns and keyword matching, returning a weighted score.
@@ -184,39 +172,3 @@ func (pc *PrivacyClassifier) tier1(content string) (float64, string) {
 	return maxScore, maxReason
 }
 
-// tier2 uses the local LLM to classify ambiguous content.
-func (pc *PrivacyClassifier) tier2(ctx context.Context, text string) SensitivityLevel {
-	// Truncate to avoid wasting local model context
-	if len(text) > 500 {
-		text = text[:500]
-	}
-
-	prompt := `Classify if this message contains personal, sensitive, or private information.
-Reply ONLY "SENSITIVE" or "SAFE". No explanation.
-
-Sensitive categories: personal identity (names+IDs), financial data, health/medical,
-credentials/passwords, legal matters, intimate/personal life details.
-
-Message: ` + text
-
-	classifyCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	resp, err := pc.localLLM.Chat(classifyCtx, []Message{
-		{Role: "user", Content: prompt},
-	}, nil, "", map[string]interface{}{
-		"max_tokens":  8,
-		"temperature": 0.0,
-	})
-
-	if err != nil || resp == nil {
-		// Fail-closed: if classification fails, assume sensitive
-		return Sensitive
-	}
-
-	answer := strings.TrimSpace(strings.ToUpper(resp.Content))
-	if strings.Contains(answer, "SAFE") {
-		return Safe
-	}
-	return Sensitive
-}

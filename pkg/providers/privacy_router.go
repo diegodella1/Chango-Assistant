@@ -14,8 +14,7 @@ type PrivacyStats struct {
 	TotalMessages int64
 	RoutedLocal   int64
 	RoutedCloud   int64
-	Tier1Catches  int64
-	Tier2Catches  int64
+	Catches       int64
 }
 
 // PrivacyRouter implements LLMProvider, routing messages between a cloud and local
@@ -65,11 +64,7 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 		if sessionKey != "" {
 			pr.sensitiveSessions.Store(sessionKey, true)
 		}
-		if result.Tier == 2 {
-			atomic.AddInt64(&pr.stats.Tier2Catches, 1)
-		} else {
-			atomic.AddInt64(&pr.stats.Tier1Catches, 1)
-		}
+		atomic.AddInt64(&pr.stats.Catches, 1)
 		return pr.routeLocal(ctx, messages, options, result.Reason)
 	}
 
@@ -88,8 +83,7 @@ func (pr *PrivacyRouter) Stats() PrivacyStats {
 		TotalMessages: atomic.LoadInt64(&pr.stats.TotalMessages),
 		RoutedLocal:   atomic.LoadInt64(&pr.stats.RoutedLocal),
 		RoutedCloud:   atomic.LoadInt64(&pr.stats.RoutedCloud),
-		Tier1Catches:  atomic.LoadInt64(&pr.stats.Tier1Catches),
-		Tier2Catches:  atomic.LoadInt64(&pr.stats.Tier2Catches),
+		Catches:       atomic.LoadInt64(&pr.stats.Catches),
 	}
 }
 

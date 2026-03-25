@@ -109,7 +109,6 @@ type ReasoningConfig struct {
 // PrivacyConfig controls the privacy router that prevents sensitive data from leaving the Pi.
 type PrivacyConfig struct {
 	Enabled            bool     `json:"enabled" env:"PICOCLAW_PRIVACY_ENABLED"`                          // Enable privacy routing
-	Tier2Enabled       bool     `json:"tier2_enabled" env:"PICOCLAW_PRIVACY_TIER2_ENABLED"`              // Use local LLM for ambiguous cases
 	AlwaysPrivateMedia bool     `json:"always_private_media" env:"PICOCLAW_PRIVACY_ALWAYS_PRIVATE_MEDIA"` // Images/docs never go to cloud
 	ExtraKeywords      []string `json:"extra_keywords,omitempty"`                                         // User-configurable sensitive keywords
 	ExtraPatterns      []string `json:"extra_patterns,omitempty"`                                         // User-configurable regex patterns
@@ -508,7 +507,6 @@ func DefaultConfig() *Config {
 		},
 		Privacy: PrivacyConfig{
 			Enabled:            false,
-			Tier2Enabled:       false,
 			AlwaysPrivateMedia: true,
 			FailClosed:         true,
 			LogDecisions:       true,
