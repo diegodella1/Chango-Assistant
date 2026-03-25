@@ -18,6 +18,7 @@ var defaultProviderModels = map[string]string{
 	"anthropic":  "claude-sonnet-4-20250514",
 	"deepseek":   "deepseek-chat",
 	"gemini":     "gemini-2.5-flash",
+	"llamacpp":   "local",
 }
 
 // handleModelCommand handles the /model command to view or change the current model at runtime.
