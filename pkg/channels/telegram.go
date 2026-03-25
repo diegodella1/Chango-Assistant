@@ -52,6 +52,7 @@ type TelegramChannel struct {
 	stopThinking sync.Map // chatID -> thinkingCancel
 	voiceInput   sync.Map // chatID -> bool (true if last input was voice/audio)
 	adminUserID  string   // admin user ID for /join, /leave commands
+	welcomed     sync.Map // senderID -> bool (welcome message sent this session)
 }
 
 var defaultModels = []string{
@@ -131,6 +132,16 @@ func (c *TelegramChannel) SetAdminUserID(id string) {
 
 func (c *TelegramChannel) Start(ctx context.Context) error {
 	logger.InfoC("telegram", "Starting Telegram bot (polling mode)...")
+
+	// Register bot commands so Telegram shows them in the "/" menu
+	_ = c.bot.SetMyCommands(ctx, &telego.SetMyCommandsParams{
+		Commands: []telego.BotCommand{
+			{Command: "help", Description: "Qué puedo hacer"},
+			{Command: "status", Description: "Estado del sistema"},
+			{Command: "model", Description: "Cambiar modelo LLM"},
+			{Command: "provider", Description: "Cambiar proveedor"},
+		},
+	})
 
 	if err := c.startPolling(ctx); err != nil {
 		return err
@@ -479,6 +490,12 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 
 	c.chatIDs[senderID] = chatID
 
+	// Intercept bare /help command → show capabilities
+	if text := strings.TrimSpace(message.Text); text == "/help" || text == "/start" {
+		c.sendHelp(ctx, chatID)
+		return
+	}
+
 	// Intercept bare /provider command → show inline keyboard
 	if text := strings.TrimSpace(message.Text); text == "/provider" {
 		c.sendProviderMenu(ctx, chatID)
@@ -489,6 +506,12 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 	if text := strings.TrimSpace(message.Text); text == "/model" {
 		c.sendModelMenu(ctx, chatID)
 		return
+	}
+
+	// Send welcome message on first interaction (once per session)
+	if _, already := c.welcomed.LoadOrStore(senderID, true); !already {
+		welcome := tu.Message(tu.ID(chatID), "¡Hola! Soy Chango 🐒 — agente autónomo de Diego.\nEscribí /help para ver qué puedo hacer.")
+		_, _ = c.bot.SendMessage(ctx, welcome)
 	}
 
 	content := ""
@@ -758,6 +781,30 @@ func (c *TelegramChannel) extractPDFText(pdfPath string) string {
 		"chars": len(text),
 	})
 	return text
+}
+
+func (c *TelegramChannel) sendHelp(ctx context.Context, chatID int64) {
+	helpText := "¡Hola! Soy <b>Chango</b> 🐒 — agente autónomo de Diego.\n\n" +
+		"<b>Comandos:</b>\n" +
+		"/help — este mensaje\n" +
+		"/status — estado del sistema\n" +
+		"/model — cambiar modelo LLM\n" +
+		"/provider — cambiar proveedor\n\n" +
+		"<b>Capacidades:</b>\n" +
+		"• Enviar/leer emails (Gmail)\n" +
+		"• Calendario y agenda\n" +
+		"• Buscar en la web\n" +
+		"• Generar imágenes\n" +
+		"• Recordatorios y tareas\n" +
+		"• Memoria persistente\n" +
+		"• Controlar luces WiFi\n" +
+		"• Investigar temas (web + YouTube)\n" +
+		"• Traducir textos\n" +
+		"• Y más...\n\n" +
+		"Podés hablarme en texto o audio 🎤"
+	msg := tu.Message(tu.ID(chatID), helpText)
+	msg.ParseMode = telego.ModeHTML
+	_, _ = c.bot.SendMessage(ctx, msg)
 }
 
 func (c *TelegramChannel) sendModelMenu(ctx context.Context, chatID int64) {

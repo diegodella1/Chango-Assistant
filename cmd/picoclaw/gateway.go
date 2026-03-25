@@ -239,13 +239,15 @@ func gatewayCmd() {
 
 	if err := cronService.Start(); err != nil {
 		fmt.Printf("Error starting cron service: %v\n", err)
+	} else {
+		fmt.Println("✓ Cron service started")
 	}
-	fmt.Println("✓ Cron service started")
 
 	if err := heartbeatService.Start(); err != nil {
 		fmt.Printf("Error starting heartbeat service: %v\n", err)
+	} else {
+		fmt.Println("✓ Heartbeat service started")
 	}
-	fmt.Println("✓ Heartbeat service started")
 
 	stateManager := state.NewManager(cfg.WorkspacePath())
 	deviceService := devices.NewService(devices.Config{

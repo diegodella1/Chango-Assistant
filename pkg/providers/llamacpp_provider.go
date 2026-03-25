@@ -359,8 +359,32 @@ func (f *FallbackProvider) Chat(ctx context.Context, messages []Message, tools [
 		"error": errStr,
 	})
 
-	// Strip tools for small local models (unreliable tool calling)
-	return f.Fallback.Chat(ctx, messages, nil, "", options)
+	// Strip tools for small local models (unreliable tool calling).
+	// If local model is still loading (503), retry with patience — it needs time to init.
+	resp, err = f.Fallback.Chat(ctx, messages, nil, "", options)
+	if err != nil && strings.Contains(err.Error(), "Loading model") {
+		logger.InfoCF("fallback", "Local model is loading, waiting for it to be ready...", nil)
+		for attempt := 0; attempt < 4; attempt++ {
+			wait := time.Duration(5*(attempt+1)) * time.Second // 5s, 10s, 15s, 20s
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(wait):
+			}
+			resp, err = f.Fallback.Chat(ctx, messages, nil, "", options)
+			if err == nil {
+				return resp, nil
+			}
+			if !strings.Contains(err.Error(), "Loading model") {
+				break
+			}
+			logger.InfoCF("fallback", "Local model still loading...", map[string]interface{}{
+				"attempt": attempt + 2,
+				"wait":    wait.String(),
+			})
+		}
+	}
+	return resp, err
 }
 
 func (f *FallbackProvider) GetDefaultModel() string {

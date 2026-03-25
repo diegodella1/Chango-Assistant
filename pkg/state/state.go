@@ -22,6 +22,9 @@ type State struct {
 
 	// Timestamp is the last time this state was updated
 	Timestamp time.Time `json:"timestamp"`
+
+	// WelcomedUsers tracks which users have received the welcome message
+	WelcomedUsers map[string]bool `json:"welcomed_users,omitempty"`
 }
 
 // Manager manages persistent state with atomic saves.
@@ -152,6 +155,28 @@ func (sm *Manager) saveAtomic() error {
 	}
 
 	return nil
+}
+
+// HasBeenWelcomed returns true if the user has already received the welcome message.
+func (sm *Manager) HasBeenWelcomed(userID string) bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if sm.state.WelcomedUsers == nil {
+		return false
+	}
+	return sm.state.WelcomedUsers[userID]
+}
+
+// MarkWelcomed records that a user has received the welcome message.
+func (sm *Manager) MarkWelcomed(userID string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if sm.state.WelcomedUsers == nil {
+		sm.state.WelcomedUsers = make(map[string]bool)
+	}
+	sm.state.WelcomedUsers[userID] = true
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
 }
 
 // load loads the state from disk.

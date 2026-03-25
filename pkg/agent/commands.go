@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -134,4 +135,30 @@ func (al *AgentLoop) handleProviderCommand(content string) (string, bool) {
 		})
 
 	return fmt.Sprintf("Provider: %s → %s\nModel: %s → %s", oldProvider, newProvider, oldModel, newModel), true
+}
+
+// handleStatusCommand handles the /status command to show system status.
+func (al *AgentLoop) handleStatusCommand(content string) (string, bool) {
+	if strings.TrimSpace(content) != "/status" {
+		return "", false
+	}
+
+	provider := al.cfg.Agents.Defaults.Provider
+	model := al.model
+	toolCount := al.tools.Count()
+
+	uptime := time.Since(al.startedAt)
+	var uptimeStr string
+	if h := int(uptime.Hours()); h > 24 {
+		uptimeStr = fmt.Sprintf("%dd %dh", h/24, h%24)
+	} else if h > 0 {
+		uptimeStr = fmt.Sprintf("%dh %dm", h, int(uptime.Minutes())%60)
+	} else {
+		uptimeStr = fmt.Sprintf("%dm", int(uptime.Minutes()))
+	}
+
+	status := fmt.Sprintf("📊 Estado del sistema\n\nProvider: %s\nModelo: %s\nTools: %d activos\nUptime: %s",
+		provider, model, toolCount, uptimeStr)
+
+	return status, true
 }

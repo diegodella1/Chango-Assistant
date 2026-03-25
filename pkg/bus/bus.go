@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -23,14 +24,16 @@ func NewMessageBus() *MessageBus {
 	}
 }
 
-func (mb *MessageBus) PublishInbound(msg InboundMessage) {
+func (mb *MessageBus) PublishInbound(msg InboundMessage) error {
 	select {
 	case mb.inbound <- msg:
+		return nil
 	case <-time.After(10 * time.Second):
 		logger.ErrorCF("bus", "PublishInbound timed out, message dropped", map[string]interface{}{
 			"channel":   msg.Channel,
 			"sender_id": msg.SenderID,
 		})
+		return fmt.Errorf("bus: PublishInbound timed out (channel: %s)", msg.Channel)
 	}
 }
 
@@ -43,15 +46,38 @@ func (mb *MessageBus) ConsumeInbound(ctx context.Context) (InboundMessage, bool)
 	}
 }
 
-func (mb *MessageBus) PublishOutbound(msg OutboundMessage) {
+func (mb *MessageBus) PublishOutbound(msg OutboundMessage) error {
 	select {
 	case mb.outbound <- msg:
+		return nil
 	case <-time.After(10 * time.Second):
 		logger.ErrorCF("bus", "PublishOutbound timed out, message dropped", map[string]interface{}{
 			"channel": msg.Channel,
 			"chat_id": msg.ChatID,
 		})
+		return fmt.Errorf("bus: PublishOutbound timed out (channel: %s, chat: %s)", msg.Channel, msg.ChatID)
 	}
+}
+
+// PublishOutboundWithRetry retries up to 3 times with backoff before giving up.
+func (mb *MessageBus) PublishOutboundWithRetry(msg OutboundMessage) error {
+	backoffs := []time.Duration{500 * time.Millisecond, 1 * time.Second, 2 * time.Second}
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		if err := mb.PublishOutbound(msg); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			if i < 2 {
+				logger.WarnCF("bus", "PublishOutbound retry", map[string]interface{}{
+					"attempt": i + 1,
+					"backoff": backoffs[i].String(),
+				})
+				time.Sleep(backoffs[i])
+			}
+		}
+	}
+	return fmt.Errorf("bus: publish failed after 3 retries: %w", lastErr)
 }
 
 func (mb *MessageBus) SubscribeOutbound(ctx context.Context) (OutboundMessage, bool) {

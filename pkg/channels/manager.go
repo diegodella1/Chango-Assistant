@@ -9,7 +9,9 @@ package channels
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
@@ -285,10 +287,44 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 				continue
 			}
 
-			if err := channel.Send(ctx, msg); err != nil {
-				logger.ErrorCF("channels", "Error sending message to channel", map[string]interface{}{
-					"channel": msg.Channel,
-					"error":   err.Error(),
+			// Retry with exponential backoff for transient errors
+			maxAttempts := 3
+			backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
+
+			var sendErr error
+			for attempt := 0; attempt < maxAttempts; attempt++ {
+				sendErr = channel.Send(ctx, msg)
+				if sendErr == nil {
+					break
+				}
+				if isPermanentSendError(sendErr) {
+					logger.ErrorCF("channels", "Permanent send error, not retrying", map[string]interface{}{
+						"channel": msg.Channel,
+						"error":   sendErr.Error(),
+					})
+					break
+				}
+				if ctx.Err() != nil {
+					break
+				}
+				if attempt < maxAttempts-1 {
+					logger.WarnCF("channels", "Send failed, retrying", map[string]interface{}{
+						"channel": msg.Channel,
+						"attempt": attempt + 1,
+						"backoff": backoffs[attempt].String(),
+						"error":   sendErr.Error(),
+					})
+					select {
+					case <-time.After(backoffs[attempt]):
+					case <-ctx.Done():
+					}
+				}
+			}
+			if sendErr != nil {
+				logger.ErrorCF("channels", "Error sending message after retries", map[string]interface{}{
+					"channel":  msg.Channel,
+					"attempts": maxAttempts,
+					"error":    sendErr.Error(),
 				})
 			}
 		}
@@ -355,4 +391,24 @@ func (m *Manager) SendToChannel(ctx context.Context, channelName, chatID, conten
 	}
 
 	return channel.Send(ctx, msg)
+}
+
+// isPermanentSendError returns true for errors that won't resolve with retry.
+func isPermanentSendError(err error) bool {
+	msg := err.Error()
+	permanentPatterns := []string{
+		"chat not found",
+		"bot was blocked",
+		"user is deactivated",
+		"invalid chat ID",
+		"not enough rights",
+		"CHAT_WRITE_FORBIDDEN",
+		"bot was kicked",
+	}
+	for _, pattern := range permanentPatterns {
+		if strings.Contains(msg, pattern) {
+			return true
+		}
+	}
+	return false
 }

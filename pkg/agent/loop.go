@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
@@ -53,6 +54,7 @@ type AgentLoop struct {
 	onEvent        func(string) // callback for real-time activity events (SSE)
 	tokenBudget    *telemetry.TokenBudget
 	scratchpad     *Scratchpad // per-session working memory (active thoughts)
+	startedAt      time.Time  // when the agent loop was created (for uptime)
 }
 
 // GetMemoryTool returns the memory tool for programmatic vault access (used by reasoning service).
@@ -170,6 +172,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		scoring:        NewScoringEngine(workspace),
 		tokenBudget:    tokenBudget,
 		scratchpad:     NewScratchpad(),
+		startedAt:      time.Now(),
 	}
 }
 
@@ -329,6 +332,11 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 
 	// Handle /model command
 	if response, handled := al.handleModelCommand(msg.Content); handled {
+		return response, nil, nil
+	}
+
+	// Handle /status command
+	if response, handled := al.handleStatusCommand(msg.Content); handled {
 		return response, nil, nil
 	}
 
@@ -717,6 +725,8 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			errMsg := err.Error()
 			var userMsg string
 			switch {
+			case strings.Contains(errMsg, "Loading model"):
+				userMsg = "El modelo local está cargando todavía. Esperá unos segundos y volvé a intentar."
 			case strings.Contains(errMsg, "429") || strings.Contains(errMsg, "rate"):
 				userMsg = "La API está saturada (rate limit). Intentá de nuevo en unos segundos."
 			case strings.Contains(errMsg, "500") || strings.Contains(errMsg, "502") || strings.Contains(errMsg, "503"):
