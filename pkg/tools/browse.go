@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -92,7 +94,7 @@ func (t *BrowseTool) Parameters() map[string]interface{} {
 			"action": map[string]interface{}{
 				"type":        "string",
 				"description": "Action: fetch/extract_links/extract_forms/submit (HTTP), navigate/click/fill/screenshot/wait/eval (browser+JS)",
-				"enum":        []string{"fetch", "extract_links", "extract_forms", "submit", "navigate", "click", "fill", "screenshot", "wait", "eval"},
+				"enum":        []string{"fetch", "extract_links", "extract_forms", "submit", "navigate", "click", "fill", "screenshot", "wait", "eval", "hn_login"},
 			},
 			"url": map[string]interface{}{
 				"type":        "string",
@@ -157,6 +159,10 @@ func (t *BrowseTool) Execute(ctx context.Context, args map[string]interface{}) *
 	selector, _ := args["selector"].(string)
 
 	switch action {
+	// Special: auto-login to HN reading credentials from workspace
+	case "hn_login":
+		return t.doHNLogin(ctx)
+
 	// HTTP actions (fast, no JS)
 	case "fetch":
 		return t.doFetch(ctx, urlStr)
@@ -639,6 +645,58 @@ func (t *BrowseTool) hasAttr(n *html.Node, key string) bool {
 		}
 	}
 	return false
+}
+
+// doHNLogin reads HN credentials from workspace and logs in via HTTP POST.
+// The LLM never sees the password — it stays internal to the tool.
+func (t *BrowseTool) doHNLogin(ctx context.Context) *ToolResult {
+	// Read password from workspace file
+	workspace := t.browser.workspace
+	pwFile := filepath.Join(workspace, "hn", "hn_password.tmp")
+	pwData, err := os.ReadFile(pwFile)
+	if err != nil {
+		return ErrorResult("No se encontraron credenciales de HN en workspace/hn/hn_password.tmp")
+	}
+	password := strings.TrimSpace(string(pwData))
+	username := "chango_ai"
+
+	// POST login form
+	formData := url.Values{
+		"acct": {username},
+		"pw":   {password},
+		"goto": {"news"},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://news.ycombinator.com/login",
+		strings.NewReader(formData.Encode()))
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to create login request: %v", err))
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", t.userAgent)
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("HN login request failed: %v", err))
+	}
+	defer resp.Body.Close()
+	io.ReadAll(resp.Body) // consume body
+
+	// Check if login succeeded by fetching the news page
+	checkReq, _ := http.NewRequestWithContext(ctx, "GET", "https://news.ycombinator.com/news", nil)
+	checkReq.Header.Set("User-Agent", t.userAgent)
+	checkResp, err := t.client.Do(checkReq)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to verify login: %v", err))
+	}
+	defer checkResp.Body.Close()
+	body, _ := t.readBody(checkResp.Body)
+
+	if strings.Contains(body, "logout") && strings.Contains(body, username) {
+		return SilentResult(fmt.Sprintf("Login exitoso en HN como '%s'. Las cookies están activas — podés usar fetch/extract_forms/submit en news.ycombinator.com.", username))
+	}
+
+	return ErrorResult("Login en HN falló — verificá las credenciales en workspace/hn/hn_password.tmp")
 }
 
 // resolveURL resolves a possibly-relative href against the base URL.
