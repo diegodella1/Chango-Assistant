@@ -50,8 +50,10 @@ type AgentLoop struct {
 	tracker        *telemetry.Tracker
 	subagentMgr    *tools.SubagentManager
 	scoring        *ScoringEngine
-	localProvider  providers.LLMProvider // local model for inner monologue (zero cost, private)
-	onEvent        func(string) // callback for real-time activity events (SSE)
+	localProvider      providers.LLMProvider // local model for inner monologue (zero cost, private)
+	backgroundProvider providers.LLMProvider // cheap cloud provider for background escalation (e.g. Groq)
+	backgroundModel    string                // model for background provider
+	onEvent            func(string)          // callback for real-time activity events (SSE)
 	tokenBudget    *telemetry.TokenBudget
 	scratchpad     *Scratchpad // per-session working memory (active thoughts)
 	startedAt      time.Time  // when the agent loop was created (for uptime)
@@ -66,6 +68,29 @@ func (al *AgentLoop) GetMemoryTool() *tools.MemoryTool {
 // SetLocalProvider sets a local LLM provider for inner monologue (zero cost, private).
 func (al *AgentLoop) SetLocalProvider(p providers.LLMProvider) {
 	al.localProvider = p
+}
+
+// SetBackgroundProvider sets a cheap cloud provider for background task escalation (e.g. Groq).
+// When heartbeat/cron/summarize escalate from local, they use this instead of the active chat provider.
+func (al *AgentLoop) SetBackgroundProvider(p providers.LLMProvider, model string) {
+	al.backgroundProvider = p
+	al.backgroundModel = model
+}
+
+// bgProvider returns the background provider if set, otherwise the main provider.
+func (al *AgentLoop) bgProvider() providers.LLMProvider {
+	if al.backgroundProvider != nil {
+		return al.backgroundProvider
+	}
+	return al.provider
+}
+
+// bgModel returns the background model if set, otherwise the main model.
+func (al *AgentLoop) bgModel() string {
+	if al.backgroundModel != "" {
+		return al.backgroundModel
+	}
+	return al.model
 }
 
 // SetEventCallback sets a function called on agent activity events (think, tool, memory, etc.)
@@ -533,6 +558,9 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 			"feature": opts.Feature,
 		})
 	}
+	// Escalation target: background provider (cheap, e.g. Groq) > active chat provider
+	escalationProvider := al.bgProvider()
+	escalationModel := al.bgModel()
 
 	// 4a. Tree of Thought for complex decisions (chat only)
 	totUsed := false
@@ -551,15 +579,18 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	if !totUsed {
 		finalContent, iteration, media, err = al.runLLMIteration(ctx, messages, opts)
 		if err != nil {
-			// If local provider failed, escalate to cloud
+			// If local provider failed, escalate to background provider (cheap cloud)
 			if useLocal {
-				logger.InfoCF("agent", "Local provider failed, escalating to cloud", map[string]interface{}{
-					"error": err.Error(),
+				logger.InfoCF("agent", "Local provider failed, escalating to background provider", map[string]interface{}{
+					"error":    err.Error(),
+					"provider": fmt.Sprintf("%T", escalationProvider),
 				})
-				al.provider = origProvider
-				al.model = origModel
+				al.provider = escalationProvider
+				al.model = escalationModel
 				useLocal = false // prevent double restore below
 				finalContent, iteration, media, err = al.runLLMIteration(ctx, messages, opts)
+				al.provider = origProvider
+				al.model = origModel
 			}
 			if err != nil {
 				return "", nil, err
@@ -569,17 +600,22 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 	// Restore original provider if we swapped to local
 	if useLocal {
-		// Check if local response is too short or low quality — escalate to cloud
+		// Check if local response is too short or low quality — escalate to background provider
 		needsEscalation := len(strings.TrimSpace(finalContent)) < 20 ||
 			strings.Contains(strings.ToLower(finalContent), "i don't know") ||
 			strings.Contains(strings.ToLower(finalContent), "no puedo")
 		al.provider = origProvider
 		al.model = origModel
 		if needsEscalation {
-			logger.InfoCF("agent", "Local response too short/uncertain, escalating to cloud", map[string]interface{}{
+			logger.InfoCF("agent", "Local response too short/uncertain, escalating to background provider", map[string]interface{}{
 				"local_response_len": len(finalContent),
+				"provider":           fmt.Sprintf("%T", escalationProvider),
 			})
+			al.provider = escalationProvider
+			al.model = escalationModel
 			finalContent, iteration, media, err = al.runLLMIteration(ctx, messages, opts)
+			al.provider = origProvider
+			al.model = origModel
 			if err != nil {
 				return "", nil, err
 			}
@@ -709,6 +745,7 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		response, err := al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
 			"max_tokens":  constants.DefaultMaxTokens,
 			"temperature": constants.DefaultTemperature,
+			"session_key": opts.SessionKey,
 		})
 
 		// Record token usage

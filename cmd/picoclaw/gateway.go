@@ -71,6 +71,17 @@ func gatewayCmd() {
 		}
 	}
 
+	// Set up background provider for cheap escalation (heartbeat/cron/summarize)
+	if cfg.Background.Provider != "" {
+		bgProv, err := providers.CreateProviderByName(cfg, cfg.Background.Provider)
+		if err == nil {
+			agentLoop.SetBackgroundProvider(bgProv, cfg.Background.Model)
+			fmt.Printf("✓ Background provider set: %s/%s (cheap escalation)\n", cfg.Background.Provider, cfg.Background.Model)
+		} else {
+			fmt.Printf("⚠ Background provider %q failed: %v\n", cfg.Background.Provider, err)
+		}
+	}
+
 	// Print agent startup info
 	fmt.Println("\n📦 Agent Status:")
 	startupInfo := agentLoop.GetStartupInfo()

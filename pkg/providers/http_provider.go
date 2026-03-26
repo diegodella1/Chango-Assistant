@@ -531,6 +531,44 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 	return wrapWithFallbackAndPrivacy(primary, cfg)
 }
 
+// CreateProviderByName creates a bare HTTP provider for the given provider name.
+// Used for background/escalation providers that don't need privacy routing or fallback wrapping.
+func CreateProviderByName(cfg *config.Config, providerName string) (LLMProvider, error) {
+	var apiKey, apiBase string
+	switch strings.ToLower(providerName) {
+	case "groq":
+		apiKey = cfg.Providers.Groq.APIKey
+		apiBase = cfg.Providers.Groq.APIBase
+		if apiBase == "" {
+			apiBase = "https://api.groq.com/openai/v1"
+		}
+	case "openai", "gpt":
+		apiKey = cfg.Providers.OpenAI.APIKey
+		apiBase = cfg.Providers.OpenAI.APIBase
+		if apiBase == "" {
+			apiBase = "https://api.openai.com/v1"
+		}
+	case "deepseek":
+		apiKey = cfg.Providers.DeepSeek.APIKey
+		apiBase = cfg.Providers.DeepSeek.APIBase
+		if apiBase == "" {
+			apiBase = "https://api.deepseek.com/v1"
+		}
+	case "openrouter":
+		apiKey = cfg.Providers.OpenRouter.APIKey
+		apiBase = cfg.Providers.OpenRouter.APIBase
+		if apiBase == "" {
+			apiBase = "https://openrouter.ai/api/v1"
+		}
+	default:
+		return nil, fmt.Errorf("unsupported background provider: %s", providerName)
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("no API key configured for background provider: %s", providerName)
+	}
+	return NewHTTPProvider(apiKey, apiBase, ""), nil
+}
+
 // wrapWithFallbackAndPrivacy wraps any provider with local fallback (on 429/5xx/timeout)
 // and privacy router if configured. All cloud providers should go through this.
 func wrapWithFallbackAndPrivacy(provider LLMProvider, cfg *config.Config) (LLMProvider, error) {

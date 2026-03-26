@@ -90,9 +90,10 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 
 		// Merge them
 		mergePrompt := fmt.Sprintf("Merge these two conversation summaries into one cohesive summary:\n\n1: %s\n\n2: %s", s1, s2)
-		resp, err := al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: mergePrompt}}, nil, al.model, map[string]interface{}{
-			"max_tokens":  1024,
-			"temperature": 0.3,
+		resp, err := al.bgProvider().Chat(ctx, []providers.Message{{Role: "user", Content: mergePrompt}}, nil, al.bgModel(), map[string]interface{}{
+			"max_tokens":   1024,
+			"temperature":  0.3,
+			"session_key": sessionKey,
 		})
 		if resp != nil && resp.Usage != nil && al.tracker != nil {
 			al.tracker.Record(telemetry.FeatureSummarize, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
@@ -120,14 +121,14 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 	// Only for real conversations (not heartbeat/cron), with enough messages to be meaningful
 	if al.memoryTool != nil && len(validMessages) >= 8 &&
 		sessionKey != "heartbeat" && !strings.HasPrefix(sessionKey, "cron:") {
-		al.distillMemories(ctx, validMessages)
+		al.distillMemories(ctx, validMessages, sessionKey)
 	}
 }
 
 // distillMemories extracts durable facts, decisions, preferences, and context from a conversation
 // batch and saves them to the obsidian vault automatically. This is the "subconscious" that
 // ensures conversations produce long-term learning without explicit user instructions.
-func (al *AgentLoop) distillMemories(ctx context.Context, batch []providers.Message) {
+func (al *AgentLoop) distillMemories(ctx context.Context, batch []providers.Message, sessionKey string) {
 	// Check token budget before spending on background distillation
 	if al.tokenBudget != nil && !al.tokenBudget.CanSpend(1500, true) {
 		logger.InfoCF("agent", "Skipping memory distillation — token budget exceeded", nil)
@@ -168,9 +169,10 @@ Return ONLY valid JSON array, no markdown fences:`
 	distillCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	resp, err := al.provider.Chat(distillCtx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.model, map[string]interface{}{
-		"max_tokens":  constants.SummarizeMaxTokens,
-		"temperature": constants.MinimalTemperature,
+	resp, err := al.bgProvider().Chat(distillCtx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.bgModel(), map[string]interface{}{
+		"max_tokens":   constants.SummarizeMaxTokens,
+		"temperature":  constants.MinimalTemperature,
+		"session_key": sessionKey,
 	})
 	if err != nil {
 		logger.WarnCF("agent", "Memory distillation failed", map[string]interface{}{"error": err.Error()})
@@ -241,7 +243,7 @@ func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Messa
 		prompt += fmt.Sprintf("%s: %s\n", m.Role, m.Content)
 	}
 
-	response, err := al.provider.Chat(ctx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.model, map[string]interface{}{
+	response, err := al.bgProvider().Chat(ctx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.bgModel(), map[string]interface{}{
 		"max_tokens":  constants.SummarizeMaxTokens,
 		"temperature": constants.LowTemperature,
 	})

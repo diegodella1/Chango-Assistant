@@ -93,8 +93,11 @@ type RSSFeed struct {
 }
 
 // BackgroundConfig controls token optimization for background processes.
+// When heartbeat/cron escalate from local model, they use Provider/Model instead of the active chat provider.
 type BackgroundConfig struct {
-	PreferLocal bool `json:"prefer_local" env:"PICOCLAW_BACKGROUND_PREFER_LOCAL"` // default true
+	PreferLocal bool   `json:"prefer_local" env:"PICOCLAW_BACKGROUND_PREFER_LOCAL"` // default true
+	Provider    string `json:"provider" env:"PICOCLAW_BACKGROUND_PROVIDER"`         // e.g. "groq" — escalation target (empty = use chat provider)
+	Model       string `json:"model" env:"PICOCLAW_BACKGROUND_MODEL"`               // e.g. "llama-3.3-70b-versatile"
 }
 
 // ReasoningConfig controls the background reasoning loop (local triage + cloud escalation).
