@@ -330,23 +330,47 @@ func (cb *ContextBuilder) buildFeedbackHint() string {
 	return sb.String()
 }
 
+// maxBootstrapChars caps bootstrap files to prevent system prompt from exceeding
+// provider token limits. Groq free tier = 12K TPM, so ~8000 chars of bootstrap
+// leaves room for tools, memory, and conversation.
+const maxBootstrapChars = 20000
+
 func (cb *ContextBuilder) LoadBootstrapFiles() string {
+	// Priority order: AGENTS.md is most important, then IDENTITY, then SOUL
 	bootstrapFiles := []string{
 		"AGENTS.md",
+		"IDENTITY.md",
 		"SOUL.md",
 		"USER.md",
-		"IDENTITY.md",
 	}
 
-	var result string
+	var parts []string
+	totalChars := 0
 	for _, filename := range bootstrapFiles {
 		filePath := filepath.Join(cb.workspace, filename)
-		if data, err := os.ReadFile(filePath); err == nil {
-			result += fmt.Sprintf("## %s\n\n%s\n\n", filename, string(data))
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
 		}
+		content := string(data)
+		// If adding this file would exceed budget, truncate it
+		if totalChars+len(content) > maxBootstrapChars {
+			remaining := maxBootstrapChars - totalChars
+			if remaining > 500 {
+				// Truncate at rune boundary
+				runes := []rune(content)
+				if len(runes) > remaining {
+					content = string(runes[:remaining]) + "\n\n[..." + filename + " truncated for context budget]"
+				}
+				parts = append(parts, fmt.Sprintf("## %s\n\n%s\n\n", filename, content))
+			}
+			break // no more files fit
+		}
+		parts = append(parts, fmt.Sprintf("## %s\n\n%s\n\n", filename, content))
+		totalChars += len(content)
 	}
 
-	return result
+	return strings.Join(parts, "")
 }
 
 func (cb *ContextBuilder) BuildMessages(history []providers.Message, summary string, currentMessage string, media []string, channel, chatID string) []providers.Message {
