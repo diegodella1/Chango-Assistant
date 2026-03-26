@@ -18,7 +18,8 @@ import (
 const (
 	browseMaxBodySize = 500 * 1024 // 500KB
 	browseMaxText     = 5000
-	browseUserAgent   = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	browseUserAgent   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	browseMaxTimeout  = 30 // seconds — cap for browser actions
 )
 
 // BrowseTool provides structured web browsing: fetch pages, extract links/forms, submit forms.
@@ -64,7 +65,7 @@ func NewBrowseTool(workspace string) *BrowseTool {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
 		Jar:     jar,
-		Timeout: 15 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 	return &BrowseTool{
 		client:      client,
@@ -151,10 +152,13 @@ func (t *BrowseTool) Execute(ctx context.Context, args map[string]interface{}) *
 		return ErrorResult("missing host in URL")
 	}
 
-	// Parse timeout for browser actions (default 30s)
+	// Parse timeout for browser actions (default 30s, max 30s)
 	timeoutSec := 30
 	if t, ok := args["timeout"].(float64); ok && t > 0 {
 		timeoutSec = int(t)
+	}
+	if timeoutSec > browseMaxTimeout {
+		timeoutSec = browseMaxTimeout
 	}
 	selector, _ := args["selector"].(string)
 

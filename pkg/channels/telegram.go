@@ -52,7 +52,6 @@ type TelegramChannel struct {
 	stopThinking sync.Map // chatID -> thinkingCancel
 	voiceInput   sync.Map // chatID -> bool (true if last input was voice/audio)
 	adminUserID  string   // admin user ID for /join, /leave commands
-	welcomed     sync.Map // senderID -> bool (welcome message sent this session)
 }
 
 var defaultModels = []string{
@@ -192,6 +191,8 @@ func (c *TelegramChannel) startPolling(ctx context.Context) error {
 func (c *TelegramChannel) reconnectPolling(ctx context.Context) {
 	backoff := 2 * time.Second
 	maxBackoff := 5 * time.Minute
+	conflictRetries := 0
+	const maxConflictRetries = 3
 
 	for {
 		select {
@@ -205,8 +206,30 @@ func (c *TelegramChannel) reconnectPolling(ctx context.Context) {
 		})
 
 		if err := c.startPolling(ctx); err != nil {
+			errStr := err.Error()
+			isConflict := strings.Contains(errStr, "409") || strings.Contains(errStr, "Conflict")
+
+			if isConflict {
+				conflictRetries++
+				logger.WarnCF("telegram", "Another bot instance is polling this token — stopping this instance", map[string]interface{}{
+					"attempt": conflictRetries,
+					"max":     maxConflictRetries,
+				})
+				if conflictRetries >= maxConflictRetries {
+					logger.ErrorCF("telegram", "Max 409 conflict retries reached, stopping polling permanently", map[string]interface{}{
+						"retries": conflictRetries,
+					})
+					return
+				}
+				backoff = 30 * time.Second
+				continue
+			}
+
+			// Reset conflict counter on non-conflict errors
+			conflictRetries = 0
+
 			logger.ErrorCF("telegram", "Reconnect failed", map[string]interface{}{
-				"error": err.Error(),
+				"error": errStr,
 			})
 			backoff *= 2
 			if backoff > maxBackoff {
@@ -245,9 +268,8 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 		c.stopThinking.Delete(msg.ChatID)
 	}
 
-	// Delete placeholder before sending voice or text
-	if pID, ok := c.placeholders.Load(msg.ChatID); ok {
-		c.placeholders.Delete(msg.ChatID)
+	// Delete placeholder before sending voice or text (atomic to avoid race)
+	if pID, ok := c.placeholders.LoadAndDelete(msg.ChatID); ok {
 		_ = c.bot.DeleteMessage(ctx, &telego.DeleteMessageParams{
 			ChatID:    tu.ID(chatID),
 			MessageID: pID.(int),
@@ -509,11 +531,8 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 		return
 	}
 
-	// Send welcome message on first interaction (once per session)
-	if _, already := c.welcomed.LoadOrStore(senderID, true); !already {
-		welcome := tu.Message(tu.ID(chatID), "¡Hola! Soy Chango 🐒 — agente autónomo de Diego.\nEscribí /help para ver qué puedo hacer.")
-		_, _ = c.bot.SendMessage(ctx, welcome)
-	}
+		// Welcome removed: Chango personality comes from AGENTS.md system prompt.
+	// Hardcoded greeting reset on every restart and felt robotic.
 
 	content := ""
 	mediaPaths := []string{}
@@ -607,7 +626,7 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 						"error": err.Error(),
 						"path":  voicePath,
 					})
-					transcribedText = fmt.Sprintf("[voice (transcription failed)]")
+					transcribedText = "[No pude transcribir el audio — intentá de nuevo o escribí el mensaje]"
 				} else {
 					transcribedText = fmt.Sprintf("[voice transcription: %s]", result.Text)
 					logger.InfoCF("telegram", "Voice transcribed successfully", map[string]interface{}{

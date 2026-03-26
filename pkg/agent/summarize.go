@@ -37,6 +37,11 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
+	// Opportunistic cleanup: remove stale scratchpad sessions (>2h idle)
+	if al.scratchpad != nil {
+		al.scratchpad.CleanupStale(2 * time.Hour)
+	}
+
 	history := al.sessions.GetHistory(sessionKey)
 	summary := al.sessions.GetSummary(sessionKey)
 
@@ -57,8 +62,8 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
 		}
-		// Estimate tokens for this message
-		msgTokens := len(m.Content) / 4
+		// Estimate tokens: /3 is more conservative than /4, better for Spanish/UTF-8 with diacritics and emojis
+		msgTokens := len(m.Content) / 3
 		if msgTokens > maxMessageTokens {
 			omitted = true
 			continue
@@ -113,15 +118,17 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 
 	if finalSummary != "" {
 		al.sessions.SetSummary(sessionKey, finalSummary)
+
+		// Auto-distill memories BEFORE truncating history.
+		// If distillation fails, we still have the full history as fallback.
+		if al.memoryTool != nil && len(validMessages) >= 8 &&
+			sessionKey != "heartbeat" && !strings.HasPrefix(sessionKey, "cron:") {
+			al.distillMemories(ctx, validMessages, sessionKey)
+		}
+
+		// Only truncate after summary and distillation are complete
 		al.sessions.TruncateHistory(sessionKey, 4)
 		al.sessions.Save(sessionKey)
-	}
-
-	// Auto-distill memories from the conversation being summarized
-	// Only for real conversations (not heartbeat/cron), with enough messages to be meaningful
-	if al.memoryTool != nil && len(validMessages) >= 8 &&
-		sessionKey != "heartbeat" && !strings.HasPrefix(sessionKey, "cron:") {
-		al.distillMemories(ctx, validMessages, sessionKey)
 	}
 }
 

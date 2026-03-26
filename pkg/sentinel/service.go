@@ -56,10 +56,19 @@ func NewService(cfg Config, stateMgr *state.Manager) *Service {
 	if cfg.IntervalSeconds <= 0 {
 		cfg.IntervalSeconds = 120
 	}
+	// Pre-populate alert throttle times so we don't fire alerts immediately on restart.
+	// After 30 minutes the throttle expires and normal alerting resumes.
+	coldStart := time.Now().Add(-30 * time.Minute)
+	alertThrottle := map[string]time.Time{
+		"cpu_temp": coldStart,
+		"ram":      coldStart,
+		"disk":     coldStart,
+	}
+
 	return &Service{
 		cfg:           cfg,
 		state:         stateMgr,
-		lastAlertTime: make(map[string]time.Time),
+		lastAlertTime: alertThrottle,
 	}
 }
 

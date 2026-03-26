@@ -53,10 +53,10 @@ var builtinPatterns = []privacyPattern{
 	{regexp.MustCompile(`(?i)\b(?:password|contraseña|clave|secret|token|api[_\s]?key)\s*[:=]\s*\S+`), "credential_pattern", 1.0},
 	// Argentine DNI (XX.XXX.XXX or XXXXXXXX)
 	{regexp.MustCompile(`\b\d{2}[\.\-]\d{3}[\.\-]\d{3}\b`), "dni_pattern", 0.7},
-	// Phone numbers (Argentine format)
-	{regexp.MustCompile(`\b(?:\+?54|0)?(?:11|[2-9]\d)\d{8}\b`), "phone_pattern", 0.5},
-	// Email addresses
-	{regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b`), "email_pattern", 0.3},
+	// Phone numbers (Argentine format) — low weight, common false positives with dates/IDs
+	{regexp.MustCompile(`\b(?:\+?54|0)?(?:11|[2-9]\d)\d{8}\b`), "phone_pattern", 0.3},
+	// Email addresses — very low weight, emails appear in normal conversation
+	{regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b`), "email_pattern", 0.1},
 	// Medical terms (Spanish)
 	{regexp.MustCompile(`(?i)\b(?:diagn[oó]s|medicament|receta\s+m[eé]dica|tratamiento\s+m[eé]dico|s[ií]ntoma|biopsia|an[aá]lisis\s+de\s+sangre)\b`), "medical_pattern", 0.8},
 	// Financial terms with personal context (Spanish)
@@ -125,8 +125,9 @@ func (pc *PrivacyClassifier) Classify(ctx context.Context, messages []Message) C
 		return ClassifyResult{Level: Sensitive, Reason: reason, Score: score}
 	}
 
-	// Ambiguous zone (0.5 - 1.0) — fail-closed or safe
-	if score >= 0.5 && pc.cfg.FailClosed {
+	// Ambiguous zone — fail-closed only for high-confidence patterns (>= 0.8)
+	// Low-weight patterns (email 0.1, phone 0.3) should NOT trigger fail-closed
+	if score >= 0.8 && pc.cfg.FailClosed {
 		return ClassifyResult{Level: Sensitive, Reason: reason + "_fail_closed", Score: score}
 	}
 

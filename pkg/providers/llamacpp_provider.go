@@ -384,8 +384,14 @@ func LlamaCppModelInfo() []map[string]string {
 
 // --- Fallback support ---
 
+// contextKey is an unexported type for context keys to avoid collisions.
+type contextKey string
+
+const fallbackDepthKey contextKey = "fallback_depth"
+
 // FallbackProvider wraps a primary and local fallback provider.
 // If the primary fails (network error, timeout), it falls back to local.
+// A depth counter in the context prevents recursive fallback chains.
 type FallbackProvider struct {
 	Primary  LLMProvider
 	Fallback LLMProvider
@@ -396,9 +402,24 @@ func NewFallbackProvider(primary, fallback LLMProvider) *FallbackProvider {
 }
 
 func (f *FallbackProvider) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) (*LLMResponse, error) {
+	// Check fallback depth to prevent recursive nesting
+	depth := 0
+	if d, ok := ctx.Value(fallbackDepthKey).(int); ok {
+		depth = d
+	}
+
 	resp, err := f.Primary.Chat(ctx, messages, tools, model, options)
 	if err == nil {
 		return resp, nil
+	}
+
+	// If we're already in a nested fallback, don't go deeper
+	if depth > 1 {
+		logger.WarnCF("fallback", "Max fallback depth reached, returning primary error", map[string]interface{}{
+			"depth": depth,
+			"error": err.Error(),
+		})
+		return nil, err
 	}
 
 	// Only fallback on network/server errors and rate limits, not on bad requests
@@ -420,21 +441,25 @@ func (f *FallbackProvider) Chat(ctx context.Context, messages []Message, tools [
 
 	logger.WarnCF("fallback", "Primary provider failed, falling back to local", map[string]interface{}{
 		"error": errStr,
+		"depth": depth,
 	})
+
+	// Increment depth in context before calling fallback
+	fbCtx := context.WithValue(ctx, fallbackDepthKey, depth+1)
 
 	// Strip tools for small local models (unreliable tool calling).
 	// If local model is still loading (503), retry with patience — it needs time to init.
-	resp, err = f.Fallback.Chat(ctx, messages, nil, "", options)
+	resp, err = f.Fallback.Chat(fbCtx, messages, nil, "", options)
 	if err != nil && strings.Contains(err.Error(), "Loading model") {
 		logger.InfoCF("fallback", "Local model is loading, waiting for it to be ready...", nil)
 		for attempt := 0; attempt < 4; attempt++ {
 			wait := time.Duration(5*(attempt+1)) * time.Second // 5s, 10s, 15s, 20s
 			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
+			case <-fbCtx.Done():
+				return nil, fbCtx.Err()
 			case <-time.After(wait):
 			}
-			resp, err = f.Fallback.Chat(ctx, messages, nil, "", options)
+			resp, err = f.Fallback.Chat(fbCtx, messages, nil, "", options)
 			if err == nil {
 				return resp, nil
 			}

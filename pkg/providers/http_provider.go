@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -111,10 +112,12 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 				"attempt": attempt + 1,
 				"backoff": backoffs[attempt-1].String(),
 			})
+			// Add jitter (0-1s) to prevent thundering herd on recovery
+			jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-			case <-time.After(backoffs[attempt-1]):
+			case <-time.After(backoffs[attempt-1] + jitter):
 			}
 		}
 
@@ -210,6 +213,9 @@ func (p *HTTPProvider) parseResponse(body []byte) (*LLMResponse, error) {
 			name = tc.Function.Name
 			if tc.Function.Arguments != "" {
 				if err := json.Unmarshal([]byte(tc.Function.Arguments), &arguments); err != nil {
+					logger.WarnCF("provider", "Malformed tool arguments JSON, using raw fallback", map[string]interface{}{
+						"tool": name, "error": err.Error(),
+					})
 					arguments["raw"] = tc.Function.Arguments
 				}
 			}
@@ -218,6 +224,9 @@ func (p *HTTPProvider) parseResponse(body []byte) (*LLMResponse, error) {
 			name = tc.Function.Name
 			if tc.Function.Arguments != "" {
 				if err := json.Unmarshal([]byte(tc.Function.Arguments), &arguments); err != nil {
+					logger.WarnCF("provider", "Malformed tool arguments JSON, using raw fallback", map[string]interface{}{
+						"tool": name, "error": err.Error(),
+					})
 					arguments["raw"] = tc.Function.Arguments
 				}
 			}

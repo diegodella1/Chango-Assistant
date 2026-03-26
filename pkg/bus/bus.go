@@ -18,8 +18,8 @@ type MessageBus struct {
 
 func NewMessageBus() *MessageBus {
 	return &MessageBus{
-		inbound:  make(chan InboundMessage, 100),
-		outbound: make(chan OutboundMessage, 100),
+		inbound:  make(chan InboundMessage, 500),
+		outbound: make(chan OutboundMessage, 500),
 		handlers: make(map[string]MessageHandler),
 	}
 }

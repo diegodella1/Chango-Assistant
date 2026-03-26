@@ -84,6 +84,9 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 
 	start := time.Now()
 	resultCh := make(chan *ToolResult, 1)
+	// Known limitation: if the tool ignores context cancellation the goroutine will
+	// leak until the tool returns on its own. We rely on toolCancel() (deferred above)
+	// to signal cancellation promptly, but cannot force-kill the goroutine.
 	go func() {
 		resultCh <- tool.Execute(toolCtx, args)
 	}()
@@ -93,6 +96,8 @@ func (r *ToolRegistry) ExecuteWithContext(ctx context.Context, name string, args
 	case result = <-resultCh:
 		// Tool completed normally
 	case <-toolCtx.Done():
+		// Cancel context immediately so well-behaved tools can exit fast.
+		toolCancel()
 		result = ErrorResult(fmt.Sprintf("tool %q timed out after %v", name, toolTimeout))
 	}
 	duration := time.Since(start)

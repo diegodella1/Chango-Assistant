@@ -212,6 +212,11 @@ func (cb *ContextBuilder) buildMemoryContext(query string) string {
 	// 2. Relevant notes via TF-IDF search (if we have a query and memoryTool)
 	if query != "" && cb.memoryTool != nil {
 		relevant := cb.memoryTool.SearchNotes(query, 10)
+		if len(relevant) == 0 {
+			logger.DebugCF("agent", "TF-IDF memory search returned 0 results", map[string]interface{}{
+				"query": query,
+			})
+		}
 		if len(relevant) > 0 {
 			var relevantParts []string
 			totalChars := 0
@@ -261,8 +266,9 @@ func (cb *ContextBuilder) buildMemoryContext(query string) string {
 	}
 	result = fmt.Sprintf("# Memory (Obsidian Vault)\n\n%s", result)
 
-	if len(result) > maxMemoryChars {
-		result = result[:maxMemoryChars] + "\n\n[...memory truncated for context efficiency]"
+	// Truncate at rune boundary to avoid splitting multi-byte UTF-8 chars (emojis, accents)
+	if runes := []rune(result); len(runes) > maxMemoryChars {
+		result = string(runes[:maxMemoryChars]) + "\n\n[...memory truncated for context efficiency]"
 	}
 
 	return result

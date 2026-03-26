@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
@@ -25,12 +26,24 @@ type PrivacyRouter struct {
 	classifier *PrivacyClassifier
 	logEnabled bool
 
-	// Per-session sensitivity tracking: once a session has sensitive data,
-	// it stays local for the rest of the conversation.
-	sensitiveSessions sync.Map // string → bool
+	// Per-session sensitivity tracking with TTL: sensitive sessions decay
+	// after a period of inactivity or message count.
+	sensitiveSessions sync.Map // string → *sensitiveSession
 
 	stats PrivacyStats
 }
+
+// sensitiveSession tracks when and why a session was marked sensitive.
+type sensitiveSession struct {
+	MarkedAt  time.Time
+	MsgCount  int // messages since marked
+	Reason    string
+}
+
+const (
+	sensitiveSessionTTL      = 30 * time.Minute // decay after 30 min
+	sensitiveSessionMaxMsgs  = 5                 // decay after 5 messages
+)
 
 // NewPrivacyRouter creates a privacy-aware provider wrapper.
 func NewPrivacyRouter(cloud, local LLMProvider, classifier *PrivacyClassifier, logEnabled bool) *PrivacyRouter {
@@ -49,10 +62,32 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 	// Extract session key from options if available (set by agent loop)
 	sessionKey, _ := options["session_key"].(string)
 
-	// Check if this session is already marked as sensitive
+	// Check if this session is marked as sensitive (with TTL decay)
 	if sessionKey != "" {
-		if _, found := pr.sensitiveSessions.Load(sessionKey); found {
-			return pr.routeLocal(ctx, messages, options, "session_locked")
+		if val, found := pr.sensitiveSessions.Load(sessionKey); found {
+			ss := val.(*sensitiveSession)
+			ss.MsgCount++
+
+			// Decay: unlock session after TTL or message count
+			if time.Since(ss.MarkedAt) > sensitiveSessionTTL || ss.MsgCount > sensitiveSessionMaxMsgs {
+				pr.sensitiveSessions.Delete(sessionKey)
+				logger.InfoCF("privacy", "Session sensitivity expired", map[string]interface{}{
+					"session": sessionKey,
+					"reason":  ss.Reason,
+					"msgs":    ss.MsgCount,
+				})
+				// Fall through to normal classification
+			} else {
+				// Still locked — but if tools are requested, escalate to cloud
+				// (local model can't use tools reliably)
+				if len(tools) > 0 {
+					logger.InfoCF("privacy", "Session locked but tools needed — escalating to cloud", map[string]interface{}{
+						"session": sessionKey,
+					})
+					return pr.routeCloud(ctx, messages, tools, model, options)
+				}
+				return pr.routeLocal(ctx, messages, options, "session_locked")
+			}
 		}
 	}
 
@@ -60,11 +95,27 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 	result := pr.classifier.Classify(ctx, messages)
 
 	if result.Level == Sensitive {
-		// Mark session as sensitive from now on
+		// Mark session as sensitive with decay tracking
 		if sessionKey != "" {
-			pr.sensitiveSessions.Store(sessionKey, true)
+			pr.sensitiveSessions.Store(sessionKey, &sensitiveSession{
+				MarkedAt: time.Now(),
+				MsgCount: 0,
+				Reason:   result.Reason,
+			})
 		}
 		atomic.AddInt64(&pr.stats.Catches, 1)
+
+		// Even for sensitive content: if tools are requested, escalate to cloud.
+		// The local model (Qwen 0.5B) can't generate tool calls reliably.
+		// Trade-off: privacy vs functionality — functionality wins when tools are needed.
+		if len(tools) > 0 {
+			logger.WarnCF("privacy", "Sensitive content detected but tools needed — routing to cloud", map[string]interface{}{
+				"reason": result.Reason,
+				"score":  result.Score,
+			})
+			return pr.routeCloud(ctx, messages, tools, model, options)
+		}
+
 		return pr.routeLocal(ctx, messages, options, result.Reason)
 	}
 

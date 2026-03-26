@@ -168,6 +168,22 @@ func (s *Scratchpad) Clear(sessionKey string) {
 	delete(s.sessions, sessionKey)
 }
 
+// CleanupStale removes scratchpad sessions that haven't been updated in the given duration.
+// Call periodically (e.g., from heartbeat or summarization) to prevent memory leaks.
+func (s *Scratchpad) CleanupStale(maxAge time.Duration) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cutoff := time.Now().Add(-maxAge)
+	removed := 0
+	for key, state := range s.sessions {
+		if state.UpdatedAt.Before(cutoff) {
+			delete(s.sessions, key)
+			removed++
+		}
+	}
+	return removed
+}
+
 // --- Heuristic helpers ---
 
 // extractTopic extracts a short topic label from a message using meaningful words.

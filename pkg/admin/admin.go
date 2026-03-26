@@ -46,15 +46,16 @@ var allowedFiles = []string{
 }
 
 type Handler struct {
-	workspacePath string
-	token         string
-	configPath    string
-	config        *config.Config
-	cronService   *cron.CronService
-	lightsTool    *tools.LightsTool
-	reloadFn      func() error
-	version       string
-	eventBus      *EventBus
+	workspacePath  string
+	token          string
+	tokenCreatedAt time.Time
+	configPath     string
+	config         *config.Config
+	cronService    *cron.CronService
+	lightsTool     *tools.LightsTool
+	reloadFn       func() error
+	version        string
+	eventBus       *EventBus
 }
 
 // EventBus broadcasts real-time agent activity events to SSE clients.
@@ -96,11 +97,12 @@ func (eb *EventBus) unsubscribe(ch chan string) {
 
 func New(workspacePath, token, configPath string, cfg *config.Config) *Handler {
 	return &Handler{
-		workspacePath: workspacePath,
-		token:         token,
-		configPath:    configPath,
-		config:        cfg,
-		eventBus:      newEventBus(),
+		workspacePath:  workspacePath,
+		token:          token,
+		tokenCreatedAt: time.Now(),
+		configPath:     configPath,
+		config:         cfg,
+		eventBus:       newEventBus(),
 	}
 }
 
@@ -173,7 +175,31 @@ func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
+			// Nudge: warn if token has been active for over 24 hours
+			if time.Since(h.tokenCreatedAt) > 24*time.Hour {
+				logger.WarnCF("admin", "Admin token is over 24h old, consider rotating", nil)
+			}
 		}
+
+		// CSRF protection for state-changing methods: verify Origin matches request host
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				origin = r.Header.Get("Referer")
+			}
+			if origin != "" {
+				expectedHost := r.Host
+				if !strings.Contains(origin, expectedHost) {
+					logger.WarnCF("admin", "CSRF check failed: origin mismatch", map[string]interface{}{
+						"origin": origin,
+						"host":   expectedHost,
+					})
+					http.Error(w, "Forbidden: origin mismatch", http.StatusForbidden)
+					return
+				}
+			}
+		}
+
 		next(w, r)
 	}
 }

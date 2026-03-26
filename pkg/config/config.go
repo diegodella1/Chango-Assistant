@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 // FlexibleStringSlice is a []string that also accepts JSON numbers,
@@ -552,6 +553,21 @@ func LoadConfig(path string) (*Config, error) {
 
 	if err := env.Parse(cfg); err != nil {
 		return nil, err
+	}
+
+	// Warn about missing critical configuration (non-fatal)
+	if cfg.Channels.Telegram.Enabled && cfg.Channels.Telegram.Token == "" {
+		logger.WarnCF("config", "Telegram token not configured", nil)
+	}
+	if cfg.Providers.Groq.APIKey == "" &&
+		cfg.Providers.OpenAI.APIKey == "" &&
+		cfg.Providers.Anthropic.APIKey == "" &&
+		cfg.Providers.OpenRouter.APIKey == "" &&
+		cfg.Providers.Gemini.APIKey == "" &&
+		cfg.Providers.DeepSeek.APIKey == "" &&
+		cfg.Providers.Zhipu.APIKey == "" &&
+		!cfg.Providers.LlamaCpp.Enabled {
+		logger.WarnCF("config", "No LLM provider API keys configured", nil)
 	}
 
 	return cfg, nil

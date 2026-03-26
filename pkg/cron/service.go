@@ -278,13 +278,27 @@ func (cs *CronService) computeNextRun(schedule *CronSchedule, nowMS int64) *int6
 
 		// Use gronx to calculate next run time
 		now := time.UnixMilli(nowMS)
-		nextTime, err := gronx.NextTickAfter(schedule.Expr, now, false)
+
+		// Apply timezone if specified, default to local
+		loc := time.Local
+		if schedule.TZ != "" {
+			parsed, err := time.LoadLocation(schedule.TZ)
+			if err != nil {
+				logger.WarnCF("cron", "Invalid timezone, using local", map[string]interface{}{"tz": schedule.TZ, "error": err.Error()})
+			} else {
+				loc = parsed
+			}
+		}
+		nowInTZ := now.In(loc)
+
+		nextTime, err := gronx.NextTickAfter(schedule.Expr, nowInTZ, false)
 		if err != nil {
 			logger.ErrorCF("cron", "Failed to compute next run", map[string]interface{}{"expr": schedule.Expr, "error": err.Error()})
 			return nil
 		}
 
-		nextMS := nextTime.UnixMilli()
+		// Convert back to UTC for consistent storage
+		nextMS := nextTime.UTC().UnixMilli()
 		return &nextMS
 	}
 

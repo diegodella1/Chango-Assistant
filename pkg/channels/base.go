@@ -48,34 +48,31 @@ func (c *BaseChannel) IsAllowed(senderID string) bool {
 		return true
 	}
 
-	// Extract parts from compound senderID like "123456|username"
+	// Extract numeric ID from compound senderID like "123456|username"
 	idPart := senderID
-	userPart := ""
 	if idx := strings.Index(senderID, "|"); idx > 0 {
 		idPart = senderID[:idx]
-		userPart = senderID[idx+1:]
 	}
 
 	for _, allowed := range c.allowList {
-		// Strip leading "@" from allowed value for username matching
 		trimmed := strings.TrimPrefix(allowed, "@")
-		allowedID := trimmed
-		allowedUser := ""
-		if idx := strings.Index(trimmed, "|"); idx > 0 {
-			allowedID = trimmed[:idx]
-			allowedUser = trimmed[idx+1:]
+
+		// Exact full match (e.g. "123|user" == "123|user")
+		if senderID == trimmed {
+			return true
 		}
 
-		// Support either side using "id|username" compound form.
-		// This keeps backward compatibility with legacy Telegram allowlist entries.
-		if senderID == allowed ||
-			idPart == allowed ||
-			senderID == trimmed ||
-			idPart == trimmed ||
-			idPart == allowedID ||
-			(allowedUser != "" && senderID == allowedUser) ||
-			(userPart != "" && (userPart == allowed || userPart == trimmed || userPart == allowedUser)) {
+		// Allowed entry is a plain numeric ID — match against sender's numeric part
+		if !strings.Contains(trimmed, "|") && idPart == trimmed {
 			return true
+		}
+
+		// Allowed entry is compound "id|user" — only match if numeric IDs match
+		if idx := strings.Index(trimmed, "|"); idx > 0 {
+			allowedID := trimmed[:idx]
+			if idPart == allowedID {
+				return true
+			}
 		}
 	}
 

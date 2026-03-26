@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 // Pre-compiled regex patterns for HTML extraction
@@ -23,7 +25,7 @@ var (
 )
 
 const (
-	userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
 type SearchProvider interface {
@@ -191,7 +193,11 @@ func (p *DuckDuckGoSearchProvider) extractResults(html string, count int, query 
 	matches := reDDGLink.FindAllStringSubmatch(html, count+5)
 
 	if len(matches) == 0 {
-		return fmt.Sprintf("No results found or extraction failed. Query: %s", query), nil
+		logger.WarnCF("web", "DDG regex matched 0 results — provider may have blocked the request", map[string]interface{}{
+			"query":    query,
+			"html_len": len(html),
+		})
+		return fmt.Sprintf("No results found for: %s (search provider may have blocked the request — try again later)", query), nil
 	}
 
 	var lines []string
