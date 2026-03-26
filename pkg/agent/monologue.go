@@ -2,6 +2,10 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/constants"
@@ -92,5 +96,59 @@ User's message: ` + userMessage
 		"chars": len(resp.Content),
 	})
 
-	return resp.Content
+	// Persist notable monologue decisions for pattern analysis
+	content := resp.Content
+	lower := strings.ToLower(content)
+	if strings.Contains(lower, "challenge") || strings.Contains(lower, "execute") || strings.Contains(lower, "disagree") {
+		al.recordMonologueDecision(userMessage, content)
+	}
+
+	return content
+}
+
+// monologueEntry records a notable inner monologue decision.
+type monologueEntry struct {
+	Timestamp string `json:"timestamp"`
+	Trigger   string `json:"trigger"` // user message excerpt
+	Decision  string `json:"decision"` // monologue output excerpt
+}
+
+// recordMonologueDecision persists notable monologue decisions (challenge/execute)
+// so the reasoning loop can analyze decision patterns over time.
+func (al *AgentLoop) recordMonologueDecision(userMsg, monologue string) {
+	logPath := filepath.Join(al.workspace, "state", "monologue_log.json")
+
+	var entries []monologueEntry
+	if data, err := os.ReadFile(logPath); err == nil {
+		json.Unmarshal(data, &entries)
+	}
+
+	// Truncate to keep entries concise
+	trigger := userMsg
+	if len(trigger) > 100 {
+		trigger = trigger[:100] + "..."
+	}
+	decision := monologue
+	if len(decision) > 200 {
+		decision = decision[:200] + "..."
+	}
+
+	entries = append(entries, monologueEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Trigger:   trigger,
+		Decision:  decision,
+	})
+
+	// Keep last 100 entries
+	if len(entries) > 100 {
+		entries = entries[len(entries)-100:]
+	}
+
+	if data, err := json.MarshalIndent(entries, "", "  "); err == nil {
+		os.MkdirAll(filepath.Dir(logPath), 0755)
+		tmp := logPath + ".tmp"
+		if err := os.WriteFile(tmp, data, 0644); err == nil {
+			os.Rename(tmp, logPath)
+		}
+	}
 }

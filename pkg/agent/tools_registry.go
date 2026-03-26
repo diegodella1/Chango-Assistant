@@ -101,6 +101,15 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	// GitHub (gh CLI)
 	registry.Register(tools.NewGithubTool())
 
+	// Git operations (commit, push, branch management)
+	registry.Register(tools.NewGitTool("/home/diego/Documents/picoclaw"))
+
+	// Coolify deploy
+	registry.Register(tools.NewDeployTool())
+
+	// Workflow engine (multi-step with state persistence and error recovery)
+	registry.Register(tools.NewWorkflowTool(workspace, registry))
+
 	// HTTP request
 	registry.Register(tools.NewHTTPRequestTool())
 

@@ -162,6 +162,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 	contextBuilder.SetModel(cfg.Agents.Defaults.Model)
 	contextBuilder.SetKnowledgeLoader(knowledgeLoader)
 	contextBuilder.SetExperiments(experimentsStore)
+	contextBuilder.SetScoring(NewScoringEngine(workspace))
 	contextBuilder.SetMemoryTool(toolsResult.memoryTool)
 
 	// Wire system prompt builder so subagents inherit the main agent's personality

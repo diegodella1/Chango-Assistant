@@ -25,6 +25,7 @@ type ContextBuilder struct {
 	model           string
 	knowledgeLoader *knowledge.Loader
 	experiments     *experiments.Store
+	scoring         *ScoringEngine // For feedback loop: correction patterns → behavior adaptation
 }
 
 func getGlobalConfigDir() string {
@@ -67,6 +68,11 @@ func (cb *ContextBuilder) SetKnowledgeLoader(loader *knowledge.Loader) {
 // SetExperiments sets the experiments store for behavioral adjustments.
 func (cb *ContextBuilder) SetExperiments(store *experiments.Store) {
 	cb.experiments = store
+}
+
+// SetScoring sets the scoring engine for feedback loop injection.
+func (cb *ContextBuilder) SetScoring(se *ScoringEngine) {
+	cb.scoring = se
 }
 
 // SetMemoryTool sets the memory tool for relevance-based memory injection.
@@ -160,6 +166,14 @@ func (cb *ContextBuilder) BuildSystemPrompt(currentMessage ...string) string {
 		adjustments := cb.experiments.BuildAdjustmentsPrompt()
 		if adjustments != "" {
 			parts = append(parts, adjustments)
+		}
+	}
+
+	// Feedback loop: inject correction patterns so the agent learns from mistakes
+	if cb.scoring != nil {
+		feedbackHint := cb.buildFeedbackHint()
+		if feedbackHint != "" {
+			parts = append(parts, feedbackHint)
 		}
 	}
 
@@ -272,6 +286,48 @@ func (cb *ContextBuilder) buildMemoryContext(query string) string {
 	}
 
 	return result
+}
+
+// buildFeedbackHint generates a system prompt section with correction patterns
+// from the scoring engine. This is the feedback loop: scoring data → behavior adaptation.
+func (cb *ContextBuilder) buildFeedbackHint() string {
+	if cb.scoring == nil {
+		return ""
+	}
+
+	globalRate := cb.scoring.GetCorrectionRate("", 7)
+	if globalRate == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Self-Awareness (Feedback Loop)\n\n")
+	sb.WriteString(fmt.Sprintf("Your correction rate in the last 7 days: %.0f%%\n", globalRate*100))
+
+	if globalRate > 0.20 {
+		sb.WriteString("⚠️ You are being corrected frequently. Before responding, double-check:\n")
+		sb.WriteString("- Am I answering what was actually asked?\n")
+		sb.WriteString("- Am I being too verbose or too vague?\n")
+		sb.WriteString("- Should I ask for clarification instead of guessing?\n\n")
+	}
+
+	// Per-topic correction rates
+	topics := []string{"deployment", "debugging", "frontend", "backend", "automation", "content"}
+	var hotTopics []string
+	for _, topic := range topics {
+		rate := cb.scoring.GetCorrectionRate(topic, 7)
+		if rate > 0.25 {
+			hotTopics = append(hotTopics, fmt.Sprintf("- %s: %.0f%% corrections", topic, rate*100))
+		}
+	}
+	if len(hotTopics) > 0 {
+		sb.WriteString("High correction topics (be extra careful):\n")
+		for _, t := range hotTopics {
+			sb.WriteString(t + "\n")
+		}
+	}
+
+	return sb.String()
 }
 
 func (cb *ContextBuilder) LoadBootstrapFiles() string {

@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -91,10 +94,52 @@ If any fail, reply: REVISE: [one line explaining what to fix]`
 	if idx := strings.Index(strings.ToUpper(result), "REVISE:"); idx >= 0 {
 		hint := strings.TrimSpace(result[idx+7:])
 		if hint != "" {
+			// Persist failure pattern for long-term learning
+			al.recordCritiqueFailure(hint)
 			return hint
 		}
 	}
 
 	// If response is ambiguous, fail open
 	return ""
+}
+
+// critiqueFailure records a pattern where self-critique triggered a revision.
+type critiqueFailure struct {
+	Timestamp string `json:"timestamp"`
+	Pattern   string `json:"pattern"`
+}
+
+// recordCritiqueFailure appends a critique failure to the durable log.
+// Accumulated patterns can be analyzed by the reasoning loop.
+func (al *AgentLoop) recordCritiqueFailure(hint string) {
+	logPath := filepath.Join(al.workspace, "state", "critique_failures.json")
+
+	var failures []critiqueFailure
+	if data, err := os.ReadFile(logPath); err == nil {
+		json.Unmarshal(data, &failures)
+	}
+
+	failures = append(failures, critiqueFailure{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Pattern:   hint,
+	})
+
+	// Keep last 50 failures
+	if len(failures) > 50 {
+		failures = failures[len(failures)-50:]
+	}
+
+	if data, err := json.MarshalIndent(failures, "", "  "); err == nil {
+		os.MkdirAll(filepath.Dir(logPath), 0755)
+		tmp := logPath + ".tmp"
+		if err := os.WriteFile(tmp, data, 0644); err == nil {
+			os.Rename(tmp, logPath)
+		}
+	}
+
+	logger.InfoCF("critique", "Recorded failure pattern", map[string]interface{}{
+		"pattern": hint,
+		"total":   len(failures),
+	})
 }
