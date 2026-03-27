@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="page-about">
+  <a href="#main-content" class="skip-link">Saltar al contenido</a>
 
   <nav class="site-nav">
     <a href="index.html" class="brand">CHANGO</a>
@@ -27,7 +28,7 @@
     </button>
   </nav>
 
-  <main class="page-content">
+  <main class="page-content" id="main-content">
     <!-- HERO -->
     <section class="page-hero">
       <p class="section-label">Nosotros</p>
@@ -53,15 +54,15 @@
         <h2>La vision</h2>
         <p>Creemos que el AI no deberia requerir que entregues tus datos a cambio de productividad. La privacidad no es un feature premium — es un derecho basico.</p>
         <div class="vision-cards">
-          <div class="vision-card">
+          <div class="vision-card reveal">
             <h3>Privacidad primero</h3>
             <p>Tus datos nunca salen de tu red. No es una promesa de terminos y condiciones — es una limitacion fisica de la arquitectura.</p>
           </div>
-          <div class="vision-card">
+          <div class="vision-card reveal">
             <h3>Proactivo, no reactivo</h3>
             <p>Los chatbots esperan que preguntes. Chango monitorea, anticipa y ejecuta. La diferencia entre una herramienta y un asistente real.</p>
           </div>
-          <div class="vision-card">
+          <div class="vision-card reveal">
             <h3>Accesible</h3>
             <p>USD 75 de hardware + desde USD 9/mes. AI de primera linea no deberia costar lo que cobra un consultor.</p>
           </div>
@@ -99,27 +100,27 @@
       <div class="about-block">
         <h2>La tecnologia</h2>
         <div class="tech-grid">
-          <div class="tech-item">
+          <div class="tech-item reveal">
             <h4>Go</h4>
             <p>Core del agente. Concurrencia nativa, bajo consumo de memoria, binario unico.</p>
           </div>
-          <div class="tech-item">
+          <div class="tech-item reveal">
             <h4>Raspberry Pi 5</h4>
             <p>8GB RAM, ARM64. El hardware dedicado que hace posible AI privado a USD 75.</p>
           </div>
-          <div class="tech-item">
+          <div class="tech-item reveal">
             <h4>Telegram API</h4>
             <p>Interfaz de usuario. Texto, voz, imagenes — sin friccion, sin apps nuevas.</p>
           </div>
-          <div class="tech-item">
+          <div class="tech-item reveal">
             <h4>LLMs (OpenRouter)</h4>
             <p>Acceso a GPT-4, Claude, Gemini y modelos open-source. El usuario elige.</p>
           </div>
-          <div class="tech-item">
+          <div class="tech-item reveal">
             <h4>Edge TTS</h4>
             <p>Sintesis de voz local en espanol argentino. Respuestas por audio cuando prefieras.</p>
           </div>
-          <div class="tech-item">
+          <div class="tech-item reveal">
             <h4>Docker + Coolify</h4>
             <p>Deploy automatizado. Actualizaciones sin downtime, rollback en un click.</p>
           </div>
@@ -176,6 +177,12 @@
       document.querySelector('.nav-actions').classList.toggle('open');
       this.classList.toggle('active');
     });
+
+    // Scroll-triggered reveal animations
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); revealObserver.unobserve(e.target); } });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
   </script>
 </body>
 </html>

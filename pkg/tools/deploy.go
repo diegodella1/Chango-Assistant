@@ -29,7 +29,7 @@ type DeployTool struct {
 
 func NewDeployTool() *DeployTool {
 	return &DeployTool{
-		baseURL: "http://localhost:8000",
+		baseURL: "http://127.0.0.1:8000",
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},

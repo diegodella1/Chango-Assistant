@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="page-docs">
+  <a href="#main-content" class="skip-link">Saltar al contenido</a>
 
   <nav class="site-nav">
     <a href="index.html" class="brand">CHANGO</a>
@@ -27,9 +28,10 @@
     </button>
   </nav>
 
-  <main class="page-content docs-layout">
+  <main class="page-content docs-layout" id="main-content">
     <!-- SIDEBAR -->
     <aside class="docs-sidebar">
+      <div class="sidebar-progress"><div class="sidebar-progress-fill"></div></div>
       <h4>Documentacion</h4>
       <a href="#overview" class="active">Vista general</a>
       <a href="#requirements">Requisitos</a>
@@ -74,28 +76,28 @@
       <section id="setup">
         <h2>Instalacion</h2>
         <div class="docs-steps">
-          <div class="docs-step">
+          <div class="docs-step reveal">
             <div class="docs-step-num">1</div>
             <div>
               <h3>Recibis el appliance</h3>
               <p>Llega pre-configurado con Chango instalado. Solo necesitas conectar alimentacion y red.</p>
             </div>
           </div>
-          <div class="docs-step">
+          <div class="docs-step reveal">
             <div class="docs-step-num">2</div>
             <div>
               <h3>Conectalo a tu red</h3>
               <p>Cable Ethernet directo a tu router. Opcionalmente configurable por WiFi.</p>
             </div>
           </div>
-          <div class="docs-step">
+          <div class="docs-step reveal">
             <div class="docs-step-num">3</div>
             <div>
               <h3>Escanea el QR</h3>
               <p>En la pantalla (o tarjeta incluida) hay un QR que te lleva directo al bot de Telegram. Escribi "Hola" y Chango te guia.</p>
             </div>
           </div>
-          <div class="docs-step">
+          <div class="docs-step reveal">
             <div class="docs-step-num">4</div>
             <div>
               <h3>Configura tu perfil</h3>
@@ -214,33 +216,33 @@
       <section id="faq">
         <h2>Preguntas frecuentes</h2>
         <div class="faq-list">
-          <details class="faq-item">
+          <details class="faq-item reveal">
             <summary>Necesito saber de tecnologia para usarlo?</summary>
-            <p>No. El appliance llega listo para usar. Conectas, escaneas un QR y hablas por Telegram. Si sabes mandar un mensaje, sabes usar Chango.</p>
+            <div class="faq-answer"><div><p>No. El appliance llega listo para usar. Conectas, escaneas un QR y hablas por Telegram. Si sabes mandar un mensaje, sabes usar Chango.</p></div></div>
           </details>
-          <details class="faq-item">
+          <details class="faq-item reveal">
             <summary>Puedo cambiar de plan despues?</summary>
-            <p>Si, podes subir o bajar de plan en cualquier momento. El cambio se aplica en el proximo ciclo de facturacion.</p>
+            <div class="faq-answer"><div><p>Si, podes subir o bajar de plan en cualquier momento. El cambio se aplica en el proximo ciclo de facturacion.</p></div></div>
           </details>
-          <details class="faq-item">
+          <details class="faq-item reveal">
             <summary>Que pasa si se corta la luz?</summary>
-            <p>Chango arranca automaticamente cuando vuelve la energia. Retoma donde quedo sin perder datos.</p>
+            <div class="faq-answer"><div><p>Chango arranca automaticamente cuando vuelve la energia. Retoma donde quedo sin perder datos.</p></div></div>
           </details>
-          <details class="faq-item">
+          <details class="faq-item reveal">
             <summary>Funciona fuera de mi red?</summary>
-            <p>Si. Como Telegram es cloud-native, podes hablar con Chango desde cualquier lugar. El procesamiento sigue siendo local — tu telefono habla con Telegram, Telegram habla con el appliance en tu red.</p>
+            <div class="faq-answer"><div><p>Si. Como Telegram es cloud-native, podes hablar con Chango desde cualquier lugar. El procesamiento sigue siendo local — tu telefono habla con Telegram, Telegram habla con el appliance en tu red.</p></div></div>
           </details>
-          <details class="faq-item">
+          <details class="faq-item reveal">
             <summary>Que modelos de AI soporta?</summary>
-            <p>Depende del plan. Local: modelos open-source 3-7B optimizados. Pro: GPT-4o, Claude Sonnet, Gemini, Llama y mas via OpenRouter. Executive: acceso ilimitado a modelos premium incluyendo GPT-4, Claude Opus y razonamiento avanzado.</p>
+            <div class="faq-answer"><div><p>Depende del plan. Local: modelos open-source 3-7B optimizados. Pro: GPT-4o, Claude Sonnet, Gemini, Llama y mas via OpenRouter. Executive: acceso ilimitado a modelos premium incluyendo GPT-4, Claude Opus y razonamiento avanzado.</p></div></div>
           </details>
-          <details class="faq-item">
+          <details class="faq-item reveal">
             <summary>Puedo usar mi propia API key?</summary>
-            <p>Si. Si ya tenes una API key de OpenRouter, OpenAI u otro proveedor, podes configurarla directamente.</p>
+            <div class="faq-answer"><div><p>Si. Si ya tenes una API key de OpenRouter, OpenAI u otro proveedor, podes configurarla directamente.</p></div></div>
           </details>
-          <details class="faq-item">
+          <details class="faq-item reveal">
             <summary>Como se actualiza?</summary>
-            <p>Automaticamente. Las actualizaciones se descargan e instalan sin intervencion. Podes elegir actualizaciones manuales si preferis control total.</p>
+            <div class="faq-answer"><div><p>Automaticamente. Las actualizaciones se descargan e instalan sin intervencion. Podes elegir actualizaciones manuales si preferis control total.</p></div></div>
           </details>
         </div>
       </section>
@@ -285,9 +287,10 @@
       this.classList.toggle('active');
     });
 
-    // Active sidebar link on scroll
+    // Active sidebar link on scroll + progress bar
     const sections = document.querySelectorAll('.docs-content section[id]');
-    const sidebarLinks = document.querySelectorAll('.docs-sidebar a');
+    const sidebarLinks = document.querySelectorAll('.docs-sidebar a:not(.skip-link)');
+    const progressFill = document.querySelector('.sidebar-progress-fill');
     window.addEventListener('scroll', () => {
       let current = '';
       sections.forEach(s => {
@@ -296,7 +299,17 @@
       sidebarLinks.forEach(a => {
         a.classList.toggle('active', a.getAttribute('href') === '#' + current);
       });
+      if (progressFill) {
+        const pct = Math.min(window.scrollY / (document.body.scrollHeight - window.innerHeight), 1);
+        progressFill.style.height = (pct * 100) + '%';
+      }
     }, { passive: true });
+
+    // Scroll-triggered reveal animations
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); revealObserver.unobserve(e.target); } });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
   </script>
 </body>
 </html>
