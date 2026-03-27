@@ -272,8 +272,13 @@ func (h *Handler) publicStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Model from config
-	if h.config != nil && h.config.Agents.Defaults.Model != "" {
+	// Model: read from disk config (in-memory config may be mutated by auto-recovery)
+	if h.configPath != "" {
+		if diskCfg, err := config.LoadConfig(h.configPath); err == nil {
+			result["model"] = diskCfg.Agents.Defaults.Model
+			result["provider"] = diskCfg.Agents.Defaults.Provider
+		}
+	} else if h.config != nil && h.config.Agents.Defaults.Model != "" {
 		result["model"] = h.config.Agents.Defaults.Model
 	}
 
