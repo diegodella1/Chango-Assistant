@@ -166,17 +166,15 @@ func (al *AgentLoop) tryAutoRecovery() {
 			continue
 		}
 
-		// Success — switch
+		// Success — switch in-memory only. Do NOT persist to disk:
+		// the user's chosen provider/model in config.json should be respected.
+		// Auto-recovery is temporary until the primary provider recovers.
 		al.provider = newProv
 		al.model = al.cfg.Agents.Defaults.Model
 		al.contextBuilder.SetModel(al.model)
 		al.consecutiveFails = 0
 
-		if al.configPath != "" {
-			_ = config.SaveConfig(al.configPath, al.cfg)
-		}
-
-		logger.WarnCF("agent", "Auto-recovery: switched provider after consecutive failures", map[string]interface{}{
+		logger.WarnCF("agent", "Auto-recovery: switched provider (in-memory only, config.json unchanged)", map[string]interface{}{
 			"from_provider": currentProvider,
 			"to_provider":   candidate,
 			"to_model":      al.model,

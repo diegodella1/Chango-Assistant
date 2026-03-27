@@ -338,65 +338,47 @@ func (s *Service) gatherState() string {
 	now := time.Now()
 	parts = append(parts, fmt.Sprintf("Hora actual: %s", now.Format("15:04")))
 
-	// Recent vault notes (last 3 insights/observations)
+	// Recent vault notes — keep minimal to fit local model context (2048 tokens)
 	if s.memoryTool != nil {
-		recentInsights := s.memoryTool.ListNotesByFolder("insights", 3)
+		recentInsights := s.memoryTool.ListNotesByFolder("insights", 2)
 		if len(recentInsights) > 0 {
 			var notes []string
 			for _, n := range recentInsights {
-				preview := n.Content
-				if len(preview) > 100 {
-					preview = preview[:100] + "..."
+				preview := n.Key
+				if len(preview) > 60 {
+					preview = preview[:60]
 				}
-				notes = append(notes, fmt.Sprintf("- [%s] %s: %s", n.Updated, n.Key, preview))
+				notes = append(notes, "- "+preview)
 			}
-			parts = append(parts, "Insights recientes:\n"+strings.Join(notes, "\n"))
+			parts = append(parts, "Insights: "+strings.Join(notes, "; "))
 		}
 
-		recentObs := s.memoryTool.ListNotesByFolder("observations", 3)
-		if len(recentObs) > 0 {
-			var notes []string
-			for _, n := range recentObs {
-				preview := n.Content
-				if len(preview) > 80 {
-					preview = preview[:80] + "..."
-				}
-				notes = append(notes, fmt.Sprintf("- %s", preview))
-			}
-			parts = append(parts, "Observaciones recientes:\n"+strings.Join(notes, "\n"))
-		}
-
-		// Pending action verifications
+		// Pending action verifications — just count
 		recentActions := s.memoryTool.ListNotesByFolder("actions", 10)
-		var pendingActions []string
+		pendingCount := 0
 		for _, n := range recentActions {
-			isPending := false
 			for _, tag := range n.Tags {
 				if tag == "pending-verification" {
-					isPending = true
+					pendingCount++
 					break
 				}
 			}
-			if isPending {
-				preview := n.Content
-				if len(preview) > 100 {
-					preview = preview[:100] + "..."
-				}
-				pendingActions = append(pendingActions, fmt.Sprintf("- [%s] %s", n.Key, preview))
-			}
 		}
-		if len(pendingActions) > 0 {
-			if len(pendingActions) > 3 {
-				pendingActions = pendingActions[:3]
-			}
-			parts = append(parts, "Acciones pendientes de verificación:\n"+strings.Join(pendingActions, "\n"))
+		if pendingCount > 0 {
+			parts = append(parts, fmt.Sprintf("Acciones pendientes: %d", pendingCount))
 		}
 	}
 
 	if len(parts) == 0 {
 		return ""
 	}
-	return strings.Join(parts, "\n\n")
+
+	result := strings.Join(parts, "\n")
+	// Cap total snapshot to ~1200 chars to fit local model context (2048 tokens)
+	if len(result) > 1200 {
+		result = result[:1200] + "\n[...truncated]"
+	}
+	return result
 }
 
 const triagePrompt = `Sos el módulo de razonamiento de fondo de Chango, un agente AI autónomo en un Raspberry Pi 5. Tu dueño es Diego.
