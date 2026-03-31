@@ -3,232 +3,459 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chango</title>
+<title>Chango Brain</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-    background: #060608;
-    color: #d4d4d4;
-    overflow: hidden;
-    height: 100vh;
+  :root{
+    --bg:#06090f;
+    --panel:#0f1622cc;
+    --panel-solid:#101a28;
+    --line:#2a3d57;
+    --text:#dbe8ff;
+    --muted:#89a2c7;
+    --ok:#34d399;
+    --warn:#f59e0b;
+    --bad:#ef4444;
+    --think:#818cf8;
+    --tool:#f472b6;
+    --memory:#34d399;
+    --browse:#38bdf8;
+    --learn:#fbbf24;
+    --reasoning:#c084fc;
+    --heartbeat:#fb7185;
+    --cron:#94a3b8;
   }
-  canvas {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Space Grotesk","IBM Plex Sans",system-ui,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    height:100vh;
+    overflow:hidden;
   }
-  /* --- Bottom UI panel --- */
-  .ui {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    z-index: 1;
-    padding: 36px 44px 32px;
-    background: linear-gradient(transparent, rgba(5,5,5,0.8) 30%, rgba(5,5,5,0.97));
-    pointer-events: none;
+  canvas{
+    position:fixed;
+    inset:0;
+    width:100vw;
+    height:100vh;
   }
-  .inner { max-width: 640px; }
-  .name {
-    font-size: 32px;
-    font-weight: 700;
-    color: #f0f0f0;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
+  .overlay{
+    position:fixed;
+    inset:0;
+    display:grid;
+    grid-template-columns:minmax(320px, 560px) minmax(280px, 420px);
+    gap:16px;
+    padding:16px;
+    pointer-events:none;
   }
-  .tagline {
-    margin-top: 4px;
-    font-size: 13px;
-    color: #8b8b9e;
-    letter-spacing: 0.03em;
+  .left,.right{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    pointer-events:auto;
   }
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    font-size: 13px;
-    color: #6b6b80;
+  .right{justify-self:end;width:min(420px,38vw)}
+  .card{
+    background:linear-gradient(165deg, #0d1522dd, #0b1320b0 60%, #0b132095);
+    border:1px solid #1d2e45;
+    border-radius:14px;
+    backdrop-filter:blur(8px);
+    box-shadow:0 10px 32px #00000066;
   }
-  .dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #333;
+  .header{
+    padding:14px 16px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
   }
-  .dot.on {
-    background: #22c55e;
-    box-shadow: 0 0 8px #22c55eaa, 0 0 2px #22c55e;
-    animation: pulse-dot 2s ease-in-out infinite;
+  .title{font-size:22px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+  .subtitle{font-size:12px;color:var(--muted);margin-top:2px}
+  .statusline{
+    display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:8px
   }
-  @keyframes pulse-dot {
-    0%, 100% { box-shadow: 0 0 8px #22c55eaa, 0 0 2px #22c55e; }
-    50% { box-shadow: 0 0 14px #22c55ecc, 0 0 4px #22c55e; }
+  .dot{width:8px;height:8px;border-radius:99px;background:#3f4f68}
+  .dot.on{background:var(--ok);box-shadow:0 0 12px #34d39999}
+  .pill{
+    border:1px solid #2f4d73;
+    background:#142136;
+    border-radius:999px;
+    padding:4px 10px;
+    font-size:11px;
+    color:#b6caf0;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    white-space:nowrap;
   }
-  .live-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    font-size: 10px;
-    font-weight: 600;
-    color: #ef4444;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    animation: pulse-live 2.5s ease-in-out infinite;
+  .pill.live{
+    border-color:#6b2f3c;
+    background:#2a1118;
+    color:#fca5a5;
   }
-  @keyframes pulse-live {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+    padding:0 12px 12px;
   }
-  .live-badge .rec { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; }
-  .stats {
-    display: flex;
-    gap: 28px;
-    margin-top: 16px;
-    font-size: 12px;
-    color: #6b6b80;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+  .metric{
+    background:#0f1a2c99;
+    border:1px solid #20344f;
+    border-radius:10px;
+    padding:10px;
+    min-height:74px;
   }
-  .stats .val { color: #c8c8d4; font-weight: 600; }
-  .links {
-    display: flex;
-    gap: 20px;
-    margin-top: 16px;
-    pointer-events: auto;
+  .metric .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .metric .v{font-size:22px;font-weight:700;margin-top:4px;line-height:1.1}
+  .metric .s{font-size:11px;color:#9cb5db;margin-top:3px}
+  .links{padding:0 12px 12px;display:flex;gap:10px;flex-wrap:wrap}
+  .links a{
+    color:#b6caf0;text-decoration:none;font-size:12px;padding:6px 10px;border:1px solid #2c4568;border-radius:8px;background:#11213a
   }
-  .links a {
-    color: #555570;
-    text-decoration: none;
-    font-size: 12px;
-    letter-spacing: 0.04em;
-    transition: color 0.2s;
+  .links a:hover{background:#173055}
+  .section-title{
+    font-size:12px;
+    color:#9cb5db;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+    padding:12px 12px 0;
+    font-weight:700;
   }
-  .links a:hover { color: #a0a0c0; }
-  /* --- Activity + legend (top right) --- */
-  .activity {
-    position: fixed;
-    top: 20px; right: 24px;
-    z-index: 2;
-    font-size: 12px;
-    color: #3a3a50;
-    text-align: right;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+  .services{padding:10px 12px 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .svc{
+    border:1px solid #243b59;
+    border-radius:8px;
+    padding:8px;
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:12px;background:#0e1b2d99
   }
-  .activity .event {
-    transition: color 0.3s;
-    color: #7a7a9a;
-    font-weight: 600;
+  .svc .on{color:var(--ok)}
+  .svc .off{color:#8aa1c4}
+  .trace-head{
+    padding:12px 12px 8px;
+    display:flex;justify-content:space-between;align-items:center
   }
-  .legend {
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 10px;
-    opacity: 0.7;
-    transition: opacity 0.5s;
+  .trace-head .mode{font-size:12px;color:#a3c0ea}
+  .event{
+    font-size:12px;
+    color:#d8e8ff;
+    border-top:1px solid #20344f;
+    padding:8px 10px;
+    display:flex;align-items:center;gap:8px;
   }
-  .legend:hover { opacity: 1; }
-  .legend span { white-space: nowrap; }
-  .activity .event.active { color: #60a5fa; }
-  .activity .event.active[data-type="think"]     { color: #818cf8; }
-  .activity .event.active[data-type="memory"]    { color: #34d399; }
-  .activity .event.active[data-type="learn"]     { color: #fbbf24; }
-  .activity .event.active[data-type="browse"]    { color: #38bdf8; }
-  .activity .event.active[data-type="tool"]      { color: #f472b6; }
-  .activity .event.active[data-type="reasoning"] { color: #c084fc; }
-  .activity .event.active[data-type="cron"]      { color: #94a3b8; }
-  .activity .event.active[data-type="heartbeat"] { color: #fb7185; }
+  .event small{margin-left:auto;color:#7f99bf}
+  .trace{
+    max-height:44vh;
+    overflow:auto;
+  }
+  .chip{width:8px;height:8px;border-radius:99px;display:inline-block}
+  .bars{padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px}
+  .barline{display:grid;grid-template-columns:80px 1fr 44px;gap:8px;align-items:center;font-size:12px}
+  .bar{
+    height:8px;border-radius:999px;background:#0e1b2d;border:1px solid #20344f;overflow:hidden
+  }
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38bdf8,#818cf8)}
+  .health{padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px}
+  .kv{display:grid;grid-template-columns:90px 1fr 40px;gap:8px;align-items:center;font-size:12px;color:#b7cae8}
+  .progress{height:8px;border-radius:999px;background:#0e1b2d;border:1px solid #20344f;overflow:hidden}
+  .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#34d399,#f59e0b,#ef4444)}
+  @media (max-width: 980px){
+    body{overflow:auto}
+    .overlay{
+      position:relative;
+      grid-template-columns:1fr;
+      padding:12px;
+    }
+    .right{justify-self:stretch;width:100%}
+    canvas{position:fixed}
+  }
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div class="activity">
-  <div class="event" id="ev">idle</div>
-  <div class="legend" id="legend">
-    <span style="color:#a5b4fc">● think</span>
-    <span style="color:#6ee7b7">● memory</span>
-    <span style="color:#fcd34d">● learn</span>
-    <span style="color:#7dd3fc">● browse</span>
-    <span style="color:#f9a8d4">● tool</span>
-    <span style="color:#d8b4fe">● reasoning</span>
-    <span style="color:#cbd5e1">● cron</span>
-    <span style="color:#fda4af">● heartbeat</span>
+<canvas id="brain"></canvas>
+<div class="overlay">
+  <div class="left">
+    <section class="card">
+      <div class="header">
+        <div>
+          <div class="title">Chango Brain</div>
+          <div class="subtitle">Runtime neural view + operational telemetry</div>
+          <div class="statusline">
+            <span class="dot" id="dot"></span>
+            <span id="stateText">connecting...</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <span class="pill live" id="eventState">idle</span>
+          <span class="pill" id="modelPill">model --</span>
+        </div>
+      </div>
+      <div class="grid">
+        <article class="metric">
+          <div class="k">Uptime</div>
+          <div class="v" id="uptime">--</div>
+          <div class="s" id="provider">provider --</div>
+        </article>
+        <article class="metric">
+          <div class="k">Memory Vault</div>
+          <div class="v" id="notes">--</div>
+          <div class="s">notes indexed</div>
+        </article>
+        <article class="metric">
+          <div class="k">Interactions 24h</div>
+          <div class="v" id="int24">--</div>
+          <div class="s">recent conversations</div>
+        </article>
+        <article class="metric">
+          <div class="k">Tokens Today</div>
+          <div class="v" id="tokens">--</div>
+          <div class="s"><span id="calls">--</span> calls</div>
+        </article>
+        <article class="metric">
+          <div class="k">Reasoning</div>
+          <div class="v"><span id="obs">--</span>/<span id="esc">--</span></div>
+          <div class="s">observations / escalations</div>
+        </article>
+        <article class="metric">
+          <div class="k">Cron Jobs</div>
+          <div class="v" id="cron">--</div>
+          <div class="s">enabled jobs</div>
+        </article>
+      </div>
+      <div class="links">
+        <a href="/admin">admin</a>
+        <a href="/about">about</a>
+        <a href="/pitch/">pitch</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">Service Matrix</div>
+      <div class="services" id="services"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">System Health</div>
+      <div class="health">
+        <div class="kv"><span>CPU</span><div class="progress"><i id="cpuBar"></i></div><span id="cpuTxt">--</span></div>
+        <div class="kv"><span>RAM</span><div class="progress"><i id="ramBar"></i></div><span id="ramTxt">--</span></div>
+        <div class="kv"><span>Disk</span><div class="progress"><i id="diskBar"></i></div><span id="diskTxt">--</span></div>
+        <div class="kv"><span>Swap</span><div class="progress"><i id="swapBar"></i></div><span id="swapTxt">--</span></div>
+      </div>
+    </section>
   </div>
-</div>
-<div class="ui">
-  <div class="inner">
-    <div class="name">Chango</div>
-    <div class="tagline">autonomous AI agent running on a Raspberry Pi 5 — Buenos Aires, AR</div>
-    <div class="status">
-      <span class="dot" id="dot"></span>
-      <span id="st">...</span>
-      <span class="live-badge"><span class="rec"></span>live</span>
-    </div>
-    <div class="stats">
-      <div><span class="val" id="up">--</span> uptime</div>
-      <div><span class="val" id="mem">--</span> memories</div>
-      <div><span class="val" id="mdl">--</span></div>
-      <div><span class="val" id="tools">37</span> tools</div>
-    </div>
-    <div class="stats" id="activity-row" style="margin-top:8px;display:none">
-      <div><span class="val" id="int24">--</span> interactions today</div>
-      <div><span class="val" id="tok">--</span> tokens</div>
-      <div><span class="val" id="obs">--</span> observations</div>
-    </div>
-    <div class="links">
-      <a href="/about">about</a>
-      <a href="/admin">admin</a>
-      <a href="/pitch/">pitch</a>
-    </div>
-  </div>
+
+  <aside class="right">
+    <section class="card">
+      <div class="trace-head">
+        <div class="section-title" style="padding:0">Top Event Load</div>
+        <div class="mode" id="eventCount">0 events</div>
+      </div>
+      <div class="bars" id="topBars"></div>
+    </section>
+    <section class="card">
+      <div class="trace-head">
+        <div class="section-title" style="padding:0">Live Trace</div>
+        <div class="mode" id="lastUpdated">--</div>
+      </div>
+      <div class="trace" id="trace"></div>
+    </section>
+  </aside>
 </div>
 
 <script>
-(function(){
-  const c = document.getElementById('c');
-  const ctx = c.getContext('2d');
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  let W, H;
+(() => {
+  const eventColors = {
+    think: [129, 140, 248],
+    memory: [52, 211, 153],
+    learn: [251, 191, 36],
+    browse: [56, 189, 248],
+    tool: [244, 114, 182],
+    reasoning: [192, 132, 252],
+    cron: [148, 163, 184],
+    heartbeat: [251, 113, 133]
+  };
+  const defaultColor = [160, 180, 220];
+  const fireQueue = [];
+  const traceEl = document.getElementById("trace");
+  const trace = [];
+  const MAX_TRACE = 80;
+  let eventsSeen = 0;
 
+  function fmtNum(v) {
+    if (v === undefined || v === null) return "--";
+    if (v >= 1000000) return (v / 1000000).toFixed(1) + "M";
+    if (v >= 1000) return (v / 1000).toFixed(1) + "K";
+    return String(v);
+  }
+  function pct(v) {
+    if (v === undefined || v === null || Number.isNaN(v)) return "--";
+    return Math.round(v) + "%";
+  }
+  function pushTrace(type, at) {
+    const t = { type: type || "event", at: at || new Date().toISOString() };
+    trace.unshift(t);
+    if (trace.length > MAX_TRACE) trace.length = MAX_TRACE;
+    eventsSeen++;
+    renderTrace();
+  }
+  function renderTrace() {
+    document.getElementById("eventCount").textContent = eventsSeen + " events";
+    traceEl.innerHTML = trace.slice(0, 40).map(item => {
+      const dt = new Date(item.at);
+      const hh = String(dt.getHours()).padStart(2, "0");
+      const mm = String(dt.getMinutes()).padStart(2, "0");
+      const col = eventColors[item.type] || defaultColor;
+      return '<div class="event"><span class="chip" style="background:rgb(' + col.join(",") + ')"></span>' +
+        item.type + "<small>" + hh + ":" + mm + "</small></div>";
+    }).join("");
+  }
+  function setProgress(id, v) {
+    const n = Math.max(0, Math.min(100, Number(v || 0)));
+    document.getElementById(id).style.width = n + "%";
+  }
+  function renderTopEvents(topEvents) {
+    const root = document.getElementById("topBars");
+    const rows = Array.isArray(topEvents) ? topEvents : [];
+    if (!rows.length) {
+      root.innerHTML = '<div class="barline"><span>idle</span><div class="bar"><i style="width:0%"></i></div><span>0</span></div>';
+      return;
+    }
+    const max = Math.max(...rows.map(r => Number(r.count || 0)), 1);
+    root.innerHTML = rows.map(r => {
+      const type = String(r.type || "event");
+      const count = Number(r.count || 0);
+      const width = Math.max(6, Math.round((count / max) * 100));
+      return '<div class="barline"><span>' + type + '</span><div class="bar"><i style="width:' + width +
+        '%"></i></div><span>' + count + "</span></div>";
+    }).join("");
+  }
+  function renderServices(services) {
+    const el = document.getElementById("services");
+    const keys = ["heartbeat", "sentinel", "reasoning", "rss", "health"];
+    el.innerHTML = keys.map(k => {
+      const on = !!(services && services[k]);
+      return '<div class="svc"><span>' + k + '</span><strong class="' + (on ? "on" : "off") + '">' + (on ? "ON" : "OFF") + "</strong></div>";
+    }).join("");
+  }
+  function handlePublicSnapshot(data) {
+    const summary = data.summary || data;
+    document.getElementById("dot").classList.add("on");
+    document.getElementById("stateText").textContent = "online";
+    document.getElementById("uptime").textContent = summary.uptime_short || summary.uptime || "--";
+    document.getElementById("notes").textContent = fmtNum(summary.notes);
+    document.getElementById("int24").textContent = fmtNum(summary.interactions_24h);
+    document.getElementById("tokens").textContent = fmtNum(summary.tokens_today);
+    document.getElementById("calls").textContent = fmtNum(summary.calls_today);
+    document.getElementById("obs").textContent = fmtNum(summary.observations_today);
+    document.getElementById("esc").textContent = fmtNum(summary.escalations_today);
+    document.getElementById("cron").textContent = fmtNum(summary.cron_jobs);
+    document.getElementById("provider").textContent = (summary.provider || "provider --") + " / " + (summary.model || "--");
+    document.getElementById("modelPill").textContent = (summary.model || "--").slice(0, 24);
+
+    const st = data.status || {};
+    const cpu = Number(st.cpu_temp_c || 0);
+    const ram = Number(st.ram_used_percent || 0);
+    const disk = Number(st.disk_used_percent || 0);
+    const swap = Number(st.swap_used_percent || 0);
+    setProgress("cpuBar", Math.min(100, cpu));
+    setProgress("ramBar", ram);
+    setProgress("diskBar", disk);
+    setProgress("swapBar", swap);
+    document.getElementById("cpuTxt").textContent = cpu ? Math.round(cpu) + "C" : "--";
+    document.getElementById("ramTxt").textContent = pct(ram);
+    document.getElementById("diskTxt").textContent = pct(disk);
+    document.getElementById("swapTxt").textContent = pct(swap);
+
+    renderServices(data.services || {});
+    renderTopEvents(data.top_events || []);
+
+    if (data.events && Array.isArray(data.events.recent)) {
+      trace.length = 0;
+      data.events.recent.slice(0, MAX_TRACE).forEach(evt => {
+        trace.push({ type: evt.type, at: evt.at });
+      });
+      renderTrace();
+    }
+    document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString();
+  }
+  async function refresh() {
+    try {
+      const r = await fetch(location.origin + "/api/public/brain");
+      if (!r.ok) throw new Error("brain endpoint");
+      const data = await r.json();
+      handlePublicSnapshot(data);
+    } catch (_) {
+      try {
+        const r = await fetch(location.origin + "/api/public/status");
+        if (!r.ok) throw new Error("status endpoint");
+        const data = await r.json();
+        handlePublicSnapshot(data);
+      } catch (e) {
+        document.getElementById("stateText").textContent = "offline";
+      }
+    }
+  }
+
+  try {
+    const es = new EventSource(location.origin + "/api/public/events");
+    es.onmessage = (e) => {
+      let type = "event";
+      let at = new Date().toISOString();
+      try {
+        const payload = JSON.parse(e.data);
+        type = payload.type || type;
+        at = payload.at || at;
+      } catch (_) {
+        type = e.data || type;
+      }
+      const color = eventColors[type] || defaultColor;
+      for (let i = 0; i < (type === "memory" ? 20 : 10); i++) fireQueue.push(color);
+      document.getElementById("eventState").textContent = type;
+      pushTrace(type, at);
+    };
+  } catch (_) {}
+
+  refresh();
+  setInterval(refresh, 8000);
+
+  // Neural render effect (preserved and tuned)
+  const c = document.getElementById("brain");
+  const ctx = c.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;
   function resize() {
-    W = window.innerWidth; H = window.innerHeight;
-    c.width = W * dpr; c.height = H * dpr;
-    c.style.width = W + 'px'; c.style.height = H + 'px';
+    W = window.innerWidth;
+    H = window.innerHeight;
+    c.width = W * dpr;
+    c.height = H * dpr;
+    c.style.width = W + "px";
+    c.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  window.addEventListener('resize', resize);
+  window.addEventListener("resize", resize);
   resize();
 
-  // --- Neurons: 500 points in brain shape (two hemispheres, denser at cortex) ---
   const N = 500;
   const neurons = [];
-  const cx = () => W / 2;
-  const cy = () => H / 2 - 30;
+  const conns = [];
+  const MAX_SYN = 60;
+  const synapses = [];
+  const centerX = () => W / 2;
+  const centerY = () => H / 2 - 24;
 
   for (let i = 0; i < N; i++) {
     const a = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
-    // Brain shape: wider than tall, with a slight indentation at top (longitudinal fissure)
     let rBase = 0.35 + Math.random() * 0.6;
-    // Cortex density: more neurons at the surface (r > 0.6)
     if (Math.random() < 0.6) rBase = 0.6 + Math.random() * 0.35;
     let nx = Math.sin(phi) * Math.cos(a) * rBase;
     let ny = Math.cos(phi) * rBase;
-    let nz = Math.sin(phi) * Math.sin(a) * rBase;
-    // Brain proportions: wider (1.4x), shorter (0.75y), with frontal lobe bias
+    const nz = Math.sin(phi) * Math.sin(a) * rBase;
     nx *= 1.4;
     ny *= 0.75;
-    // Longitudinal fissure: push neurons away from center-top
     const topness = Math.max(0, 0.5 - Math.abs(ny - 0.3));
-    const centerDist = Math.abs(nx);
-    if (centerDist < 0.15 && topness > 0.1) {
-      nx += (nx > 0 ? 0.12 : -0.12); // push hemispheres apart slightly
-    }
+    if (Math.abs(nx) < 0.15 && topness > 0.1) nx += (nx > 0 ? 0.12 : -0.12);
     neurons.push({
       nx, ny, nz,
       vx: (Math.random() - 0.5) * 0.00012,
@@ -236,116 +463,52 @@
       base: 0.35 + Math.random() * 0.2,
       glow: 0,
       glowColor: null,
-      size: 1.2 + Math.random() * 0.8,
+      size: 1.2 + Math.random() * 0.8
     });
   }
 
-  // --- Static connections: nearby neurons ---
-  const conns = [];
-  const CONN_THRESHOLD = 0.22;
   for (let i = 0; i < N; i++) {
     for (let j = i + 1; j < N; j++) {
       const dx = neurons[i].nx - neurons[j].nx;
       const dy = neurons[i].ny - neurons[j].ny;
       const dz = neurons[i].nz - neurons[j].nz;
-      const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      if (d < CONN_THRESHOLD) conns.push({ a: i, b: j, d: d });
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (d < 0.22) conns.push({ a: i, b: j, d: d });
     }
   }
+  for (let i = 0; i < MAX_SYN; i++) synapses.push({ ci: -1, life: 0, max: 0, color: defaultColor });
 
-  // Color palette per cognitive process — [R, G, B]
-  const eventColors = {
-    think:     [129, 140, 248],  // indigo — reasoning/reflection
-    memory:    [52,  211, 153],  // emerald — knowledge storage/retrieval
-    learn:     [251, 191, 36],   // amber — learning/growth
-    browse:    [56,  189, 248],  // sky — external research
-    tool:      [244, 114, 182],  // pink — tool execution
-    reasoning: [192, 132, 252],  // purple — background reasoning loop
-    cron:      [148, 163, 184],  // slate — scheduled tasks
-    heartbeat: [251, 113, 133],  // rose — vital signs
-  };
-  const defaultColor = [160, 180, 220]; // neutral blue-white
-
-  // --- Active synapses (soft pulses, color-coded) ---
-  const MAX_SYN = 60;
-  const synapses = [];
-  for (let i = 0; i < MAX_SYN; i++) {
-    synapses.push({ ci: -1, life: 0, max: 0, color: defaultColor });
-  }
-
-  // --- SSE: real activity with color-coded cognitive processes ---
-  let pending = 0;
-  let lastEvent = 'idle';
-  const burst = { think: 12, tool: 8, memory: 18, browse: 10, learn: 25, cron: 5, heartbeat: 4, reasoning: 15 };
-
-  // Queue of pending fires with their color
-  const fireQueue = [];
-  const evEl = document.getElementById('ev');
-  let evTimeout;
-
-  try {
-    const es = new EventSource(location.origin + '/api/public/events');
-    es.onmessage = function(e) {
-      const type = e.data;
-      const count = burst[type] || 6;
-      const color = eventColors[type] || defaultColor;
-      for (let i = 0; i < count; i++) fireQueue.push(color);
-      lastEvent = type;
-      evEl.textContent = type;
-      evEl.setAttribute('data-type', type);
-      evEl.classList.add('active');
-      clearTimeout(evTimeout);
-      evTimeout = setTimeout(() => {
-        evEl.classList.remove('active');
-        evEl.removeAttribute('data-type');
-        evEl.textContent = 'idle';
-      }, 3000);
-    };
-  } catch(e) {}
-
-  // --- Render ---
-  let time = 0;
-
-  function getScreenPos(n) {
-    // Scale factor: fill ~70% of viewport
+  function pos(n) {
     const scale = Math.min(W, H) * 0.38;
-    return {
-      x: cx() + n.nx * scale,
-      y: cy() + n.ny * scale,
-    };
+    return { x: centerX() + n.nx * scale, y: centerY() + n.ny * scale };
   }
 
-  function frame() {
-    requestAnimationFrame(frame);
-    time += 0.002;
+  let t = 0;
+  function tick() {
+    requestAnimationFrame(tick);
+    t += 0.002;
     ctx.clearRect(0, 0, W, H);
+    const cos = Math.cos(t * 0.08);
+    const sin = Math.sin(t * 0.08);
 
-    // Very slow rotation — preserve brain shape
-    const cos = Math.cos(time * 0.08), sin = Math.sin(time * 0.08);
-
-    // Update neuron positions (gentle drift + slow rotation)
     for (const n of neurons) {
       n.nx += n.vx;
       n.ny += n.vy;
-      const d = Math.sqrt(n.nx*n.nx + n.ny*n.ny + n.nz*n.nz);
+      const d = Math.sqrt(n.nx * n.nx + n.ny * n.ny + n.nz * n.nz);
       if (d > 0.75) {
         n.vx -= n.nx * 0.0002;
         n.vy -= n.ny * 0.0002;
       }
       n.vx += (Math.random() - 0.5) * 0.000008;
       n.vy += (Math.random() - 0.5) * 0.000008;
-      n.vx *= 0.995; n.vy *= 0.995;
+      n.vx *= 0.995;
+      n.vy *= 0.995;
       n.glow *= 0.94;
-
-      // Apply slow Y rotation for 3D feel
-      const rx = n.nx * cos - n.nz * sin;
-      const rz = n.nx * sin + n.nz * cos;
-      n._rx = rx; n._rz = rz;
+      n._rx = n.nx * cos - n.nz * sin;
+      n._rz = n.nx * sin + n.nz * cos;
     }
 
-    // Fire synapses from real events + resting-state ambient activity
-    // Resting brain: slow waves of activity that wander across the network
-    const ambientRate = 0.012 + Math.sin(time * 0.3) * 0.006; // breathing rhythm
+    const ambientRate = 0.012 + Math.sin(t * 0.3) * 0.006;
     for (let s = 0; s < MAX_SYN; s++) {
       if (synapses[s].life <= 0 && (fireQueue.length > 0 || Math.random() < ambientRate)) {
         const color = fireQueue.length > 0 ? fireQueue.shift() : defaultColor;
@@ -356,141 +519,84 @@
         synapses[s].max = 25 + Math.random() * 35;
         synapses[s].life = synapses[s].max;
         synapses[s].color = color;
-        // Light up endpoint neurons with process color
         na.glow = 1; nb.glow = 1;
         na.glowColor = color; nb.glowColor = color;
-        // Cascade: light up nearby neurons
-        for (let k = 0; k < N; k++) {
-          const dx = neurons[k].nx - na.nx, dy = neurons[k].ny - na.ny;
-          if (dx*dx + dy*dy < 0.02) {
-            neurons[k].glow = Math.max(neurons[k].glow, 0.6);
-            neurons[k].glowColor = color;
-          }
-        }
       }
       if (synapses[s].life > 0) synapses[s].life--;
     }
 
-    // Draw static connections (subtle network)
     ctx.lineWidth = 0.4;
     for (const conn of conns) {
-      const pa = getScreenPos(neurons[conn.a]);
-      const pb = getScreenPos(neurons[conn.b]);
+      const a = pos(neurons[conn.a]);
+      const b = pos(neurons[conn.b]);
       ctx.beginPath();
-      ctx.moveTo(pa.x, pa.y);
-      ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(100,140,200,0.10)';
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = "rgba(100,140,200,0.10)";
       ctx.stroke();
     }
 
-    // Draw active synapse pulses (color-coded by cognitive process)
     for (let s = 0; s < MAX_SYN; s++) {
       if (synapses[s].life <= 0) continue;
       const conn = conns[synapses[s].ci];
       if (!conn) continue;
-      const pa = getScreenPos(neurons[conn.a]);
-      const pb = getScreenPos(neurons[conn.b]);
-      const t = synapses[s].life / synapses[s].max;
-      const alpha = Math.sin(t * Math.PI);
-      const [cr, cg, cb] = synapses[s].color;
-      // Soft glow line (process color, desaturated)
+      const a = pos(neurons[conn.a]);
+      const b = pos(neurons[conn.b]);
+      const life = synapses[s].life / synapses[s].max;
+      const alpha = Math.sin(life * Math.PI);
+      const col = synapses[s].color;
       ctx.save();
-      ctx.filter = 'blur(3px)';
+      ctx.filter = "blur(3px)";
       ctx.beginPath();
-      ctx.moveTo(pa.x, pa.y);
-      ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (alpha * 0.4) + ')';
-      ctx.lineWidth = 2.5;
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + (alpha * 0.45) + ")";
+      ctx.lineWidth = 2.4;
       ctx.stroke();
       ctx.restore();
-      // Bright core (lighter version of process color)
-      const lr = Math.min(255, cr + 80), lg = Math.min(255, cg + 60), lb = Math.min(255, cb + 40);
       ctx.beginPath();
-      ctx.moveTo(pa.x, pa.y);
-      ctx.lineTo(pb.x, pb.y);
-      ctx.strokeStyle = 'rgba(' + lr + ',' + lg + ',' + lb + ',' + (alpha * 0.6) + ')';
-      ctx.lineWidth = 0.6;
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = "rgba(" + Math.min(255, col[0] + 70) + "," + Math.min(255, col[1] + 50) + "," + Math.min(255, col[2] + 30) + "," + (alpha * 0.7) + ")";
+      ctx.lineWidth = 0.7;
       ctx.stroke();
     }
 
-    // Draw neurons with multi-layer glow (color-coded by last cognitive process)
     for (const n of neurons) {
-      const p = getScreenPos(n);
-      const brightness = n.base + n.glow * 0.85;
-      const r = n.size;
-      // Active color from process, or default blue-white
+      const p = pos(n);
+      const glow = n.base + n.glow * 0.85;
       const gc = n.glowColor || defaultColor;
-      const hasColor = n.glow > 0.15 && n.glowColor;
-
-      // Layer 1: wide soft glow (process-colored when active)
+      const active = n.glow > 0.15 && n.glowColor;
+      const r = n.size;
       const glowRadius = r * (8 + n.glow * 12);
       const glowAlpha = 0.10 + n.glow * 0.45;
       ctx.save();
-      if (n.glow > 0.2) ctx.filter = 'blur(2px)';
+      if (n.glow > 0.2) ctx.filter = "blur(2px)";
       const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
-      if (hasColor) {
-        grad.addColorStop(0, 'rgba(' + gc[0] + ',' + gc[1] + ',' + gc[2] + ',' + glowAlpha + ')');
-        grad.addColorStop(0.3, 'rgba(' + gc[0]*0.6 + ',' + gc[1]*0.6 + ',' + gc[2]*0.6 + ',' + (glowAlpha*0.4) + ')');
-        grad.addColorStop(1, 'rgba(' + gc[0]*0.3 + ',' + gc[1]*0.3 + ',' + gc[2]*0.3 + ',0)');
+      if (active) {
+        grad.addColorStop(0, "rgba(" + gc[0] + "," + gc[1] + "," + gc[2] + "," + glowAlpha + ")");
+        grad.addColorStop(1, "rgba(" + Math.round(gc[0] * 0.3) + "," + Math.round(gc[1] * 0.3) + "," + Math.round(gc[2] * 0.3) + ",0)");
       } else {
-        grad.addColorStop(0, 'rgba(140,180,255,' + glowAlpha + ')');
-        grad.addColorStop(0.3, 'rgba(80,130,220,' + (glowAlpha * 0.4) + ')');
-        grad.addColorStop(1, 'rgba(40,80,180,0)');
+        grad.addColorStop(0, "rgba(140,180,255," + glowAlpha + ")");
+        grad.addColorStop(1, "rgba(40,80,180,0)");
       }
       ctx.beginPath();
       ctx.arc(p.x, p.y, glowRadius, 0, Math.PI * 2);
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.restore();
-
-      // Layer 2: core dot (process-colored when firing, blue-white at rest)
       ctx.beginPath();
       ctx.arc(p.x, p.y, r * 1.1, 0, Math.PI * 2);
-      const coreAlpha = Math.min(brightness * 1.4, 1);
-      if (hasColor && n.glow > 0.3) {
-        // Bright core in process color
-        const lr = Math.min(255, gc[0] + 70), lg = Math.min(255, gc[1] + 50), lb = Math.min(255, gc[2] + 30);
-        ctx.fillStyle = 'rgba(' + lr + ',' + lg + ',' + lb + ',' + coreAlpha + ')';
+      if (active && n.glow > 0.3) {
+        ctx.fillStyle = "rgba(" + Math.min(255, gc[0] + 70) + "," + Math.min(255, gc[1] + 50) + "," + Math.min(255, gc[2] + 30) + "," + Math.min(glow * 1.4, 1) + ")";
       } else {
-        // Cool blue-white at rest
-        const cr = Math.round(120 + brightness * 60);
-        const cg = Math.round(150 + brightness * 50);
-        const cb = Math.round(200 + brightness * 40);
-        ctx.fillStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + coreAlpha + ')';
+        ctx.fillStyle = "rgba(" + Math.round(120 + glow * 60) + "," + Math.round(150 + glow * 50) + "," + Math.round(200 + glow * 40) + "," + Math.min(glow * 1.4, 1) + ")";
       }
       ctx.fill();
     }
   }
-  frame();
+  tick();
 })();
-
-// Status
-fetch(location.origin + '/api/public/status')
-  .then(r => r.ok ? r.json() : Promise.reject())
-  .then(d => {
-    document.getElementById('dot').classList.add('on');
-    document.getElementById('st').textContent = 'online' + (d.uptime ? ' · ' + d.uptime : '');
-    if (d.uptime_short || d.uptime) document.getElementById('up').textContent = d.uptime_short || d.uptime;
-    if (d.notes !== undefined) document.getElementById('mem').textContent = d.notes;
-    if (d.model) document.getElementById('mdl').textContent = d.model;
-    // 24h activity stats
-    var hasActivity = false;
-    if (d.interactions_24h !== undefined) {
-      document.getElementById('int24').textContent = d.interactions_24h;
-      hasActivity = true;
-    }
-    if (d.tokens_today !== undefined) {
-      var t = d.tokens_today;
-      document.getElementById('tok').textContent = t >= 1000000 ? (t/1000000).toFixed(1)+'M' : t >= 1000 ? (t/1000).toFixed(0)+'K' : t;
-      hasActivity = true;
-    }
-    if (d.observations_today !== undefined) {
-      document.getElementById('obs').textContent = d.observations_today;
-      hasActivity = true;
-    }
-    if (hasActivity) document.getElementById('activity-row').style.display = 'flex';
-  })
-  .catch(() => { document.getElementById('st').textContent = 'offline'; });
 </script>
 </body>
 </html>

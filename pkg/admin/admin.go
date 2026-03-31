@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,39 +61,77 @@ type Handler struct {
 
 // EventBus broadcasts real-time agent activity events to SSE clients.
 type EventBus struct {
-	clients map[chan string]bool
+	clients map[chan AdminEvent]bool
+	recent  []AdminEvent
+	counts  map[string]int
 	mu      sync.RWMutex
 }
 
 func newEventBus() *EventBus {
-	return &EventBus{clients: make(map[chan string]bool)}
+	return &EventBus{
+		clients: make(map[chan AdminEvent]bool),
+		recent:  make([]AdminEvent, 0, 256),
+		counts:  make(map[string]int),
+	}
+}
+
+type AdminEvent struct {
+	Type string `json:"type"`
+	At   string `json:"at"`
 }
 
 // Emit sends an event to all connected SSE clients.
 func (eb *EventBus) Emit(eventType string) {
-	eb.mu.RLock()
-	defer eb.mu.RUnlock()
+	evt := AdminEvent{
+		Type: eventType,
+		At:   time.Now().UTC().Format(time.RFC3339Nano),
+	}
+
+	eb.mu.Lock()
+	eb.counts[eventType]++
+	eb.recent = append(eb.recent, evt)
+	if len(eb.recent) > 200 {
+		eb.recent = eb.recent[len(eb.recent)-200:]
+	}
+	clients := make([]chan AdminEvent, 0, len(eb.clients))
 	for ch := range eb.clients {
+		clients = append(clients, ch)
+	}
+	eb.mu.Unlock()
+
+	for _, ch := range clients {
 		select {
-		case ch <- eventType:
-		default: // drop if client is slow
+		case ch <- evt:
+		default:
 		}
 	}
 }
 
-func (eb *EventBus) subscribe() chan string {
-	ch := make(chan string, 16)
+func (eb *EventBus) subscribe() chan AdminEvent {
+	ch := make(chan AdminEvent, 32)
 	eb.mu.Lock()
 	eb.clients[ch] = true
 	eb.mu.Unlock()
 	return ch
 }
 
-func (eb *EventBus) unsubscribe(ch chan string) {
+func (eb *EventBus) unsubscribe(ch chan AdminEvent) {
 	eb.mu.Lock()
 	delete(eb.clients, ch)
 	eb.mu.Unlock()
 	close(ch)
+}
+
+func (eb *EventBus) snapshot() (recent []AdminEvent, counts map[string]int) {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+	recent = make([]AdminEvent, len(eb.recent))
+	copy(recent, eb.recent)
+	counts = make(map[string]int, len(eb.counts))
+	for k, v := range eb.counts {
+		counts[k] = v
+	}
+	return recent, counts
 }
 
 func New(workspacePath, token, configPath string, cfg *config.Config) *Handler {
@@ -114,15 +153,16 @@ func (h *Handler) EmitEvent(eventType string) {
 }
 
 func (h *Handler) SetCronService(cs *cron.CronService) { h.cronService = cs }
-func (h *Handler) SetLightsTool(lt *tools.LightsTool)   { h.lightsTool = lt }
-func (h *Handler) SetReloadFn(fn func() error)          { h.reloadFn = fn }
-func (h *Handler) SetVersion(v string)                   { h.version = v }
+func (h *Handler) SetLightsTool(lt *tools.LightsTool)  { h.lightsTool = lt }
+func (h *Handler) SetReloadFn(fn func() error)         { h.reloadFn = fn }
+func (h *Handler) SetVersion(v string)                 { h.version = v }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", h.serveHome)
 	mux.HandleFunc("/about", h.serveAbout)
 	mux.HandleFunc("/admin", h.serveSPA)
 	mux.HandleFunc("/api/public/status", h.publicStatus)
+	mux.HandleFunc("/api/public/brain", h.publicBrain)
 	mux.HandleFunc("/api/public/events", h.sseEvents)
 	mux.HandleFunc("/api/health", h.withAuth(h.systemHealth))
 	mux.HandleFunc("/api/swap/free", h.withAuth(h.freeSwap))
@@ -385,9 +425,243 @@ func (h *Handler) publicStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Recent event counters (from in-process event bus)
+	if h.eventBus != nil {
+		recent, counts := h.eventBus.snapshot()
+		result["events_total"] = counts
+		result["events_recent_count"] = len(recent)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(result)
+}
+
+// publicBrain returns a richer runtime snapshot for the realtime home dashboard.
+func (h *Handler) publicBrain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	status := map[string]interface{}{}
+	if data, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "sentinel.json")); err == nil {
+		var s map[string]interface{}
+		if json.Unmarshal(data, &s) == nil {
+			status["cpu_temp_c"] = s["cpu_temp_c"]
+			status["ram_used_percent"] = s["ram_used_percent"]
+			status["disk_used_percent"] = s["disk_used_percent"]
+			if alerts, ok := s["alerts"].([]interface{}); ok {
+				status["alerts_count"] = len(alerts)
+			}
+			status["uptime_seconds"] = s["uptime_seconds"]
+		}
+	}
+
+	swapTotalMB, swapFreeMB, swapUsedPercent := readSwap()
+	_ = swapTotalMB
+	_ = swapFreeMB
+	status["swap_used_percent"] = swapUsedPercent
+
+	resp := map[string]interface{}{
+		"generated_at": time.Now().UTC().Format(time.RFC3339),
+		"version":      h.version,
+		"status":       status,
+		"services": map[string]bool{
+			"heartbeat": h.config.Heartbeat.Enabled,
+			"sentinel":  h.config.Sentinel.Enabled,
+			"reasoning": h.config.Reasoning.Enabled,
+			"rss":       h.config.RSS.Enabled,
+			"health":    h.config.Health.Enabled,
+		},
+	}
+
+	// Provider/model from current disk config.
+	if h.configPath != "" {
+		if diskCfg, err := config.LoadConfig(h.configPath); err == nil {
+			resp["provider"] = diskCfg.Agents.Defaults.Provider
+			resp["model"] = diskCfg.Agents.Defaults.Model
+		}
+	}
+
+	// Public summary reused by home cards.
+	if ps, err := h.buildPublicStatus(); err == nil {
+		resp["summary"] = ps
+	}
+
+	// Event trace and counters.
+	if h.eventBus != nil {
+		recent, counts := h.eventBus.snapshot()
+		// latest first in trace
+		for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
+			recent[i], recent[j] = recent[j], recent[i]
+		}
+		if len(recent) > 50 {
+			recent = recent[:50]
+		}
+		resp["events"] = map[string]interface{}{
+			"counts": counts,
+			"recent": recent,
+		}
+
+		type kv struct {
+			K string
+			V int
+		}
+		top := make([]kv, 0, len(counts))
+		for k, v := range counts {
+			top = append(top, kv{K: k, V: v})
+		}
+		sort.Slice(top, func(i, j int) bool { return top[i].V > top[j].V })
+		if len(top) > 5 {
+			top = top[:5]
+		}
+		topMap := make([]map[string]interface{}, 0, len(top))
+		for _, item := range top {
+			topMap = append(topMap, map[string]interface{}{"type": item.K, "count": item.V})
+		}
+		resp["top_events"] = topMap
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) buildPublicStatus() (map[string]interface{}, error) {
+	result := map[string]interface{}{
+		"status":  "ok",
+		"version": h.version,
+	}
+
+	sentinelData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "sentinel.json"))
+	if err == nil {
+		var s map[string]interface{}
+		if json.Unmarshal(sentinelData, &s) == nil {
+			if up, ok := s["uptime_seconds"].(float64); ok {
+				hrs := int(up) / 3600
+				mins := (int(up) % 3600) / 60
+				if hrs > 24 {
+					d := hrs / 24
+					result["uptime_short"] = fmt.Sprintf("%dd", d)
+					result["uptime"] = fmt.Sprintf("%dd %dh", d, hrs%24)
+				} else if hrs > 0 {
+					result["uptime_short"] = fmt.Sprintf("%dh", hrs)
+					result["uptime"] = fmt.Sprintf("%dh %dm", hrs, mins)
+				} else {
+					result["uptime_short"] = fmt.Sprintf("%dm", mins)
+					result["uptime"] = fmt.Sprintf("%dm", mins)
+				}
+			}
+		}
+	}
+
+	if h.configPath != "" {
+		if diskCfg, err := config.LoadConfig(h.configPath); err == nil {
+			result["model"] = diskCfg.Agents.Defaults.Model
+			result["provider"] = diskCfg.Agents.Defaults.Provider
+		}
+	} else if h.config != nil && h.config.Agents.Defaults.Model != "" {
+		result["model"] = h.config.Agents.Defaults.Model
+	}
+
+	vaultDir := filepath.Join(h.workspacePath, "obsidian")
+	folders := []string{"daily", "people", "preferences", "insights", "decisions", "projects", "blog", "state", "inbox"}
+	totalNotes := 0
+	for _, f := range folders {
+		dir := filepath.Join(vaultDir, f)
+		entries, err := os.ReadDir(dir)
+		if err == nil {
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+					totalNotes++
+				}
+			}
+		}
+	}
+	result["notes"] = totalNotes
+
+	if h.cronService != nil {
+		jobsFile := filepath.Join(h.workspacePath, "cron", "jobs.json")
+		if data, err := os.ReadFile(jobsFile); err == nil {
+			var jobs []map[string]interface{}
+			if json.Unmarshal(data, &jobs) == nil {
+				count := 0
+				for _, j := range jobs {
+					if enabled, ok := j["enabled"].(bool); ok && enabled {
+						count++
+					}
+				}
+				result["cron_jobs"] = count
+			}
+		}
+	}
+
+	scoresData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "interaction_scores.json"))
+	if err == nil {
+		var scores []map[string]interface{}
+		if json.Unmarshal(scoresData, &scores) == nil {
+			cutoff := time.Now().UTC().Add(-24 * time.Hour)
+			count24h := 0
+			var lastActivity string
+			for _, s := range scores {
+				if ts, ok := s["timestamp"].(string); ok {
+					if t, err := time.Parse(time.RFC3339, ts); err == nil {
+						if t.After(cutoff) {
+							count24h++
+						}
+						if ts > lastActivity {
+							lastActivity = ts
+						}
+					}
+				}
+			}
+			result["interactions_24h"] = count24h
+			if lastActivity != "" {
+				result["last_activity"] = lastActivity
+			}
+		}
+	}
+
+	telemetryData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "telemetry.json"))
+	if err == nil {
+		var telemetry map[string]interface{}
+		if json.Unmarshal(telemetryData, &telemetry) == nil {
+			today := time.Now().Format("2006-01-02")
+			if days, ok := telemetry["days"].([]interface{}); ok {
+				for _, d := range days {
+					if dm, ok := d.(map[string]interface{}); ok {
+						if dm["date"] == today {
+							if totals, ok := dm["totals"].(map[string]interface{}); ok {
+								if tt, ok := totals["total_tokens"].(float64); ok {
+									result["tokens_today"] = int64(tt)
+								}
+								if calls, ok := totals["calls"].(float64); ok {
+									result["calls_today"] = int(calls)
+								}
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	reasoningData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "reasoning_state.json"))
+	if err == nil {
+		var rs map[string]interface{}
+		if json.Unmarshal(reasoningData, &rs) == nil {
+			if obs, ok := rs["observations_today"].(float64); ok {
+				result["observations_today"] = int(obs)
+			}
+			if esc, ok := rs["escalations_today"].(float64); ok {
+				result["escalations_today"] = int(esc)
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // fileInfo is the JSON shape returned by the list endpoint.
@@ -399,8 +673,8 @@ type fileInfo struct {
 // networkInfo represents a physical network interface.
 type networkInfo struct {
 	Name    string `json:"name"`
-	State   string `json:"state"`    // up/down
-	IP      string `json:"ip"`       // first IPv4 if available
+	State   string `json:"state"` // up/down
+	IP      string `json:"ip"`    // first IPv4 if available
 	RxBytes int64  `json:"rx_bytes"`
 	TxBytes int64  `json:"tx_bytes"`
 }
@@ -417,9 +691,9 @@ type extendedHealth struct {
 	// Sentinel fields (embedded from JSON)
 	Sentinel json.RawMessage `json:"sentinel"`
 	// Swap
-	SwapTotalMB   int64   `json:"swap_total_mb"`
-	SwapFreeMB    int64   `json:"swap_free_mb"`
-	SwapUsedPct   float64 `json:"swap_used_percent"`
+	SwapTotalMB int64   `json:"swap_total_mb"`
+	SwapFreeMB  int64   `json:"swap_free_mb"`
+	SwapUsedPct float64 `json:"swap_used_percent"`
 	// Network
 	Networks []networkInfo `json:"networks"`
 	// Bluetooth
@@ -1231,7 +1505,8 @@ func (h *Handler) sseEvents(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", evt)
+			payload, _ := json.Marshal(evt)
+			fmt.Fprintf(w, "data: %s\n\n", payload)
 			flusher.Flush()
 		}
 	}
