@@ -105,7 +105,16 @@ func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msg
 	registry.Register(tools.NewGitTool("/home/diego/Documents/picoclaw"))
 
 	// Coolify deploy
-	registry.Register(tools.NewDeployTool())
+	deployTool := tools.NewDeployTool()
+	deployTool.SetSendCallback(func(channel, chatID, content string) error {
+		msgBus.PublishOutbound(bus.OutboundMessage{
+			Channel: channel,
+			ChatID:  chatID,
+			Content: content,
+		})
+		return nil
+	})
+	registry.Register(deployTool)
 
 	// Workflow engine (multi-step with state persistence and error recovery)
 	registry.Register(tools.NewWorkflowTool(workspace, registry))

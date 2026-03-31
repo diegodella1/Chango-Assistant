@@ -21,10 +21,10 @@ import (
 // Concern represents something that deserves attention without being asked.
 type Concern struct {
 	ID        string    `json:"id"`
-	Type      string    `json:"type"`       // stale_project, overdue_task, pattern, opportunity, upcoming_event
-	Priority  int       `json:"priority"`   // 1-5, 5 = urgent
+	Type      string    `json:"type"`     // stale_project, overdue_task, pattern, opportunity, upcoming_event
+	Priority  int       `json:"priority"` // 1-5, 5 = urgent
 	Summary   string    `json:"summary"`
-	Context   string    `json:"context"`    // what triggered this concern
+	Context   string    `json:"context"` // what triggered this concern
 	CreatedAt time.Time `json:"created_at"`
 	Resolved  bool      `json:"resolved"`
 }
@@ -528,6 +528,41 @@ func parseLastChannel(lastChannel string) (platform, userID string) {
 	return parts[0], parts[1]
 }
 
+func (s *Service) notifyAutoDeployFailure(stage, detail string) {
+	s.mu.RLock()
+	msgBus := s.bus
+	s.mu.RUnlock()
+	if msgBus == nil {
+		return
+	}
+
+	lastChannel := s.state.GetLastChannel()
+	if lastChannel == "" {
+		return
+	}
+	platform, userID := parseLastChannel(lastChannel)
+	if platform == "" || userID == "" || constants.IsInternalChannel(platform) {
+		return
+	}
+
+	detail = strings.TrimSpace(detail)
+	if len(detail) > 500 {
+		detail = detail[:500] + "…"
+	}
+
+	content := fmt.Sprintf("⚠️ Auto-deploy falló en %s.", stage)
+	if detail != "" {
+		content += "\n" + detail
+	}
+	content += "\nVoy a necesitar intervención manual para corregirlo."
+
+	msgBus.PublishOutbound(bus.OutboundMessage{
+		Channel: platform,
+		ChatID:  userID,
+		Content: content,
+	})
+}
+
 // deployState tracks the last deploy time.
 type deployState struct {
 	LastDeploy time.Time `json:"last_deploy"`
@@ -617,6 +652,7 @@ func (s *Service) checkAutoDeploy() {
 			"error":  err.Error(),
 			"output": string(output),
 		})
+		s.notifyAutoDeployFailure("go build", strings.TrimSpace(string(output)))
 		return
 	}
 
@@ -628,6 +664,7 @@ func (s *Service) checkAutoDeploy() {
 			"error":  err.Error(),
 			"output": string(output),
 		})
+		s.notifyAutoDeployFailure("go vet", strings.TrimSpace(string(output)))
 		return
 	}
 
@@ -638,6 +675,7 @@ func (s *Service) checkAutoDeploy() {
 	gitAddCmd.Dir = sourceRoot
 	if _, err := gitAddCmd.CombinedOutput(); err != nil {
 		logger.ErrorCF("attention", "Auto-deploy git add failed", map[string]interface{}{"error": err.Error()})
+		s.notifyAutoDeployFailure("git add", err.Error())
 		return
 	}
 
@@ -650,6 +688,7 @@ func (s *Service) checkAutoDeploy() {
 				"error":  err.Error(),
 				"output": string(output),
 			})
+			s.notifyAutoDeployFailure("git commit", strings.TrimSpace(string(output)))
 			return
 		}
 	}
@@ -662,6 +701,7 @@ func (s *Service) checkAutoDeploy() {
 			"error":  err.Error(),
 			"output": string(output),
 		})
+		s.notifyAutoDeployFailure("git push", strings.TrimSpace(string(output)))
 		return
 	}
 
@@ -675,6 +715,7 @@ func (s *Service) checkAutoDeploy() {
 				"error":  err.Error(),
 				"output": string(output),
 			})
+			s.notifyAutoDeployFailure("deploy trigger", strings.TrimSpace(string(output)))
 		} else {
 			logger.InfoC("attention", "Coolify deploy triggered successfully")
 		}

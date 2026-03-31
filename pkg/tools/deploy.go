@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 // appUUIDs maps known app names to their Coolify UUIDs.
@@ -21,10 +23,19 @@ var appUUIDs = map[string]string{
 	"picoclaw": "vk4goko0koc8k4c48sckwsk8",
 }
 
+var appHealthURLs = map[string]string{
+	"picoclaw": "http://127.0.0.1:18790/health",
+}
+
+type DeploySendCallback func(channel, chatID, content string) error
+
 // DeployTool manages Coolify deployments via API.
 type DeployTool struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL        string
+	httpClient     *http.Client
+	defaultChannel string
+	defaultChatID  string
+	sendCallback   DeploySendCallback
 }
 
 func NewDeployTool() *DeployTool {
@@ -37,6 +48,15 @@ func NewDeployTool() *DeployTool {
 }
 
 func (t *DeployTool) Name() string { return "deploy" }
+
+func (t *DeployTool) SetContext(channel, chatID string) {
+	t.defaultChannel = channel
+	t.defaultChatID = chatID
+}
+
+func (t *DeployTool) SetSendCallback(callback DeploySendCallback) {
+	t.sendCallback = callback
+}
 
 func (t *DeployTool) Description() string {
 	return "Coolify deployment operations. Actions: deploy (restart an app), status (check deployment status), logs (get deployment logs). " +
@@ -132,6 +152,8 @@ func (t *DeployTool) deploy(ctx context.Context, args map[string]interface{}) *T
 		}
 		return SilentResult(fmt.Sprintf("Deploy triggered for %s. Response: %s", app, string(body)))
 	}
+
+	t.startFailureMonitor(app, uuid, deployUUID)
 
 	return SilentResult(fmt.Sprintf("Deploy triggered for %s. deployment_uuid: %s\nUse deploy status to check progress.", app, deployUUID))
 }
@@ -336,4 +358,149 @@ func knownAppNames() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+func (t *DeployTool) startFailureMonitor(app, uuid, deployUUID string) {
+	if t.sendCallback == nil || t.defaultChannel == "" || t.defaultChatID == "" || deployUUID == "" {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+		defer cancel()
+
+		for {
+			select {
+			case <-ctx.Done():
+				t.notifyFailure(fmt.Sprintf("⚠️ Deploy %s sin estado final tras 12m (deployment_uuid: %s). Revisá Coolify.", app, deployUUID))
+				return
+			case <-time.After(10 * time.Second):
+				status, logs, err := t.fetchDeploymentSnapshot(ctx, deployUUID)
+				if err != nil {
+					logger.WarnCF("deploy", "Failed to poll deployment status", map[string]interface{}{
+						"deployment_uuid": deployUUID,
+						"error":           err.Error(),
+					})
+					continue
+				}
+				if status == "" || status == "in_progress" || status == "queued" || status == "running" {
+					continue
+				}
+				if isFailedDeployStatus(status) {
+					t.notifyFailure(fmt.Sprintf("❌ Deploy falló (%s) para %s (%s). deployment_uuid: %s\n%s", status, app, uuid, deployUUID, summarizeLogs(logs)))
+					return
+				}
+				if status == "finished" {
+					if err := t.checkHealth(ctx, app, uuid); err != nil {
+						t.notifyFailure(fmt.Sprintf("⚠️ Deploy terminó pero health-check falló para %s (%s): %v\ndeployment_uuid: %s", app, uuid, err, deployUUID))
+					}
+					return
+				}
+			}
+		}
+	}()
+}
+
+func (t *DeployTool) fetchDeploymentSnapshot(ctx context.Context, deployUUID string) (string, string, error) {
+	tokenID, bearer, err := t.createTempToken(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("create token: %w", err)
+	}
+	defer t.cleanupToken(ctx, tokenID)
+
+	url := fmt.Sprintf("%s/api/v1/deployments/%s", t.baseURL, deployUUID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := t.httpClient.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", "", fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", "", err
+	}
+
+	status, _ := result["status"].(string)
+	logs, _ := result["logs"].(string)
+	return strings.ToLower(strings.TrimSpace(status)), logs, nil
+}
+
+func (t *DeployTool) checkHealth(ctx context.Context, app, uuid string) error {
+	url := resolveHealthURL(app, uuid)
+	if url == "" {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func (t *DeployTool) notifyFailure(content string) {
+	if t.sendCallback == nil || t.defaultChannel == "" || t.defaultChatID == "" || strings.TrimSpace(content) == "" {
+		return
+	}
+	if err := t.sendCallback(t.defaultChannel, t.defaultChatID, content); err != nil {
+		logger.ErrorCF("deploy", "Failed to send deploy failure notification", map[string]interface{}{
+			"channel": t.defaultChannel,
+			"chat_id": t.defaultChatID,
+			"error":   err.Error(),
+		})
+	}
+}
+
+func isFailedDeployStatus(status string) bool {
+	switch status {
+	case "failed", "error", "cancelled", "canceled":
+		return true
+	default:
+		return false
+	}
+}
+
+func resolveHealthURL(app, uuid string) string {
+	if v, ok := appHealthURLs[strings.ToLower(strings.TrimSpace(app))]; ok {
+		return v
+	}
+	for name, id := range appUUIDs {
+		if strings.EqualFold(id, uuid) {
+			return appHealthURLs[name]
+		}
+	}
+	return ""
+}
+
+func summarizeLogs(logs string) string {
+	logs = strings.TrimSpace(logs)
+	if logs == "" {
+		return "No logs disponibles."
+	}
+	const max = 700
+	if len(logs) <= max {
+		return logs
+	}
+	return "Últimas líneas:\n" + logs[len(logs)-max:]
 }
