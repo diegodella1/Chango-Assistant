@@ -599,36 +599,36 @@
 <div class="login-overlay" id="loginOverlay">
   <div class="login-box">
     <h2>chango admin</h2>
-    <div class="login-error" id="loginError">Token incorrecto</div>
+    <div class="login-error" id="loginError">Invalid token</div>
     <input type="password" id="tokenInput" placeholder="Admin token" autofocus>
-    <button class="btn btn-primary" onclick="doLogin()">Entrar</button>
+    <button class="btn btn-primary" onclick="doLogin()">Sign in</button>
   </div>
 </div>
 
 <header>
   <h1>chango <span>admin</span> <span class="version-badge" id="versionBadge"></span></h1>
-  <button class="btn" onclick="doLogout()">Salir</button>
+  <button class="btn" onclick="doLogout()">Sign out</button>
 </header>
 
 <div class="main">
   <nav class="sidebar">
-    <div class="section-label">Sistema</div>
+    <div class="section-label">System</div>
     <ul><li id="healthNav" onclick="showHealth()">Raspberry Pi</li></ul>
-    <div class="section-label">Memoria</div>
+    <div class="section-label">Memory</div>
     <ul><li id="vaultNav" onclick="showVault()">Vault</li></ul>
     <div class="section-label">IoT</div>
-    <ul><li id="lightsNav" onclick="showLights()">Luces</li></ul>
-    <div class="section-label">Automatizacion</div>
+    <ul><li id="lightsNav" onclick="showLights()">Lights</li></ul>
+    <div class="section-label">Automation</div>
     <ul><li id="cronNav" onclick="showCron()">Cron Jobs</li></ul>
-    <div class="section-label">Config</div>
-    <ul><li id="settingsNav" onclick="showSettings()">Ajustes</li></ul>
+    <div class="section-label">Settings</div>
+    <ul><li id="settingsNav" onclick="showSettings()">Settings</li></ul>
     <div class="section-label">Logs</div>
-    <ul><li id="logsNav" onclick="showLogs()">Visor</li></ul>
-    <div class="section-label">Archivos</div>
+    <ul><li id="logsNav" onclick="showLogs()">Viewer</li></ul>
+    <div class="section-label">Files</div>
     <ul id="fileList"></ul>
   </nav>
   <div class="editor-wrap" id="editorWrap">
-    <div class="empty-state" id="emptyState">Selecciona un archivo</div>
+    <div class="empty-state" id="emptyState">Select a file</div>
     <div class="health-panel" id="healthPanel" style="display:none"></div>
     <div class="vault-panel" id="vaultPanel" style="display:none"></div>
     <div class="settings-panel" id="settingsPanel" style="display:none"></div>
@@ -638,10 +638,10 @@
     <div style="display:none;flex-direction:column;flex:1;overflow:hidden" id="editorPanel">
       <div class="editor-toolbar">
         <span class="filename" id="currentFile"></span>
-        <button class="btn btn-primary" id="saveBtn" onclick="saveFile()">Guardar</button>
+        <button class="btn btn-primary" id="saveBtn" onclick="saveFile()">Save</button>
       </div>
       <textarea id="editor" spellcheck="false"></textarea>
-      <div class="status idle" id="statusBar">Listo</div>
+      <div class="status idle" id="statusBar">Ready</div>
     </div>
   </div>
 </div>
@@ -722,13 +722,13 @@ function renderFileList(files) {
 }
 
 function openFile(name, el) {
-  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  if (dirty && !confirm('You have unsaved changes. Discard them?')) return;
 
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   el.classList.add('active');
   hideAllPanels();
 
-  setStatus('Cargando...', 'idle');
+  setStatus('Loading...', 'idle');
   fetch(API + '/api/files/' + encodeURIComponent(name), { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => {
@@ -738,7 +738,7 @@ function openFile(name, el) {
       document.getElementById('emptyState').style.display = 'none';
       document.getElementById('editorPanel').style.display = 'flex';
       dirty = false;
-      setStatus('Listo', 'idle');
+      setStatus('Ready', 'idle');
     })
     .catch(e => setStatus('Error: ' + e.message, 'err'));
 }
@@ -747,7 +747,7 @@ function saveFile() {
   if (!currentFile) return;
   const btn = document.getElementById('saveBtn');
   btn.disabled = true;
-  setStatus('Guardando...', 'idle');
+  setStatus('Saving...', 'idle');
 
   fetch(API + '/api/files/' + encodeURIComponent(currentFile), {
     method: 'PUT',
@@ -757,8 +757,8 @@ function saveFile() {
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(() => {
       dirty = false;
-      setStatus('Guardado', 'ok');
-      setTimeout(() => { if (!dirty) setStatus('Listo', 'idle'); }, 2000);
+      setStatus('Saved', 'ok');
+      setTimeout(() => { if (!dirty) setStatus('Ready', 'idle'); }, 2000);
     })
     .catch(e => setStatus('Error: ' + e.message, 'err'))
     .finally(() => { btn.disabled = false; });
@@ -842,23 +842,23 @@ function renderHealth(d) {
     ((s.ram_total_mb||0) - (s.ram_available_mb||0)) + ' / ' + (s.ram_total_mb||0) + ' MB', s.ram_used_percent, 100);
   html += card('Swap', d.swap_used_percent.toFixed(0) + '%', swapCls,
     (d.swap_total_mb - d.swap_free_mb) + ' / ' + d.swap_total_mb + ' MB', d.swap_used_percent, 100);
-  html += card('Disco', (s.disk_used_percent||0).toFixed(0) + '%', diskCls,
+  html += card('Disk', (s.disk_used_percent||0).toFixed(0) + '%', diskCls,
     ((s.disk_total_gb||0) - (s.disk_free_gb||0)).toFixed(1) + ' / ' + (s.disk_total_gb||0).toFixed(1) + ' GB', s.disk_used_percent, 100);
   html += card('Uptime', uptime, 'good', '');
 
   html += '</div>';
 
-  // Alertas
+  // Alerts
   if (s.alerts && s.alerts.length > 0) {
-    html += '<div class="health-alerts"><h3 style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px">Alertas</h3>';
+    html += '<div class="health-alerts"><h3 style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px">Alerts</h3>';
     s.alerts.forEach(a => { html += '<div class="alert-item">' + esc(a) + '</div>'; });
     html += '</div>';
   }
 
-  // Red
+  // Network
   if (d.networks && d.networks.length > 0) {
-    html += '<div class="health-section"><h3>Red</h3><table class="health-table">';
-    html += '<tr><th>Interfaz</th><th>Estado</th><th>IP</th><th>RX</th><th>TX</th></tr>';
+    html += '<div class="health-section"><h3>Network</h3><table class="health-table">';
+    html += '<tr><th>Interface</th><th>Status</th><th>IP</th><th>RX</th><th>TX</th></tr>';
     d.networks.forEach(n => {
       const dot = n.state === 'up' ? 'dot-up' : 'dot-down';
       html += '<tr><td>' + esc(n.name) + '</td>';
@@ -873,7 +873,7 @@ function renderHealth(d) {
   // Bluetooth
   if (d.bluetooth && d.bluetooth.length > 0) {
     html += '<div class="health-section"><h3>Bluetooth</h3><table class="health-table">';
-    html += '<tr><th>Adaptador</th><th>Estado</th><th>Direcci\u00F3n</th></tr>';
+    html += '<tr><th>Adapter</th><th>Status</th><th>Address</th></tr>';
     d.bluetooth.forEach(b => {
       const dot = b.state === 'up' ? 'dot-up' : 'dot-down';
       html += '<tr><td>' + esc(b.name) + '</td>';
@@ -885,15 +885,15 @@ function renderHealth(d) {
 
   // Action buttons
   html += '<div class="health-actions">';
-  html += '<button class="btn-action" id="btnFreeSwap" onclick="freeSwap()">Liberar Swap</button>';
-  html += '<button class="btn-action" id="btnWifiScan" onclick="scanWifi()">Escanear WiFi</button>';
-  html += '<button class="btn-action" id="btnBtScan" onclick="scanBluetooth()">Escanear Bluetooth</button>';
+  html += '<button class="btn-action" id="btnFreeSwap" onclick="freeSwap()">Free Swap</button>';
+  html += '<button class="btn-action" id="btnWifiScan" onclick="scanWifi()">Scan Wi-Fi</button>';
+  html += '<button class="btn-action" id="btnBtScan" onclick="scanBluetooth()">Scan Bluetooth</button>';
   html += '</div>';
 
   // Scan results area
   html += '<div class="scan-results" id="scanResults"></div>';
 
-  html += '<div class="health-meta">sentinel: ' + ago + ' // refresco 30s</div>';
+  html += '<div class="health-meta">sentinel: ' + ago + ' // refresh 30s</div>';
   document.getElementById('healthPanel').innerHTML = html;
 }
 
@@ -919,9 +919,9 @@ function card(label, value, cls, sub, pct, max) {
 
 function timeSince(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'hace ' + s + 's';
-  if (s < 3600) return 'hace ' + Math.floor(s / 60) + 'min';
-  return 'hace ' + Math.floor(s / 3600) + 'h';
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'min ago';
+  return Math.floor(s / 3600) + 'h ago';
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -929,43 +929,43 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 // Actions
 function freeSwap() {
   const btn = document.getElementById('btnFreeSwap');
-  if (!confirm('Esto va a liberar el swap (swapoff + swapon). Puede tardar unos segundos.')) return;
+  if (!confirm('This will free swap (swapoff + swapon). It may take a few seconds.')) return;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Liberando...';
+  btn.innerHTML = '<span class="spinner"></span>Freeing...';
   fetch(API + '/api/swap/free', { method: 'POST', headers: headers() })
     .then(r => r.json())
     .then(data => {
       if (data.error) throw new Error(data.error);
-      btn.textContent = 'Swap liberado!';
-      setTimeout(() => { btn.textContent = 'Liberar Swap'; btn.disabled = false; loadHealth(); }, 2000);
+      btn.textContent = 'Swap freed!';
+      setTimeout(() => { btn.textContent = 'Free Swap'; btn.disabled = false; loadHealth(); }, 2000);
     })
     .catch(e => {
       btn.textContent = 'Error';
       showScanResults('Error', '<div class="alert-item">' + esc(e.message) + '</div>');
-      setTimeout(() => { btn.textContent = 'Liberar Swap'; btn.disabled = false; }, 3000);
+      setTimeout(() => { btn.textContent = 'Free Swap'; btn.disabled = false; }, 3000);
     });
 }
 
 function scanWifi() {
   const btn = document.getElementById('btnWifiScan');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Escaneando...';
+  btn.innerHTML = '<span class="spinner"></span>Scanning...';
   fetch(API + '/api/wifi/scan', { method: 'POST', headers: headers() })
     .then(r => r.json())
     .then(data => {
-      btn.textContent = 'Escanear WiFi';
+      btn.textContent = 'Scan Wi-Fi';
       btn.disabled = false;
       if (data.error) { showScanResults('Error', '<div class="alert-item">' + esc(data.error) + '</div>'); return; }
-      if (!data.length) { showScanResults('WiFi', '<p style="color:var(--text-muted)">No se encontraron redes</p>'); return; }
-      let t = '<table class="health-table"><tr><th>SSID</th><th>Signal</th><th>Freq</th><th>Canal</th><th>BSSID</th></tr>';
+      if (!data.length) { showScanResults('Wi-Fi', '<p style="color:var(--text-muted)">No networks found</p>'); return; }
+      let t = '<table class="health-table"><tr><th>SSID</th><th>Signal</th><th>Freq</th><th>Channel</th><th>BSSID</th></tr>';
       data.forEach(n => {
         t += '<tr><td>' + esc(n.ssid) + '</td><td>' + esc(n.signal) + '</td><td>' + esc(n.freq) + '</td><td>' + (n.channel||'-') + '</td><td style="color:var(--text-muted)">' + esc(n.bssid) + '</td></tr>';
       });
       t += '</table>';
-      showScanResults('Redes WiFi (' + data.length + ')', t);
+      showScanResults('Wi-Fi Networks (' + data.length + ')', t);
     })
     .catch(e => {
-      btn.textContent = 'Escanear WiFi';
+      btn.textContent = 'Scan Wi-Fi';
       btn.disabled = false;
       showScanResults('Error', '<div class="alert-item">' + esc(e.message) + '</div>');
     });
@@ -974,23 +974,23 @@ function scanWifi() {
 function scanBluetooth() {
   const btn = document.getElementById('btnBtScan');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Escaneando (~8s)...';
+  btn.innerHTML = '<span class="spinner"></span>Scanning (~8s)...';
   fetch(API + '/api/bluetooth/scan', { method: 'POST', headers: headers() })
     .then(r => r.json())
     .then(data => {
-      btn.textContent = 'Escanear Bluetooth';
+      btn.textContent = 'Scan Bluetooth';
       btn.disabled = false;
       if (data.error) { showScanResults('Error', '<div class="alert-item">' + esc(data.error) + '</div>'); return; }
-      if (!data.length) { showScanResults('Bluetooth', '<p style="color:var(--text-muted)">No se encontraron dispositivos</p>'); return; }
-      let t = '<table class="health-table"><tr><th>Nombre</th><th>Direcci\u00F3n</th></tr>';
+      if (!data.length) { showScanResults('Bluetooth', '<p style="color:var(--text-muted)">No devices found</p>'); return; }
+      let t = '<table class="health-table"><tr><th>Name</th><th>Address</th></tr>';
       data.forEach(d => {
         t += '<tr><td>' + esc(d.name) + '</td><td style="color:var(--text-muted)">' + esc(d.address) + '</td></tr>';
       });
       t += '</table>';
-      showScanResults('Dispositivos Bluetooth (' + data.length + ')', t);
+      showScanResults('Bluetooth Devices (' + data.length + ')', t);
     })
     .catch(e => {
-      btn.textContent = 'Escanear Bluetooth';
+      btn.textContent = 'Scan Bluetooth';
       btn.disabled = false;
       showScanResults('Error', '<div class="alert-item">' + esc(e.message) + '</div>');
     });
@@ -1029,14 +1029,14 @@ function loadVault() {
     .then(data => { vaultData = data; renderVaultOverview(); })
     .catch(e => {
       document.getElementById('vaultPanel').innerHTML =
-        '<div class="empty-state">Error cargando vault: ' + e.message + '</div>';
+        '<div class="empty-state">Error loading vault: ' + e.message + '</div>';
     });
 }
 
 function renderVaultOverview() {
   const d = vaultData;
   let html = '<h2>Vault</h2>';
-  html += '<div class="vault-total">' + d.total_notes + ' notas</div>';
+  html += '<div class="vault-total">' + d.total_notes + ' notes</div>';
   html += '<div class="vault-folders">';
   d.folders.forEach(f => {
     const active = vaultCurrentFolder === f.name ? ' active' : '';
@@ -1060,17 +1060,17 @@ function openVaultFolder(folder) {
   });
 
   const area = document.getElementById('vaultNotesArea');
-  area.innerHTML = '<span class="spinner"></span> Cargando...';
+  area.innerHTML = '<span class="spinner"></span> Loading...';
 
   fetch(API + '/api/vault/notes?folder=' + encodeURIComponent(folder), { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(notes => {
       if (!notes || notes.length === 0) {
-        area.innerHTML = '<p style="color:var(--text-muted);margin-top:16px">Sin notas en ' + esc(folder) + '/</p>';
+        area.innerHTML = '<p style="color:var(--text-muted);margin-top:16px">No notes in ' + esc(folder) + '/</p>';
         return;
       }
       let html = '<div class="vault-notes-list">';
-      html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">' + notes.length + ' nota(s)</div>';
+      html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">' + notes.length + ' note(s)</div>';
       notes.forEach(n => {
         html += '<div class="vault-note-item" onclick="openVaultNote(\'' + esc(folder) + '\',\'' + esc(n.key) + '\')">';
         html += '<div class="vault-note-key">' + esc(n.key) + '</div>';
@@ -1089,10 +1089,10 @@ function openVaultFolder(folder) {
 }
 
 function openVaultNote(folder, key) {
-  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  if (dirty && !confirm('You have unsaved changes. Discard them?')) return;
 
   const panel = document.getElementById('vaultPanel');
-  panel.innerHTML = '<span class="spinner"></span> Cargando nota...';
+  panel.innerHTML = '<span class="spinner"></span> Loading note...';
 
   fetch(API + '/api/vault/note/' + encodeURIComponent(folder) + '/' + encodeURIComponent(key), { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
@@ -1102,21 +1102,21 @@ function openVaultNote(folder, key) {
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">' + esc(folder) + '/' + esc(key) + '.md</div>';
       html += '<textarea id="vaultEditor" style="width:100%;min-height:400px;padding:16px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-family:var(--font-mono);font-size:13px;line-height:1.6;resize:vertical;outline:none" spellcheck="false">' + esc(data.content) + '</textarea>';
       html += '<div class="vault-note-actions">';
-      html += '<button class="btn btn-primary" onclick="saveVaultNote(\'' + esc(folder) + '\',\'' + esc(key) + '\')">Guardar</button>';
-      html += '<button class="btn-danger" onclick="deleteVaultNote(\'' + esc(folder) + '\',\'' + esc(key) + '\')">Eliminar</button>';
+      html += '<button class="btn btn-primary" onclick="saveVaultNote(\'' + esc(folder) + '\',\'' + esc(key) + '\')">Save</button>';
+      html += '<button class="btn-danger" onclick="deleteVaultNote(\'' + esc(folder) + '\',\'' + esc(key) + '\')">Delete</button>';
       html += '</div>';
       html += '<div class="status idle" id="vaultStatus" style="margin-top:8px;font-size:12px"></div>';
       panel.innerHTML = html;
       document.getElementById('vaultEditor').addEventListener('input', () => { dirty = true; });
       dirty = false;
     })
-    .catch(e => { panel.innerHTML = '<button class="vault-back" onclick="renderVaultOverview()">&larr; Volver</button><div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+    .catch(e => { panel.innerHTML = '<button class="vault-back" onclick="renderVaultOverview()">&larr; Back</button><div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
 }
 
 function saveVaultNote(folder, key) {
   const content = document.getElementById('vaultEditor').value;
   const status = document.getElementById('vaultStatus');
-  status.textContent = 'Guardando...';
+  status.textContent = 'Saving...';
   status.className = 'status idle';
 
   fetch(API + '/api/vault/note/' + encodeURIComponent(folder) + '/' + encodeURIComponent(key), {
@@ -1126,7 +1126,7 @@ function saveVaultNote(folder, key) {
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(() => {
       dirty = false;
-      status.textContent = 'Guardado';
+      status.textContent = 'Saved';
       status.className = 'status ok';
       setTimeout(() => { status.textContent = ''; status.className = 'status idle'; }, 2000);
     })
@@ -1134,7 +1134,7 @@ function saveVaultNote(folder, key) {
 }
 
 function deleteVaultNote(folder, key) {
-  if (!confirm('Eliminar nota "' + key + '"?')) return;
+  if (!confirm('Delete note "' + key + '"?')) return;
 
   fetch(API + '/api/vault/note/' + encodeURIComponent(folder) + '/' + encodeURIComponent(key), {
     method: 'DELETE', headers: headers()
@@ -1175,14 +1175,14 @@ function hideSettings() {
 function renderSettingsShell() {
   const tabs = [
     { id: 'providers', label: 'Providers' },
-    { id: 'channels', label: 'Canales' },
+    { id: 'channels', label: 'Channels' },
     { id: 'tools', label: 'Tools' },
-    { id: 'services', label: 'Servicios' },
-    { id: 'agent', label: 'Agente' },
+    { id: 'services', label: 'Services' },
+    { id: 'agent', label: 'Agent' },
     { id: 'briefing', label: 'Briefing' },
   ];
-  let html = '<h2>Ajustes</h2>';
-  html += '<div class="restart-banner" id="restartBanner">Cambios sin aplicar. <button class="btn" style="margin-left:12px;padding:4px 10px;font-size:11px" onclick="applyReload()">Aplicar</button></div>';
+  let html = '<h2>Settings</h2>';
+  html += '<div class="restart-banner" id="restartBanner">Unapplied changes. <button class="btn" style="margin-left:12px;padding:4px 10px;font-size:11px" onclick="applyReload()">Apply</button></div>';
   html += '<div class="settings-tabs">';
   tabs.forEach(t => {
     html += '<button class="settings-tab' + (t.id === currentSettingsTab ? ' active' : '') + '" onclick="switchSettingsTab(\'' + t.id + '\')">' + t.label + '</button>';
@@ -1234,7 +1234,7 @@ function markRestart() {
 // Providers
 function loadProviders() {
   const el = document.getElementById('settingsSection_providers');
-  el.innerHTML = '<span class="spinner"></span> Cargando...';
+  el.innerHTML = '<span class="spinner"></span> Loading...';
   fetch(API + '/api/settings/providers', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderProviders(data))
@@ -1256,7 +1256,7 @@ function renderProviders(data) {
     html += '</div>';
   });
   html += '<div class="settings-actions">';
-  html += '<button class="btn btn-primary" onclick="saveProviders()">Guardar</button>';
+  html += '<button class="btn btn-primary" onclick="saveProviders()">Save</button>';
   html += '<span class="settings-toast" id="toast_providers"></span></div>';
   document.getElementById('settingsSection_providers').innerHTML = html;
 }
@@ -1272,7 +1272,7 @@ function saveProviders() {
   });
   fetch(API + '/api/settings/providers', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
-    .then(() => { settingsToast('providers', 'Guardado', true); markRestart(); })
+    .then(() => { settingsToast('providers', 'Saved', true); markRestart(); })
     .catch(e => settingsToast('providers', 'Error: ' + e.message, false));
 }
 
@@ -1295,7 +1295,7 @@ function testProvider(name) {
 // Channels
 function loadChannels() {
   const el = document.getElementById('settingsSection_channels');
-  el.innerHTML = '<span class="spinner"></span> Cargando...';
+  el.innerHTML = '<span class="spinner"></span> Loading...';
   fetch(API + '/api/settings/channels', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderChannels(data))
@@ -1306,27 +1306,27 @@ function renderChannels(data) {
   let html = '';
   const tg = data.telegram || {};
   html += '<div class="settings-card"><h3>Telegram</h3>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_telegram_enabled', tg.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('ch_telegram_enabled', tg.enabled) + '</div>';
   html += '<div class="settings-row"><label>Token</label><input type="password" id="ch_telegram_token" value="' + esc(tg.token || '') + '"></div>';
   html += '<div class="settings-row"><label>Allow From</label><input type="text" id="ch_telegram_allow" value="' + esc((tg.allow_from || []).join(', ')) + '" placeholder="user_id1, user_id2"></div>';
   html += '</div>';
   const dc = data.discord || {};
   html += '<div class="settings-card"><h3>Discord</h3>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_discord_enabled', dc.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('ch_discord_enabled', dc.enabled) + '</div>';
   html += '<div class="settings-row"><label>Token</label><input type="password" id="ch_discord_token" value="' + esc(dc.token || '') + '"></div>';
   html += '</div>';
   const sl = data.slack || {};
   html += '<div class="settings-card"><h3>Slack</h3>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_slack_enabled', sl.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('ch_slack_enabled', sl.enabled) + '</div>';
   html += '<div class="settings-row"><label>Bot Token</label><input type="password" id="ch_slack_token" value="' + esc(sl.token || '') + '"></div>';
   html += '</div>';
   const wh = data.webhook || {};
   html += '<div class="settings-card"><h3>Webhook</h3>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('ch_webhook_enabled', wh.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('ch_webhook_enabled', wh.enabled) + '</div>';
   html += '</div>';
 
   html += '<div class="settings-actions">';
-  html += '<button class="btn btn-primary" onclick="saveChannels()">Guardar</button>';
+  html += '<button class="btn btn-primary" onclick="saveChannels()">Save</button>';
   html += '<span class="settings-toast" id="toast_channels"></span></div>';
   document.getElementById('settingsSection_channels').innerHTML = html;
 }
@@ -1354,14 +1354,14 @@ function saveChannels() {
   };
   fetch(API + '/api/settings/channels', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
-    .then(() => { settingsToast('channels', 'Guardado', true); markRestart(); })
+    .then(() => { settingsToast('channels', 'Saved', true); markRestart(); })
     .catch(e => settingsToast('channels', 'Error: ' + e.message, false));
 }
 
 // Tools
 function loadTools() {
   const el = document.getElementById('settingsSection_tools');
-  el.innerHTML = '<span class="spinner"></span> Cargando...';
+  el.innerHTML = '<span class="spinner"></span> Loading...';
   fetch(API + '/api/settings/tools', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderTools(data))
@@ -1374,30 +1374,30 @@ function renderTools(data) {
   let html = '';
   const ddg = web.duckduckgo || {};
   html += '<div class="settings-card"><h3>DuckDuckGo</h3>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('tool_ddg_enabled', ddg.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('tool_ddg_enabled', ddg.enabled) + '</div>';
   html += '<div class="settings-row"><label>Max Results</label><input type="number" id="tool_ddg_max" value="' + (ddg.max_results || 5) + '" min="1" max="20"></div>';
   html += '</div>';
   const sp = web.serper || {};
   html += '<div class="settings-card"><h3>Serper</h3>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('tool_serper_enabled', sp.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('tool_serper_enabled', sp.enabled) + '</div>';
   html += '<div class="settings-row"><label>API Key</label><input type="password" id="tool_serper_key" value="' + esc(sp.api_key || '') + '"></div>';
   html += '<div class="settings-row"><label>Max Results</label><input type="number" id="tool_serper_max" value="' + (sp.max_results || 5) + '" min="1" max="20"></div>';
   html += '</div>';
   const bv = web.brave || {};
   html += '<div class="settings-card"><h3>Brave Search</h3>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('tool_brave_enabled', bv.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('tool_brave_enabled', bv.enabled) + '</div>';
   html += '<div class="settings-row"><label>API Key</label><input type="password" id="tool_brave_key" value="' + esc(bv.api_key || '') + '"></div>';
   html += '<div class="settings-row"><label>Max Results</label><input type="number" id="tool_brave_max" value="' + (bv.max_results || 5) + '" min="1" max="20"></div>';
   html += '</div>';
   html += '<div class="settings-card"><h3>Google Service Account</h3>';
-  html += '<div class="settings-row"><label>SA File</label><span style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">' + esc(google.service_account_file || '(no configurado)') + '</span></div>';
+  html += '<div class="settings-row"><label>SA File</label><span style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">' + esc(google.service_account_file || '(not configured)') + '</span></div>';
   html += '<div class="settings-row"><label>Email</label><input type="text" id="tool_google_email" value="' + esc(google.impersonate_email || '') + '" placeholder="user@domain.com"></div>';
-  html += '<div class="upload-zone" onclick="document.getElementById(\'saFileInput\').click()">Subir service account JSON<input type="file" id="saFileInput" accept=".json" onchange="uploadSA(this.files[0])"></div>';
+  html += '<div class="upload-zone" onclick="document.getElementById(\'saFileInput\').click()">Upload service account JSON<input type="file" id="saFileInput" accept=".json" onchange="uploadSA(this.files[0])"></div>';
   html += '<div id="uploadStatus" style="font-size:12px;margin-top:8px"></div>';
   html += '</div>';
 
   html += '<div class="settings-actions">';
-  html += '<button class="btn btn-primary" onclick="saveTools()">Guardar</button>';
+  html += '<button class="btn btn-primary" onclick="saveTools()">Save</button>';
   html += '<span class="settings-toast" id="toast_tools"></span></div>';
   document.getElementById('settingsSection_tools').innerHTML = html;
 }
@@ -1413,14 +1413,14 @@ function saveTools() {
   };
   fetch(API + '/api/settings/tools', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
-    .then(() => { settingsToast('tools', 'Guardado', true); markRestart(); })
+    .then(() => { settingsToast('tools', 'Saved', true); markRestart(); })
     .catch(e => settingsToast('tools', 'Error: ' + e.message, false));
 }
 
 function uploadSA(file) {
   if (!file) return;
   const status = document.getElementById('uploadStatus');
-  status.innerHTML = '<span class="spinner"></span> Subiendo...';
+  status.innerHTML = '<span class="spinner"></span> Uploading...';
   status.style.color = 'var(--text-muted)';
 
   const fd = new FormData();
@@ -1433,7 +1433,7 @@ function uploadSA(file) {
     .then(r => r.json())
     .then(data => {
       if (data.error) throw new Error(data.error);
-      status.textContent = 'Subido: ' + (data.client_email || '');
+      status.textContent = 'Uploaded: ' + (data.client_email || '');
       status.style.color = 'var(--success)';
       markRestart();
     })
@@ -1446,7 +1446,7 @@ function uploadSA(file) {
 // Services
 function loadServices() {
   const el = document.getElementById('settingsSection_services');
-  el.innerHTML = '<span class="spinner"></span> Cargando...';
+  el.innerHTML = '<span class="spinner"></span> Loading...';
   fetch(API + '/api/settings/services', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderServices(data))
@@ -1459,23 +1459,23 @@ function renderServices(data) {
   const dv = data.devices || {};
   let html = '';
   html += '<div class="settings-card"><h3>Heartbeat</h3>';
-  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Chequeo periodico interno. Ejecuta tareas de HEARTBEAT.md.</p>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_hb_enabled', hb.enabled) + '</div>';
-  html += '<div class="settings-row"><label>Intervalo (min)</label><input type="number" id="svc_hb_interval" value="' + (hb.interval || 45) + '" min="5" max="1440"></div>';
+  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Internal periodic check. Runs tasks from HEARTBEAT.md.</p>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('svc_hb_enabled', hb.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Interval (min)</label><input type="number" id="svc_hb_interval" value="' + (hb.interval || 45) + '" min="5" max="1440"></div>';
   html += '</div>';
   html += '<div class="settings-card"><h3>Sentinel</h3>';
-  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Monitor hardware: CPU temp, RAM, disco. Alerta por Telegram si hay problemas.</p>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_sn_enabled', sn.enabled) + '</div>';
-  html += '<div class="settings-row"><label>Intervalo (seg)</label><input type="number" id="svc_sn_interval" value="' + (sn.interval_seconds || 120) + '" min="30" max="3600"></div>';
+  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Hardware monitor: CPU temp, RAM, disk. Sends Telegram alerts if something is wrong.</p>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('svc_sn_enabled', sn.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Interval (sec)</label><input type="number" id="svc_sn_interval" value="' + (sn.interval_seconds || 120) + '" min="30" max="3600"></div>';
   html += '</div>';
   html += '<div class="settings-card"><h3>Devices</h3>';
-  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Monitor de dispositivos USB.</p>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('svc_dv_enabled', dv.enabled) + '</div>';
-  html += '<div class="settings-row"><label>Monitor USB</label>' + toggle('svc_dv_usb', dv.monitor_usb) + '</div>';
+  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">USB device monitor.</p>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('svc_dv_enabled', dv.enabled) + '</div>';
+  html += '<div class="settings-row"><label>USB Monitor</label>' + toggle('svc_dv_usb', dv.monitor_usb) + '</div>';
   html += '</div>';
 
   html += '<div class="settings-actions">';
-  html += '<button class="btn btn-primary" onclick="saveServices()">Guardar</button>';
+  html += '<button class="btn btn-primary" onclick="saveServices()">Save</button>';
   html += '<span class="settings-toast" id="toast_services"></span></div>';
   document.getElementById('settingsSection_services').innerHTML = html;
 }
@@ -1488,14 +1488,14 @@ function saveServices() {
   };
   fetch(API + '/api/settings/services', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
-    .then(() => { settingsToast('services', 'Guardado', true); markRestart(); })
+    .then(() => { settingsToast('services', 'Saved', true); markRestart(); })
     .catch(e => settingsToast('services', 'Error: ' + e.message, false));
 }
 
 // Agent
 function loadAgent() {
   const el = document.getElementById('settingsSection_agent');
-  el.innerHTML = '<span class="spinner"></span> Cargando...';
+  el.innerHTML = '<span class="spinner"></span> Loading...';
   fetch(API + '/api/settings/agent', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderAgent(data))
@@ -1503,17 +1503,17 @@ function loadAgent() {
 }
 
 function renderAgent(data) {
-  let html = '<div class="settings-card"><h3>Agente por defecto</h3>';
-  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Provider y modelo del LLM.</p>';
+  let html = '<div class="settings-card"><h3>Default Agent</h3>';
+  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">LLM provider and model.</p>';
   html += '<div class="settings-row"><label>Provider</label><input type="text" id="agent_provider" value="' + esc(data.provider || '') + '" placeholder="(auto-detect)"></div>';
-  html += '<div class="settings-row"><label>Modelo</label><input type="text" id="agent_model" value="' + esc(data.model || '') + '" placeholder="e.g. gpt-4o"></div>';
+  html += '<div class="settings-row"><label>Model</label><input type="text" id="agent_model" value="' + esc(data.model || '') + '" placeholder="e.g. gpt-4o"></div>';
   html += '<div class="settings-row"><label>Temperature</label><input type="number" id="agent_temp" value="' + (data.temperature || 0.7) + '" min="0" max="2" step="0.1"></div>';
   html += '<div class="settings-row"><label>Max Tokens</label><input type="number" id="agent_tokens" value="' + (data.max_tokens || 8192) + '" min="100" max="128000"></div>';
   html += '<div class="settings-row"><label>Max Tool Iters</label><input type="number" id="agent_iters" value="' + (data.max_tool_iterations || 20) + '" min="1" max="100"></div>';
   html += '</div>';
 
   html += '<div class="settings-actions">';
-  html += '<button class="btn btn-primary" onclick="saveAgent()">Guardar</button>';
+  html += '<button class="btn btn-primary" onclick="saveAgent()">Save</button>';
   html += '<span class="settings-toast" id="toast_agent"></span></div>';
   document.getElementById('settingsSection_agent').innerHTML = html;
 }
@@ -1528,14 +1528,14 @@ function saveAgent() {
   };
   fetch(API + '/api/settings/agent', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
-    .then(() => { settingsToast('agent', 'Guardado', true); markRestart(); })
+    .then(() => { settingsToast('agent', 'Saved', true); markRestart(); })
     .catch(e => settingsToast('agent', 'Error: ' + e.message, false));
 }
 
 // --- Briefing ---
 function loadBriefing() {
   const el = document.getElementById('settingsSection_briefing');
-  el.innerHTML = '<span class="spinner"></span> Cargando...';
+  el.innerHTML = '<span class="spinner"></span> Loading...';
   fetch(API + '/api/settings/briefing', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderBriefing(data))
@@ -1543,17 +1543,17 @@ function loadBriefing() {
 }
 
 function renderBriefing(data) {
-  let html = '<div class="settings-card"><h3>Briefing Ejecutivo</h3>';
-  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Resumen diario por Telegram con noticias, agenda y temas configurados.</p>';
-  html += '<div class="settings-row"><label>Habilitado</label>' + toggle('brief_enabled', data.enabled) + '</div>';
-  html += '<div class="settings-row"><label>Horario</label><input type="text" id="brief_time" value="' + esc(data.delivery_time || '08:00') + '" placeholder="HH:MM"></div>';
-  html += '<div class="settings-row"><label>Idioma</label><input type="text" id="brief_lang" value="' + esc(data.language || 'es-AR') + '"></div>';
-  html += '<div class="settings-row"><label>Temas</label><input type="text" id="brief_topics" value="' + esc((data.topics || []).join(', ')) + '" placeholder="AI, fintech, ..."></div>';
-  html += '<div class="settings-row"><label>Competidores</label><input type="text" id="brief_competitors" value="' + esc((data.competitors || []).join(', ')) + '" placeholder="Company A, Company B"></div>';
-  html += '<div class="settings-row"><label>Fuentes</label><input type="text" id="brief_sources" value="' + esc((data.sources || []).join(', ')) + '" placeholder="TechCrunch, HN, ..."></div>';
+  let html = '<div class="settings-card"><h3>Executive Briefing</h3>';
+  html += '<p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Daily Telegram summary with news, agenda, and configured topics.</p>';
+  html += '<div class="settings-row"><label>Enabled</label>' + toggle('brief_enabled', data.enabled) + '</div>';
+  html += '<div class="settings-row"><label>Time</label><input type="text" id="brief_time" value="' + esc(data.delivery_time || '08:00') + '" placeholder="HH:MM"></div>';
+  html += '<div class="settings-row"><label>Language</label><input type="text" id="brief_lang" value="' + esc(data.language || 'en-US') + '"></div>';
+  html += '<div class="settings-row"><label>Topics</label><input type="text" id="brief_topics" value="' + esc((data.topics || []).join(', ')) + '" placeholder="AI, fintech, ..."></div>';
+  html += '<div class="settings-row"><label>Competitors</label><input type="text" id="brief_competitors" value="' + esc((data.competitors || []).join(', ')) + '" placeholder="Company A, Company B"></div>';
+  html += '<div class="settings-row"><label>Sources</label><input type="text" id="brief_sources" value="' + esc((data.sources || []).join(', ')) + '" placeholder="TechCrunch, HN, ..."></div>';
   html += '</div>';
   html += '<div class="settings-actions">';
-  html += '<button class="btn btn-primary" onclick="saveBriefing()">Guardar</button>';
+  html += '<button class="btn btn-primary" onclick="saveBriefing()">Save</button>';
   html += '<span class="settings-toast" id="toast_briefing"></span></div>';
   document.getElementById('settingsSection_briefing').innerHTML = html;
 }
@@ -1570,7 +1570,7 @@ function saveBriefing() {
   };
   fetch(API + '/api/settings/briefing', { method: 'PUT', headers: headers(), body: JSON.stringify(body) })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
-    .then(() => { settingsToast('briefing', 'Guardado', true); markRestart(); })
+    .then(() => { settingsToast('briefing', 'Saved', true); markRestart(); })
     .catch(e => settingsToast('briefing', 'Error: ' + e.message, false));
 }
 
@@ -1582,7 +1582,7 @@ function applyReload() {
       settingsNeedsRestart = false;
       const b = document.getElementById('restartBanner');
       if (b) b.style.display = 'none';
-      showToast('Recargado: ' + (data.reloaded || []).join(', '), true);
+      showToast('Reloaded: ' + (data.reloaded || []).join(', '), true);
     })
     .catch(e => showToast('Error: ' + e.message, false));
 }
@@ -1591,7 +1591,7 @@ function applyReload() {
 let cronFormVisible = false;
 
 function showCron() {
-  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  if (dirty && !confirm('You have unsaved changes. Discard them?')) return;
   dirty = false; currentFile = null;
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   document.getElementById('cronNav').classList.add('active');
@@ -1602,7 +1602,7 @@ function showCron() {
 
 function loadCron() {
   const el = document.getElementById('cronPanel');
-  el.innerHTML = '<h2>Cron Jobs</h2><span class="spinner"></span> Cargando...';
+  el.innerHTML = '<h2>Cron Jobs</h2><span class="spinner"></span> Loading...';
   fetch(API + '/api/cron/jobs', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderCron(data.jobs || []))
@@ -1611,34 +1611,34 @@ function loadCron() {
 
 function renderCron(jobs) {
   let html = '<h2>Cron Jobs</h2>';
-  html += '<button class="btn" onclick="toggleCronForm()" style="margin-bottom:16px">+ Nuevo</button>';
+  html += '<button class="btn" onclick="toggleCronForm()" style="margin-bottom:16px">+ New</button>';
   html += '<div class="cron-form" id="cronForm" style="display:none">';
-  html += '<h3>Nuevo Cron Job</h3>';
-  html += '<div class="settings-row"><label>Nombre</label><input type="text" id="cj_name" placeholder="Mi tarea"></div>';
-  html += '<div class="settings-row"><label>Tipo</label><select id="cj_kind" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:12px"><option value="cron">Cron</option><option value="every">Cada X ms</option></select></div>';
-  html += '<div class="settings-row"><label>Expresion</label><input type="text" id="cj_expr" placeholder="0 8 * * *"></div>';
-  html += '<div class="settings-row"><label>Mensaje</label><input type="text" id="cj_msg" placeholder="Prompt o comando"></div>';
+  html += '<h3>New Cron Job</h3>';
+  html += '<div class="settings-row"><label>Name</label><input type="text" id="cj_name" placeholder="My task"></div>';
+  html += '<div class="settings-row"><label>Type</label><select id="cj_kind" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:12px"><option value="cron">Cron</option><option value="every">Every X ms</option></select></div>';
+  html += '<div class="settings-row"><label>Expression</label><input type="text" id="cj_expr" placeholder="0 8 * * *"></div>';
+  html += '<div class="settings-row"><label>Message</label><input type="text" id="cj_msg" placeholder="Prompt or command"></div>';
   html += '<div class="settings-row"><label>Deliver</label>' + toggle('cj_deliver', true) + '</div>';
-  html += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" onclick="createCronJob()">Crear</button><button class="btn" onclick="toggleCronForm()">Cancelar</button></div>';
+  html += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" onclick="createCronJob()">Create</button><button class="btn" onclick="toggleCronForm()">Cancel</button></div>';
   html += '</div>';
 
   if (jobs.length === 0) {
-    html += '<p style="color:var(--text-muted)">No hay cron jobs configurados</p>';
+    html += '<p style="color:var(--text-muted)">No cron jobs configured</p>';
   }
   jobs.forEach(j => {
-    const schedStr = j.schedule.kind === 'cron' ? j.schedule.expr : (j.schedule.kind === 'every' ? 'cada ' + (j.schedule.everyMs/1000) + 's' : 'una vez');
+    const schedStr = j.schedule.kind === 'cron' ? j.schedule.expr : (j.schedule.kind === 'every' ? 'every ' + (j.schedule.everyMs/1000) + 's' : 'once');
     const statusCls = j.state.lastStatus === 'ok' ? 'ok' : (j.state.lastStatus === 'error' ? 'err' : '');
-    const lastRun = j.state.lastRunAtMs ? timeSince(new Date(j.state.lastRunAtMs).toISOString()) : 'nunca';
-    const nextRun = j.state.nextRunAtMs ? new Date(j.state.nextRunAtMs).toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'}) : '-';
+    const lastRun = j.state.lastRunAtMs ? timeSince(new Date(j.state.lastRunAtMs).toISOString()) : 'never';
+    const nextRun = j.state.nextRunAtMs ? new Date(j.state.nextRunAtMs).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'}) : '-';
     html += '<div class="cron-card">';
     html += '<div class="cron-info">';
     html += '<div class="cron-name">' + esc(j.name) + '</div>';
     html += '<div class="cron-schedule">' + esc(schedStr) + '</div>';
-    html += '<div class="cron-status ' + statusCls + '">Ultimo: ' + lastRun + ' | Proximo: ' + nextRun + '</div>';
+    html += '<div class="cron-status ' + statusCls + '">Last: ' + lastRun + ' | Next: ' + nextRun + '</div>';
     html += '</div>';
     html += '<div class="cron-actions">';
     html += toggle('cron_toggle_' + j.id, j.enabled);
-    html += '<button class="btn-danger" onclick="deleteCronJob(\'' + j.id + '\')">Eliminar</button>';
+    html += '<button class="btn-danger" onclick="deleteCronJob(\'' + j.id + '\')">Delete</button>';
     html += '</div></div>';
   });
   document.getElementById('cronPanel').innerHTML = html;
@@ -1684,7 +1684,7 @@ function toggleCronJob(id, enabled) {
 }
 
 function deleteCronJob(id) {
-  if (!confirm('Eliminar este cron job?')) return;
+  if (!confirm('Delete this cron job?')) return;
   fetch(API + '/api/cron/jobs/' + id, { method: 'DELETE', headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(() => loadCron())
@@ -1695,7 +1695,7 @@ function deleteCronJob(id) {
 let logsInterval = null;
 
 function showLogs() {
-  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  if (dirty && !confirm('You have unsaved changes. Discard them?')) return;
   dirty = false; currentFile = null;
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   document.getElementById('logsNav').classList.add('active');
@@ -1708,11 +1708,11 @@ function showLogs() {
 function renderLogsShell() {
   let html = '<h2>Logs</h2>';
   html += '<div class="logs-filters">';
-  html += '<select id="logLevel"><option value="">Todos</option><option value="DEBUG">DEBUG</option><option value="INFO">INFO</option><option value="WARN">WARN</option><option value="ERROR">ERROR</option></select>';
-  html += '<input type="text" id="logSearch" placeholder="Buscar..." style="flex:1;min-width:100px">';
+  html += '<select id="logLevel"><option value="">All</option><option value="DEBUG">DEBUG</option><option value="INFO">INFO</option><option value="WARN">WARN</option><option value="ERROR">ERROR</option></select>';
+  html += '<input type="text" id="logSearch" placeholder="Search..." style="flex:1;min-width:100px">';
   html += '<input type="number" id="logLines" value="100" min="10" max="500" style="width:60px">';
   html += '<label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><input type="checkbox" id="logAuto" onchange="toggleLogAuto()"> Auto</label>';
-  html += '<button class="btn" onclick="loadLogs()">Refrescar</button>';
+  html += '<button class="btn" onclick="loadLogs()">Refresh</button>';
   html += '</div>';
   html += '<div class="logs-output" id="logsOutput"></div>';
   document.getElementById('logsPanel').innerHTML = html;
@@ -1727,7 +1727,7 @@ function loadLogs() {
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => {
       const out = document.getElementById('logsOutput');
-      if (!data.logs || data.logs.length === 0) { out.innerHTML = '<span style="color:var(--text-muted)">Sin logs</span>'; return; }
+      if (!data.logs || data.logs.length === 0) { out.innerHTML = '<span style="color:var(--text-muted)">No logs</span>'; return; }
       let html = '';
       data.logs.forEach(l => {
         const comp = l.component ? ' ' + l.component + ':' : '';
@@ -1751,7 +1751,7 @@ function toggleLogAuto() {
 
 // --- Lights ---
 function showLights() {
-  if (dirty && !confirm('Tenes cambios sin guardar. Descartar?')) return;
+  if (dirty && !confirm('You have unsaved changes. Discard them?')) return;
   dirty = false; currentFile = null;
   document.querySelectorAll('.sidebar li').forEach(x => x.classList.remove('active'));
   document.getElementById('lightsNav').classList.add('active');
@@ -1762,11 +1762,11 @@ function showLights() {
 
 function loadLights() {
   const el = document.getElementById('lightsPanel');
-  el.innerHTML = '<h2>Luces</h2><span class="spinner"></span> Cargando...';
+  el.innerHTML = '<h2>Lights</h2><span class="spinner"></span> Loading...';
   fetch(API + '/api/devices/lights', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => renderLights(data.output || '[]'))
-    .catch(e => { el.innerHTML = '<h2>Luces</h2><div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
+    .catch(e => { el.innerHTML = '<h2>Lights</h2><div class="alert-item">Error: ' + esc(e.message) + '</div>'; });
 }
 
 function renderLights(outputStr) {
@@ -1774,14 +1774,14 @@ function renderLights(outputStr) {
   try { devices = JSON.parse(outputStr); } catch(e) {}
   if (!Array.isArray(devices)) devices = [];
 
-  let html = '<h2>Luces</h2>';
+  let html = '<h2>Lights</h2>';
   html += '<div style="margin-bottom:16px">';
-  html += '<button class="btn" id="btnDiscover" onclick="discoverLights()">Escanear red</button>';
+  html += '<button class="btn" id="btnDiscover" onclick="discoverLights()">Scan network</button>';
   html += '</div>';
   html += '<div id="discoverArea"></div>';
 
   if (devices.length === 0) {
-    html += '<p style="color:var(--text-muted)">Sin luces guardadas.</p>';
+    html += '<p style="color:var(--text-muted)">No saved lights.</p>';
   } else {
     html += '<div class="lights-grid">';
     devices.forEach(d => {
@@ -1804,30 +1804,30 @@ function renderLights(outputStr) {
 
 function discoverLights() {
   const btn = document.getElementById('btnDiscover');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Buscando...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Searching...'; }
   const ctrl = new AbortController();
   setTimeout(() => ctrl.abort(), 15000);
   fetch(API + '/api/devices/lights/discover', { method: 'POST', headers: headers(), signal: ctrl.signal })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => {
-      if (btn) { btn.disabled = false; btn.textContent = 'Escanear red'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Scan network'; }
       let devices = [];
       try { devices = JSON.parse(data.output || '[]'); } catch(e) {}
       const area = document.getElementById('discoverArea');
-      if (!devices.length) { area.innerHTML = '<p style="color:var(--text-muted);margin-bottom:16px">No se encontraron dispositivos</p>'; return; }
-      let html = '<div class="discover-results"><h3>Encontrados (' + devices.length + ')</h3>';
+      if (!devices.length) { area.innerHTML = '<p style="color:var(--text-muted);margin-bottom:16px">No devices found</p>'; return; }
+      let html = '<div class="discover-results"><h3>Found (' + devices.length + ')</h3>';
       devices.forEach((d,i) => {
         html += '<div class="discover-item">';
         html += '<span style="flex:1;font-family:var(--font-mono);font-size:12px">' + esc(d.ip || d.IP) + ' | ' + esc(d.mac || d.MAC) + ' | ' + esc(d.model || d.Model) + '</span>';
-        html += '<input type="text" id="disc_name_' + i + '" placeholder="Nombre" style="width:100px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:12px">';
-        html += '<button class="btn" onclick="saveLightFromDiscover(' + i + ',\'' + esc(d.ip||d.IP) + '\',\'' + esc(d.mac||d.MAC) + '\',\'' + esc(d.model||d.Model) + '\')">Guardar</button>';
+        html += '<input type="text" id="disc_name_' + i + '" placeholder="Name" style="width:100px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:12px">';
+        html += '<button class="btn" onclick="saveLightFromDiscover(' + i + ',\'' + esc(d.ip||d.IP) + '\',\'' + esc(d.mac||d.MAC) + '\',\'' + esc(d.model||d.Model) + '\')">Save</button>';
         html += '</div>';
       });
       html += '</div>';
       area.innerHTML = html;
     })
     .catch(e => {
-      if (btn) { btn.disabled = false; btn.textContent = 'Escanear red'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Scan network'; }
       const area = document.getElementById('discoverArea');
       if (area) area.innerHTML = '<div class="alert-item">Error: ' + esc(e.message) + '</div>';
     });
@@ -1867,7 +1867,7 @@ function lightBrightness(device, val) {
 }
 
 function lightRemove(device) {
-  if (!confirm('Eliminar "' + device + '"?')) return;
+  if (!confirm('Delete "' + device + '"?')) return;
   fetch(API + '/api/devices/lights/' + encodeURIComponent(device), { method: 'DELETE', headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(() => loadLights())
@@ -1878,19 +1878,19 @@ function lightRemove(device) {
 function checkUpdates() {
   const el = document.getElementById('updateArea');
   if (!el) return;
-  el.innerHTML = '<span class="spinner"></span> Verificando...';
+  el.innerHTML = '<span class="spinner"></span> Checking...';
   fetch(API + '/api/updates/check', { headers: headers() })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
     .then(data => {
-      let html = '<div style="font-size:12px;font-family:var(--font-mono)">actual: ' + esc(data.current || 'dev') + '</div>';
+      let html = '<div style="font-size:12px;font-family:var(--font-mono)">current: ' + esc(data.current || 'dev') + '</div>';
       if (data.update_available) {
         html += '<div class="update-available">';
-        html += '<div style="font-size:13px;margin-bottom:8px">Nueva version: ' + esc(data.latest) + '</div>';
+        html += '<div style="font-size:13px;margin-bottom:8px">New version: ' + esc(data.latest) + '</div>';
         if (data.release_notes) html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;white-space:pre-wrap">' + esc(data.release_notes.substring(0,500)) + '</div>';
-        html += '<button class="btn btn-primary" onclick="applyUpdate()">Actualizar</button>';
+        html += '<button class="btn btn-primary" onclick="applyUpdate()">Update</button>';
         html += '</div>';
       } else {
-        html += '<div style="font-size:12px;color:var(--success);margin-top:8px">Al dia</div>';
+        html += '<div style="font-size:12px;color:var(--success);margin-top:8px">Up to date</div>';
       }
       if (data.error) html += '<div style="font-size:12px;color:var(--error);margin-top:8px">' + esc(data.error) + '</div>';
       el.innerHTML = html;
@@ -1901,7 +1901,7 @@ function checkUpdates() {
 function applyUpdate() {
   fetch(API + '/api/updates/apply', { method: 'POST', headers: headers() })
     .then(r => r.json())
-    .then(data => showToast(data.message || 'Deploy iniciado', true))
+    .then(data => showToast(data.message || 'Deploy started', true))
     .catch(e => showToast('Error: ' + e.message, false));
 }
 
@@ -1911,8 +1911,8 @@ renderHealth = function(d) {
   origRenderHealth(d);
   const panel = document.getElementById('healthPanel');
   if (panel) {
-    const updateHtml = '<div class="update-section"><h3 style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px">Actualizaciones</h3>' +
-      '<button class="btn" onclick="checkUpdates()">Verificar</button>' +
+    const updateHtml = '<div class="update-section"><h3 style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px">Updates</h3>' +
+      '<button class="btn" onclick="checkUpdates()">Check</button>' +
       '<div id="updateArea" style="margin-top:12px"></div></div>';
     panel.insertAdjacentHTML('beforeend', updateHtml);
   }
@@ -1956,28 +1956,28 @@ function renderWizardStep() {
   });
   stepsHtml += '</div>';
 
-  let html = '<h2>Configuracion inicial</h2>';
-  html += '<div class="wizard-sub">Configura Chango en unos minutos</div>';
+  let html = '<h2>Initial setup</h2>';
+  html += '<div class="wizard-sub">Set up Chango in a few minutes</div>';
   html += stepsHtml;
 
   if (wizardStep === 0) {
     html += '<h3 style="margin-bottom:12px;font-size:13px">1. Provider LLM</h3>';
-    html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Necesitas al menos una API key. OpenRouter recomendado.</p>';
+    html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">You need at least one API key. OpenRouter is recommended.</p>';
     html += '<div class="settings-row"><label>OpenRouter</label><input type="password" id="wiz_or_key" placeholder="sk-or-..."></div>';
-    html += '<div class="wizard-nav"><button class="btn btn-primary" onclick="wizardSaveProvider()">Siguiente</button></div>';
+    html += '<div class="wizard-nav"><button class="btn btn-primary" onclick="wizardSaveProvider()">Next</button></div>';
   } else if (wizardStep === 1) {
     html += '<h3 style="margin-bottom:12px;font-size:13px">2. Telegram Bot</h3>';
-    html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Crea un bot en @BotFather y pega el token.</p>';
+    html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Create a bot in @BotFather and paste the token.</p>';
     html += '<div class="settings-row"><label>Bot Token</label><input type="password" id="wiz_tg_token" placeholder="123456:ABC..."></div>';
-    html += '<div class="settings-row"><label>Tu Chat ID</label><input type="text" id="wiz_tg_chatid" placeholder="123456789"></div>';
-    html += '<div class="wizard-nav"><button class="btn" onclick="wizardStep=0;renderWizardStep()">Atras</button><button class="btn btn-primary" onclick="wizardSaveTelegram()">Siguiente</button></div>';
+    html += '<div class="settings-row"><label>Your Chat ID</label><input type="text" id="wiz_tg_chatid" placeholder="123456789"></div>';
+    html += '<div class="wizard-nav"><button class="btn" onclick="wizardStep=0;renderWizardStep()">Back</button><button class="btn btn-primary" onclick="wizardSaveTelegram()">Next</button></div>';
   } else if (wizardStep === 2) {
-    html += '<h3 style="margin-bottom:12px;font-size:13px">3. Tu Perfil</h3>';
-    html += '<input type="text" id="wiz_name" placeholder="Nombre completo">';
-    html += '<input type="text" id="wiz_role" placeholder="Rol (ej: CEO, CTO)">';
-    html += '<input type="text" id="wiz_industry" placeholder="Industria">';
+    html += '<h3 style="margin-bottom:12px;font-size:13px">3. Your Profile</h3>';
+    html += '<input type="text" id="wiz_name" placeholder="Full name">';
+    html += '<input type="text" id="wiz_role" placeholder="Role (e.g. CEO, CTO)">';
+    html += '<input type="text" id="wiz_industry" placeholder="Industry">';
     html += '<input type="text" id="wiz_tz" placeholder="Timezone" value="America/Buenos_Aires">';
-    html += '<div class="wizard-nav"><button class="btn" onclick="wizardStep=1;renderWizardStep()">Atras</button><button class="btn btn-primary" onclick="wizardSaveProfile()">Completar</button></div>';
+    html += '<div class="wizard-nav"><button class="btn" onclick="wizardStep=1;renderWizardStep()">Back</button><button class="btn btn-primary" onclick="wizardSaveProfile()">Finish</button></div>';
   }
 
   box.innerHTML = html;
@@ -1985,7 +1985,7 @@ function renderWizardStep() {
 
 function wizardSaveProvider() {
   const key = document.getElementById('wiz_or_key')?.value;
-  if (!key) { alert('Ingresa una API key'); return; }
+  if (!key) { alert('Enter an API key'); return; }
   fetch(API + '/api/settings/providers', {
     method: 'PUT', headers: headers(),
     body: JSON.stringify({ openrouter: { api_key: key, api_base: '' }, anthropic: { api_key: '', api_base: '' }, openai: { api_key: '', api_base: '' }, groq: { api_key: '', api_base: '' }, gemini: { api_key: '', api_base: '' }, deepseek: { api_key: '', api_base: '' }, zhipu: { api_key: '', api_base: '' }, vllm: { api_key: '', api_base: '' }, nvidia: { api_key: '', api_base: '' }, moonshot: { api_key: '', api_base: '' }, shengsuanyun: { api_key: '', api_base: '' }, github_copilot: { api_key: '', api_base: '' } })
@@ -1998,7 +1998,7 @@ function wizardSaveProvider() {
 function wizardSaveTelegram() {
   const token = document.getElementById('wiz_tg_token')?.value;
   const chatid = document.getElementById('wiz_tg_chatid')?.value;
-  if (!token) { alert('Ingresa el bot token'); return; }
+  if (!token) { alert('Enter the bot token'); return; }
   const body = {
     telegram: { enabled: true, token: token, allow_from: chatid ? [chatid] : [] },
     discord: { enabled: false, token: '' },
