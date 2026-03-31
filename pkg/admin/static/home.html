@@ -43,7 +43,7 @@
     position:fixed;
     inset:0;
     display:grid;
-    grid-template-columns:minmax(320px, 560px) minmax(260px, 360px);
+    grid-template-columns:minmax(320px, 560px) 1fr minmax(260px, 360px);
     gap:16px;
     padding:16px;
     pointer-events:none;
@@ -54,7 +54,8 @@
     gap:12px;
     pointer-events:auto;
   }
-  .right{justify-self:end;width:min(360px,30vw)}
+  .left{grid-column:1}
+  .right{grid-column:3;justify-self:end;width:min(360px,28vw)}
   .card{
     background:linear-gradient(165deg, #0d1522dd, #0b1320b0 60%, #0b132095);
     border:1px solid #1d2e45;
