@@ -408,6 +408,11 @@ func (f *FallbackProvider) Chat(ctx context.Context, messages []Message, tools [
 		depth = d
 	}
 
+	// Vision turns must not fall back to a blind local model.
+	if HasVisionInput(messages) {
+		return f.Primary.Chat(ctx, messages, tools, model, options)
+	}
+
 	resp, err := f.Primary.Chat(ctx, messages, tools, model, options)
 	if err == nil {
 		return resp, nil

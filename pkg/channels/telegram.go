@@ -1,9 +1,12 @@
 package channels
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/csv"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -695,26 +699,16 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 						"source":      "document",
 					})
 				}
-			} else if mimeType == "application/pdf" || strings.HasSuffix(strings.ToLower(fileName), ".pdf") {
-				// Extract text from PDFs using pdftotext
-				pdfText := c.extractPDFText(docPath)
-				if pdfText != "" {
-					if content != "" {
-						content += "\n"
-					}
-					content += fmt.Sprintf("[PDF: %s]\n%s", fileName, pdfText)
-				} else {
-					if content != "" {
-						content += "\n"
-					}
-					content += fmt.Sprintf("[PDF: %s - no se pudo extraer texto]", fileName)
-				}
 			} else {
-				mediaPaths = append(mediaPaths, docPath)
 				if content != "" {
 					content += "\n"
 				}
-				content += fmt.Sprintf("[file: %s]", fileName)
+				if extracted := c.extractDocumentText(docPath, mimeType, fileName); extracted != "" {
+					content += extracted
+				} else {
+					mediaPaths = append(mediaPaths, docPath)
+					content += fmt.Sprintf("[file: %s]", fileName)
+				}
 			}
 		}
 	}
@@ -810,6 +804,38 @@ func (c *TelegramChannel) downloadFile(ctx context.Context, fileID, ext string) 
 	return c.downloadFileWithInfo(file, ext)
 }
 
+func (c *TelegramChannel) extractDocumentText(docPath, mimeType, fileName string) string {
+	lowerName := strings.ToLower(fileName)
+	switch {
+	case mimeType == "application/pdf" || strings.HasSuffix(lowerName, ".pdf"):
+		pdfText := c.extractPDFText(docPath)
+		if pdfText == "" {
+			return fmt.Sprintf("[PDF: %s - no se pudo extraer texto]", fileName)
+		}
+		return fmt.Sprintf("[PDF: %s]\n%s", fileName, pdfText)
+	case mimeType == "text/csv" || strings.HasSuffix(lowerName, ".csv"):
+		if csvText := extractCSVText(docPath); csvText != "" {
+			return fmt.Sprintf("[CSV: %s]\n%s", fileName, csvText)
+		}
+		return fmt.Sprintf("[CSV: %s - no se pudo extraer texto]", fileName)
+	case mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || strings.HasSuffix(lowerName, ".docx"):
+		if docxText := extractDOCXText(docPath); docxText != "" {
+			return fmt.Sprintf("[DOCX: %s]\n%s", fileName, docxText)
+		}
+		return fmt.Sprintf("[DOCX: %s - no se pudo extraer texto]", fileName)
+	case mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+		mimeType == "application/vnd.ms-excel" ||
+		strings.HasSuffix(lowerName, ".xlsx") ||
+		strings.HasSuffix(lowerName, ".xls"):
+		if sheetText := extractSpreadsheetText(docPath); sheetText != "" {
+			return fmt.Sprintf("[Spreadsheet: %s]\n%s", fileName, sheetText)
+		}
+		return fmt.Sprintf("[Spreadsheet: %s - no se pudo extraer texto]", fileName)
+	default:
+		return ""
+	}
+}
+
 // extractPDFText uses pdftotext to extract text from a PDF file.
 // Returns extracted text (truncated to 15000 chars to avoid context overflow).
 func (c *TelegramChannel) extractPDFText(pdfPath string) string {
@@ -833,6 +859,246 @@ func (c *TelegramChannel) extractPDFText(pdfPath string) string {
 		"chars": len(text),
 	})
 	return text
+}
+
+func extractCSVText(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.FieldsPerRecord = -1
+	rows, err := reader.ReadAll()
+	if err != nil || len(rows) == 0 {
+		return ""
+	}
+
+	var lines []string
+	maxRows := minInt(len(rows), 20)
+	for i := 0; i < maxRows; i++ {
+		lines = append(lines, strings.Join(rows[i], " | "))
+	}
+	text := strings.Join(lines, "\n")
+	return truncateDocText(text, 15000)
+}
+
+func extractDOCXText(path string) string {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return ""
+	}
+	defer zr.Close()
+
+	var documentXML []byte
+	for _, f := range zr.File {
+		if f.Name != "word/document.xml" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return ""
+		}
+		documentXML, err = io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return ""
+		}
+		break
+	}
+	if len(documentXML) == 0 {
+		return ""
+	}
+
+	decoder := xml.NewDecoder(bytes.NewReader(documentXML))
+	var lines []string
+	var paragraph strings.Builder
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch se := tok.(type) {
+		case xml.StartElement:
+			if se.Name.Local == "tab" {
+				paragraph.WriteString("\t")
+			}
+		case xml.EndElement:
+			if se.Name.Local == "p" {
+				text := strings.TrimSpace(paragraph.String())
+				if text != "" {
+					lines = append(lines, text)
+				}
+				paragraph.Reset()
+			}
+		case xml.CharData:
+			paragraph.WriteString(string(se))
+		}
+	}
+
+	return truncateDocText(strings.Join(lines, "\n"), 15000)
+}
+
+func extractSpreadsheetText(path string) string {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return ""
+	}
+	defer zr.Close()
+
+	sharedStrings := map[int]string{}
+	var sheetFiles []string
+	for _, f := range zr.File {
+		switch {
+		case f.Name == "xl/sharedStrings.xml":
+			sharedStrings = parseXLSXSharedStrings(f)
+		case strings.HasPrefix(f.Name, "xl/worksheets/sheet") && strings.HasSuffix(f.Name, ".xml"):
+			sheetFiles = append(sheetFiles, f.Name)
+		}
+	}
+	if len(sheetFiles) == 0 {
+		return ""
+	}
+
+	var lines []string
+	for _, name := range sheetFiles {
+		for _, f := range zr.File {
+			if f.Name != name {
+				continue
+			}
+			sheetLines := parseXLSXSheet(f, sharedStrings)
+			if len(sheetLines) > 0 {
+				lines = append(lines, fmt.Sprintf("## %s", filepath.Base(name)))
+				lines = append(lines, sheetLines...)
+			}
+			break
+		}
+	}
+
+	return truncateDocText(strings.Join(lines, "\n"), 15000)
+}
+
+func parseXLSXSharedStrings(file *zip.File) map[int]string {
+	result := map[int]string{}
+	rc, err := file.Open()
+	if err != nil {
+		return result
+	}
+	defer rc.Close()
+
+	decoder := xml.NewDecoder(rc)
+	idx := -1
+	inText := false
+	var current strings.Builder
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch se := tok.(type) {
+		case xml.StartElement:
+			if se.Name.Local == "si" {
+				idx++
+				current.Reset()
+			}
+			if se.Name.Local == "t" {
+				inText = true
+			}
+		case xml.EndElement:
+			if se.Name.Local == "t" {
+				inText = false
+			}
+			if se.Name.Local == "si" && idx >= 0 {
+				result[idx] = current.String()
+			}
+		case xml.CharData:
+			if inText {
+				current.WriteString(string(se))
+			}
+		}
+	}
+	return result
+}
+
+func parseXLSXSheet(file *zip.File, sharedStrings map[int]string) []string {
+	rc, err := file.Open()
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+
+	decoder := xml.NewDecoder(rc)
+	var lines []string
+	var row []string
+	cellType := ""
+	inValue := false
+	maxRows := 20
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch se := tok.(type) {
+		case xml.StartElement:
+			switch se.Name.Local {
+			case "row":
+				row = nil
+			case "c":
+				cellType = ""
+				for _, attr := range se.Attr {
+					if attr.Name.Local == "t" {
+						cellType = attr.Value
+					}
+				}
+			case "v", "t":
+				inValue = true
+			}
+		case xml.EndElement:
+			switch se.Name.Local {
+			case "v", "t":
+				inValue = false
+			case "row":
+				if len(row) > 0 {
+					lines = append(lines, strings.Join(row, " | "))
+					if len(lines) >= maxRows {
+						return lines
+					}
+				}
+			}
+		case xml.CharData:
+			if !inValue {
+				continue
+			}
+			val := string(se)
+			if cellType == "s" {
+				if idx, err := strconv.Atoi(strings.TrimSpace(val)); err == nil {
+					val = sharedStrings[idx]
+				}
+			}
+			val = strings.TrimSpace(val)
+			if val != "" {
+				row = append(row, val)
+			}
+		}
+	}
+	return lines
+}
+
+func truncateDocText(text string, maxLen int) string {
+	text = strings.TrimSpace(text)
+	if len(text) <= maxLen {
+		return text
+	}
+	return text[:maxLen] + "\n\n[... texto truncado ...]"
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (c *TelegramChannel) sendHelp(ctx context.Context, chatID int64) {
