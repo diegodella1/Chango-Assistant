@@ -49,6 +49,7 @@ type AgentLoop struct {
 	configPath         string         // Path to config.json for persistence
 	tracker            *telemetry.Tracker
 	subagentMgr        *tools.SubagentManager
+	learnTool          *tools.LearnTool
 	scoring            *ScoringEngine
 	localProvider      providers.LLMProvider // local model for inner monologue (zero cost, private)
 	backgroundProvider providers.LLMProvider // cheap cloud provider for background escalation (e.g. Groq)
@@ -195,6 +196,7 @@ func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		cfg:            cfg,
 		configPath:     configPath,
 		subagentMgr:    subagentManager,
+		learnTool:      learnTool,
 		scoring:        NewScoringEngine(workspace),
 		tokenBudget:    tokenBudget,
 		scratchpad:     NewScratchpad(),
@@ -552,7 +554,8 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	// 3. Save user message to session
 	al.sessions.AddMessage(opts.SessionKey, "user", opts.UserMessage)
 	if !opts.NoHistory && opts.Feature == telemetry.FeatureChat && opts.UserMessage != "" {
-		updateTopicTracks(al.workspace, opts.UserMessage, history)
+		tracks := updateTopicTracks(al.workspace, opts.UserMessage, history)
+		al.maybePromoteTopicTracks(tracks, opts)
 	}
 
 	// 4. Run LLM iteration loop (or Tree of Thought for complex decisions)

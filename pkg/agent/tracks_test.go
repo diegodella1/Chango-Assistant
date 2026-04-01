@@ -1,7 +1,11 @@
 package agent
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -59,4 +63,74 @@ func TestUpdateTopicTracksAccumulatesMentions(t *testing.T) {
 		}
 	}
 	t.Fatalf("autonomia track not found")
+}
+
+func TestEvaluateTopicTrackPromotesToLearnWhenKnowledgeMissing(t *testing.T) {
+	workspace := t.TempDir()
+	track := TopicTrack{
+		Topic:       "autonomia",
+		Mentions:    3,
+		Status:      "active",
+		LastMessage: "Quiero investigar autonomia real del agente.",
+	}
+
+	evaluateTopicTrack(workspace, &track)
+
+	if track.NextAction != "learn" {
+		t.Fatalf("expected learn, got %q", track.NextAction)
+	}
+}
+
+func TestEvaluateTopicTrackPromotesToTaskWhenActionable(t *testing.T) {
+	workspace := t.TempDir()
+	track := TopicTrack{
+		Topic:       "deploy",
+		Mentions:    2,
+		Status:      "active",
+		LastMessage: "Hay que revisar y desplegar esto en producción.",
+	}
+
+	evaluateTopicTrack(workspace, &track)
+
+	if track.NextAction != "task" {
+		t.Fatalf("expected task, got %q", track.NextAction)
+	}
+}
+
+func TestEvaluateTopicTrackRespectsCooldown(t *testing.T) {
+	workspace := t.TempDir()
+	track := TopicTrack{
+		Topic:         "autonomia",
+		Mentions:      5,
+		Status:        "active",
+		CooldownUntil: time.Now().Add(2 * time.Hour),
+	}
+
+	evaluateTopicTrack(workspace, &track)
+
+	if track.NextAction != "cooldown" {
+		t.Fatalf("expected cooldown, got %q", track.NextAction)
+	}
+}
+
+func TestCreateTrackTaskAvoidsDuplicates(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "tasks"), 0755); err != nil {
+		t.Fatalf("mkdir tasks: %v", err)
+	}
+	data, _ := json.Marshal([]map[string]any{
+		{
+			"title":  "Seguimiento autonomo: deploy",
+			"status": "pending",
+			"tags":   []string{"autonomy-track", "topic:deploy"},
+		},
+	})
+	if err := os.WriteFile(filepath.Join(workspace, "tasks", "tasks.json"), data, 0644); err != nil {
+		t.Fatalf("write tasks: %v", err)
+	}
+
+	created := createTrackTask(workspace, TopicTrack{Topic: "deploy", Priority: 4})
+	if created {
+		t.Fatalf("expected duplicate task creation to be skipped")
+	}
 }
