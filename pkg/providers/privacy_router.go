@@ -35,14 +35,14 @@ type PrivacyRouter struct {
 
 // sensitiveSession tracks when and why a session was marked sensitive.
 type sensitiveSession struct {
-	MarkedAt  time.Time
-	MsgCount  int // messages since marked
-	Reason    string
+	MarkedAt time.Time
+	MsgCount int // messages since marked
+	Reason   string
 }
 
 const (
-	sensitiveSessionTTL      = 30 * time.Minute // decay after 30 min
-	sensitiveSessionMaxMsgs  = 5                 // decay after 5 messages
+	sensitiveSessionTTL     = 30 * time.Minute // decay after 30 min
+	sensitiveSessionMaxMsgs = 5                // decay after 5 messages
 )
 
 // NewPrivacyRouter creates a privacy-aware provider wrapper.
@@ -142,9 +142,27 @@ func (pr *PrivacyRouter) Stats() PrivacyStats {
 func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, options map[string]interface{}, reason string) (*LLMResponse, error) {
 	atomic.AddInt64(&pr.stats.RoutedLocal, 1)
 
+	localCaps := ResolveCapabilities(pr.local, "")
+	hasVisionInput := HasVisionInput(messages)
+
 	if pr.logEnabled {
-		logger.InfoCF("privacy", "Routing to LOCAL", map[string]interface{}{
-			"reason": reason,
+		fields := map[string]interface{}{
+			"reason":   reason,
+			"model":    localCaps.Model,
+			"provider": localCaps.Provider,
+		}
+		if hasVisionInput {
+			fields["vision_support"] = string(localCaps.Vision)
+		}
+		logger.InfoCF("privacy", "Routing to LOCAL", fields)
+	}
+
+	if hasVisionInput && localCaps.Vision == CapabilityUnsupported {
+		logger.WarnCF("privacy", "Image kept local but local model has no vision", map[string]interface{}{
+			"reason":         reason,
+			"provider":       localCaps.Provider,
+			"model":          localCaps.Model,
+			"vision_support": string(localCaps.Vision),
 		})
 	}
 
@@ -166,6 +184,10 @@ func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, opt
 		return nil, err
 	}
 
+	if hasVisionInput && localCaps.Vision == CapabilityUnsupported {
+		resp.Content = strings.TrimSpace(VisionUnsupportedNotice(localCaps.Model) + "\n\n" + resp.Content)
+	}
+
 	return resp, nil
 }
 
@@ -173,13 +195,36 @@ func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, opt
 func (pr *PrivacyRouter) routeCloud(ctx context.Context, messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) (*LLMResponse, error) {
 	atomic.AddInt64(&pr.stats.RoutedCloud, 1)
 
+	cloudCaps := ResolveCapabilities(pr.cloud, model)
+	hasVisionInput := HasVisionInput(messages)
+
 	if pr.logEnabled {
-		logger.InfoCF("privacy", "Routing to CLOUD", map[string]interface{}{
-			"model": model,
+		fields := map[string]interface{}{
+			"model":    cloudCaps.Model,
+			"provider": cloudCaps.Provider,
+		}
+		if hasVisionInput {
+			fields["vision_support"] = string(cloudCaps.Vision)
+		}
+		logger.InfoCF("privacy", "Routing to CLOUD", fields)
+	}
+
+	if hasVisionInput && cloudCaps.Vision == CapabilityUnsupported {
+		logger.WarnCF("privacy", "Image routed to cloud model without vision support", map[string]interface{}{
+			"provider":       cloudCaps.Provider,
+			"model":          cloudCaps.Model,
+			"vision_support": string(cloudCaps.Vision),
 		})
 	}
 
-	return pr.cloud.Chat(ctx, messages, tools, model, options)
+	resp, err := pr.cloud.Chat(ctx, messages, tools, model, options)
+	if err != nil {
+		return nil, err
+	}
+	if hasVisionInput && cloudCaps.Vision == CapabilityUnsupported {
+		resp.Content = strings.TrimSpace(VisionUnsupportedNotice(cloudCaps.Model) + "\n\n" + resp.Content)
+	}
+	return resp, nil
 }
 
 // sanitizeForLocal strips image content parts from messages (local model can't handle vision)

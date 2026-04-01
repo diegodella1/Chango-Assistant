@@ -58,8 +58,6 @@ func (p *CodexProvider) Chat(ctx context.Context, messages []Message, tools []To
 
 	// ChatGPT backend requires streaming — collect events until response.completed
 	stream := p.client.Responses.NewStreaming(ctx, params, opts...)
-	defer stream.Close()
-
 	var finalResp *responses.Response
 	for stream.Next() {
 		event := stream.Current()
@@ -67,11 +65,17 @@ func (p *CodexProvider) Chat(ctx context.Context, messages []Message, tools []To
 			finalResp = &event.Response
 		}
 	}
+	stream.Close()
 	if err := stream.Err(); err != nil {
 		return nil, fmt.Errorf("codex API call: %w", err)
 	}
 	if finalResp == nil {
-		return nil, fmt.Errorf("codex API call: no response.completed event received")
+		// Some environments/tests return a plain JSON response instead of SSE events.
+		fallbackResp, err := p.client.Responses.New(ctx, params, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("codex API call: no response.completed event received and fallback request failed: %w", err)
+		}
+		return parseCodexResponse(fallbackResp), nil
 	}
 
 	return parseCodexResponse(finalResp), nil

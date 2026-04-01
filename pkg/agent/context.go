@@ -327,6 +327,22 @@ func (cb *ContextBuilder) buildFeedbackHint() string {
 		}
 	}
 
+	// Cross-data awareness: remind agent to check related systems
+	sb.WriteString("\n## Cross-System Awareness\n")
+	sb.WriteString("Before responding, consider checking related systems:\n")
+	sb.WriteString("- If discussing a meeting/event → check `calendar` for context\n")
+	sb.WriteString("- If discussing a person → check `gmail` for recent emails from them\n")
+	sb.WriteString("- If discussing a task → check `tasks` for status and deadline\n")
+	sb.WriteString("- If discussing a deploy/code → check `git(action='status')` first\n")
+
+	// On Sundays, append full weekly report for meta-reflection
+	if time.Now().Weekday() == time.Sunday {
+		report := cb.scoring.GetWeeklyReport()
+		if report != "" {
+			sb.WriteString("\n## Weekly Report\n\n" + report)
+		}
+	}
+
 	return sb.String()
 }
 
