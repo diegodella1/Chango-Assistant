@@ -1,9 +1,11 @@
 package channels
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -279,44 +281,36 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 	// Send media as photos or documents based on file type
 	if len(msg.Media) > 0 {
 		for _, mediaURL := range msg.Media {
+			caption := ""
+			if msg.Content != "" {
+				caption = markdownToTelegramHTML(msg.Content)
+			}
+
 			if isImageURL(mediaURL) {
-				// Send as photo
-				photoParams := &telego.SendPhotoParams{
-					ChatID: tu.ID(chatID),
-					Photo:  tu.FileFromURL(mediaURL),
-				}
-				if msg.Content != "" {
-					photoParams.Caption = markdownToTelegramHTML(msg.Content)
-					photoParams.ParseMode = telego.ModeHTML
-				}
-				if _, photoErr := c.bot.SendPhoto(ctx, photoParams); photoErr != nil {
+				sent, photoErr := c.sendTelegramPhoto(ctx, chatID, mediaURL, caption)
+				if photoErr != nil {
 					logger.ErrorCF("telegram", "Failed to send photo, falling back to text", map[string]interface{}{
 						"error": photoErr.Error(),
 						"url":   mediaURL,
 					})
 					break // fall through to text send below
-				} else {
+				}
+				if sent {
 					return nil
 				}
-			} else {
-				// Send as document (PDFs, CSVs, generic files)
-				docParams := &telego.SendDocumentParams{
-					ChatID:   tu.ID(chatID),
-					Document: tu.FileFromURL(mediaURL),
-				}
-				if msg.Content != "" {
-					docParams.Caption = markdownToTelegramHTML(msg.Content)
-					docParams.ParseMode = telego.ModeHTML
-				}
-				if _, docErr := c.bot.SendDocument(ctx, docParams); docErr != nil {
-					logger.ErrorCF("telegram", "Failed to send document, falling back to text", map[string]interface{}{
-						"error": docErr.Error(),
-						"url":   mediaURL,
-					})
-					break // fall through to text send below
-				} else {
-					return nil
-				}
+				continue
+			}
+
+			sent, docErr := c.sendTelegramDocument(ctx, chatID, mediaURL, caption)
+			if docErr != nil {
+				logger.ErrorCF("telegram", "Failed to send document, falling back to text", map[string]interface{}{
+					"error": docErr.Error(),
+					"url":   mediaURL,
+				})
+				break // fall through to text send below
+			}
+			if sent {
+				return nil
 			}
 		}
 	}
@@ -976,6 +970,60 @@ func splitMessage(text string, maxLen int) []string {
 	return chunks
 }
 
+func (c *TelegramChannel) sendTelegramPhoto(ctx context.Context, chatID int64, mediaRef, caption string) (bool, error) {
+	photoParams := &telego.SendPhotoParams{
+		ChatID: tu.ID(chatID),
+	}
+	if caption != "" {
+		photoParams.Caption = caption
+		photoParams.ParseMode = telego.ModeHTML
+	}
+
+	inputFile, cleanup, useUpload, err := telegramMediaInput(mediaRef, ".png")
+	if err != nil {
+		return false, err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	if useUpload {
+		photoParams.Photo = inputFile
+	} else {
+		photoParams.Photo = tu.FileFromURL(mediaRef)
+	}
+
+	_, err = c.bot.SendPhoto(ctx, photoParams)
+	return err == nil, err
+}
+
+func (c *TelegramChannel) sendTelegramDocument(ctx context.Context, chatID int64, mediaRef, caption string) (bool, error) {
+	docParams := &telego.SendDocumentParams{
+		ChatID: tu.ID(chatID),
+	}
+	if caption != "" {
+		docParams.Caption = caption
+		docParams.ParseMode = telego.ModeHTML
+	}
+
+	inputFile, cleanup, useUpload, err := telegramMediaInput(mediaRef, ".bin")
+	if err != nil {
+		return false, err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	if useUpload {
+		docParams.Document = inputFile
+	} else {
+		docParams.Document = tu.FileFromURL(mediaRef)
+	}
+
+	_, err = c.bot.SendDocument(ctx, docParams)
+	return err == nil, err
+}
+
 // isImageURL returns true if the URL points to a known image format or is a data URI image.
 func isImageURL(u string) bool {
 	if strings.HasPrefix(u, "data:image/") {
@@ -988,6 +1036,102 @@ func isImageURL(u string) bool {
 		}
 	}
 	return false
+}
+
+func telegramMediaInput(mediaRef, fallbackExt string) (telego.InputFile, func(), bool, error) {
+	if strings.HasPrefix(mediaRef, "data:") {
+		return telegramInputFileFromDataURI(mediaRef, fallbackExt)
+	}
+
+	if looksLikeLocalPath(mediaRef) {
+		file, err := os.Open(mediaRef)
+		if err != nil {
+			return telego.InputFile{}, nil, false, fmt.Errorf("opening media file %q: %w", mediaRef, err)
+		}
+		cleanup := func() {
+			_ = file.Close()
+		}
+		return telego.InputFile{File: file}, cleanup, true, nil
+	}
+
+	return telego.InputFile{}, nil, false, nil
+}
+
+func telegramInputFileFromDataURI(dataURI, fallbackExt string) (telego.InputFile, func(), bool, error) {
+	header, payload, found := strings.Cut(dataURI, ",")
+	if !found {
+		return telego.InputFile{}, nil, false, fmt.Errorf("invalid data URI")
+	}
+	if !strings.HasSuffix(header, ";base64") {
+		return telego.InputFile{}, nil, false, fmt.Errorf("unsupported data URI encoding")
+	}
+
+	data, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return telego.InputFile{}, nil, false, fmt.Errorf("decoding data URI: %w", err)
+	}
+
+	ext := extensionFromDataURIHeader(header)
+	if ext == "" {
+		ext = fallbackExt
+	}
+
+	tmpFile, err := os.CreateTemp("", "picoclaw_tg_media_*"+ext)
+	if err != nil {
+		return telego.InputFile{}, nil, false, fmt.Errorf("creating temp media file: %w", err)
+	}
+
+	if _, err := io.Copy(tmpFile, bytes.NewReader(data)); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return telego.InputFile{}, nil, false, fmt.Errorf("writing temp media file: %w", err)
+	}
+
+	if _, err := tmpFile.Seek(0, 0); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return telego.InputFile{}, nil, false, fmt.Errorf("rewinding temp media file: %w", err)
+	}
+
+	cleanup := func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+	}
+	return telego.InputFile{File: tmpFile}, cleanup, true, nil
+}
+
+func extensionFromDataURIHeader(header string) string {
+	switch {
+	case strings.HasPrefix(header, "data:image/jpeg"):
+		return ".jpg"
+	case strings.HasPrefix(header, "data:image/png"):
+		return ".png"
+	case strings.HasPrefix(header, "data:image/gif"):
+		return ".gif"
+	case strings.HasPrefix(header, "data:image/webp"):
+		return ".webp"
+	case strings.HasPrefix(header, "data:application/pdf"):
+		return ".pdf"
+	default:
+		return ""
+	}
+}
+
+func looksLikeLocalPath(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "data:") {
+		return false
+	}
+	if filepath.IsAbs(ref) {
+		return true
+	}
+	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") {
+		return true
+	}
+	_, err := os.Stat(ref)
+	return err == nil
 }
 
 func parseChatID(chatIDStr string) (int64, error) {
