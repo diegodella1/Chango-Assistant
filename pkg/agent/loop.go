@@ -534,8 +534,26 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		}
 	}
 
+	// 2f. Autonomy signals — recurrent topics and challenge bias
+	if !opts.NoHistory && opts.UserMessage != "" && opts.Feature == telemetry.FeatureChat {
+		if autonomyHint := buildAutonomyHint(opts.UserMessage, history); autonomyHint != "" {
+			hint := providers.Message{
+				Role:    "system",
+				Content: autonomyHint,
+			}
+			messages = append(messages[:len(messages)-1], hint, messages[len(messages)-1])
+			logger.DebugCF("agent", "Autonomy signals injected", map[string]interface{}{
+				"session": opts.SessionKey,
+				"length":  len(autonomyHint),
+			})
+		}
+	}
+
 	// 3. Save user message to session
 	al.sessions.AddMessage(opts.SessionKey, "user", opts.UserMessage)
+	if !opts.NoHistory && opts.Feature == telemetry.FeatureChat && opts.UserMessage != "" {
+		updateTopicTracks(al.workspace, opts.UserMessage, history)
+	}
 
 	// 4. Run LLM iteration loop (or Tree of Thought for complex decisions)
 	var finalContent string

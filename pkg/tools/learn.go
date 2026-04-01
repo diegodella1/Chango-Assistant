@@ -2,11 +2,12 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/sipeed/picoclaw/pkg/knowledge"
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -127,10 +128,7 @@ func (t *LearnTool) start(ctx context.Context, args map[string]interface{}) *Too
 	}
 
 	_, err := t.subagentMgr.Spawn(ctx, prompt, fmt.Sprintf("learn:%s", slug), t.channel, t.chatID, func(callbackCtx context.Context, result *ToolResult) {
-		// On completion, refresh the index
-		t.knowledgeLoader.RefreshIndex()
-		logger.InfoCF("learn", "Research completed, index refreshed",
-			map[string]interface{}{"topic": topic, "slug": slug})
+		t.finalizeResearchTopic(topic, purpose, slug)
 	})
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to spawn research subagent: %v", err))
@@ -205,7 +203,7 @@ func (t *LearnTool) refresh(ctx context.Context, args map[string]interface{}) *T
 	}
 
 	_, err := t.subagentMgr.Spawn(ctx, prompt, fmt.Sprintf("learn-refresh:%s", slug), t.channel, t.chatID, func(callbackCtx context.Context, result *ToolResult) {
-		t.knowledgeLoader.RefreshIndex()
+		t.finalizeResearchTopic(topic, purpose, slug)
 	})
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to spawn research subagent: %v", err))
@@ -249,17 +247,94 @@ Instructions:
    - Notable controversies or open questions
 4. SAVE: Use write_file tool to save the synthesized knowledge to: %s/KNOWLEDGE.md
    Format: Markdown with clear headers, bullet points where appropriate.
-5. UPDATE META: Use write_file tool to update %s/META.json with:
-   - status: "ready"
-   - updated_at: "%s"
-   - char_count: (actual character count of KNOWLEDGE.md)
-   - keywords: (extract 5-10 relevant keywords from your research)
+5. UPDATE META: Use write_file tool to update %s/META.json with the best metadata you can.
+   Importante: el sistema normaliza status/char_count/keywords al terminar, así que priorizá que exista un JSON válido.
 6. SOURCES: Use write_file tool to save source URLs to %s/sources.json as a JSON array of objects with "url" and "title" fields.
 7. NOTIFY: Use message tool to send a short summary (2-3 lines) to the user about what you learned.
 
+Usá exactamente estos nombres de tools cuando haga falta: web_search, web_fetch, write_file, read_file, memory, message.
+
 Write in Spanish. Be thorough but concise. Focus on actionable knowledge.`,
 		topic, purposeSection, searchCount, fetchCount, wordRange,
-		knowledgePath, knowledgePath, time.Now().Format(time.RFC3339), knowledgePath)
+		knowledgePath, knowledgePath, knowledgePath)
+}
+
+func (t *LearnTool) finalizeResearchTopic(topic, purpose, slug string) {
+	if t.knowledgeLoader == nil {
+		return
+	}
+
+	meta := knowledge.KnowledgeMeta{
+		Slug:        slug,
+		Title:       topic,
+		Description: purpose,
+		Keywords:    generateKeywords(topic),
+		Status:      "researching",
+		CreatedAt:   knowledge.Now(),
+		UpdatedAt:   knowledge.Now(),
+		Version:     1,
+		AutoInject:  true,
+	}
+
+	for _, existing := range t.knowledgeLoader.ListAll() {
+		if existing.Slug == slug {
+			meta = existing
+			break
+		}
+	}
+
+	knowledgePath := filepath.Join(t.workspace, "knowledge", slug, "KNOWLEDGE.md")
+	content, err := os.ReadFile(knowledgePath)
+	if err != nil || strings.TrimSpace(string(content)) == "" {
+		meta.Status = "failed"
+		meta.UpdatedAt = knowledge.Now()
+		if saveErr := t.knowledgeLoader.SaveMeta(meta); saveErr != nil {
+			logger.WarnCF("learn", "Failed to persist failed research metadata",
+				map[string]interface{}{"topic": topic, "slug": slug, "error": saveErr.Error()})
+			return
+		}
+		_ = t.knowledgeLoader.RefreshIndex()
+		logger.WarnCF("learn", "Research finished without knowledge content",
+			map[string]interface{}{"topic": topic, "slug": slug})
+		return
+	}
+
+	meta.Title = topic
+	meta.Description = purpose
+	meta.Status = "ready"
+	meta.UpdatedAt = knowledge.Now()
+	meta.CharCount = len(content)
+	meta.AutoInject = true
+	if meta.CreatedAt == "" {
+		meta.CreatedAt = meta.UpdatedAt
+	}
+	if meta.Version <= 0 {
+		meta.Version = 1
+	}
+	meta.Keywords = mergeKeywords(meta.Keywords, generateKeywords(topic), extractKeywords(string(content), 8))
+
+	if saveErr := t.knowledgeLoader.SaveMeta(meta); saveErr != nil {
+		logger.WarnCF("learn", "Failed to persist finalized research metadata",
+			map[string]interface{}{"topic": topic, "slug": slug, "error": saveErr.Error()})
+		return
+	}
+
+	sourcesPath := filepath.Join(t.workspace, "knowledge", slug, "sources.json")
+	if _, err := os.Stat(sourcesPath); err != nil {
+		emptySources, _ := json.Marshal([]map[string]string{})
+		if writeErr := os.WriteFile(sourcesPath, emptySources, 0644); writeErr != nil {
+			logger.WarnCF("learn", "Failed to create empty sources.json",
+				map[string]interface{}{"topic": topic, "slug": slug, "error": writeErr.Error()})
+		}
+	}
+
+	if err := t.knowledgeLoader.RefreshIndex(); err != nil {
+		logger.WarnCF("learn", "Research completed but failed to refresh index",
+			map[string]interface{}{"topic": topic, "slug": slug, "error": err.Error()})
+		return
+	}
+	logger.InfoCF("learn", "Research completed, metadata normalized",
+		map[string]interface{}{"topic": topic, "slug": slug, "char_count": meta.CharCount})
 }
 
 // slugify converts a topic name to a URL-safe slug.
@@ -296,4 +371,63 @@ func generateKeywords(topic string) []string {
 		}
 	}
 	return keywords
+}
+
+func extractKeywords(content string, limit int) []string {
+	if limit <= 0 {
+		limit = 8
+	}
+
+	stopWords := map[string]bool{
+		"de": true, "la": true, "el": true, "los": true, "las": true,
+		"en": true, "del": true, "al": true, "un": true, "una": true,
+		"y": true, "o": true, "a": true, "por": true, "con": true,
+		"sobre": true, "para": true, "que": true, "como": true,
+		"the": true, "of": true, "and": true, "in": true, "on": true,
+		"for": true, "to": true, "is": true, "are": true,
+	}
+
+	content = strings.ToLower(content)
+	wordRe := regexp.MustCompile(`[a-z0-9áéíóúñü]{4,}`)
+	counts := map[string]int{}
+	for _, word := range wordRe.FindAllString(content, -1) {
+		if stopWords[word] {
+			continue
+		}
+		counts[word]++
+	}
+
+	var keywords []string
+	for len(keywords) < limit {
+		bestWord := ""
+		bestCount := 0
+		for word, count := range counts {
+			if count > bestCount {
+				bestWord = word
+				bestCount = count
+			}
+		}
+		if bestWord == "" {
+			break
+		}
+		keywords = append(keywords, bestWord)
+		delete(counts, bestWord)
+	}
+	return keywords
+}
+
+func mergeKeywords(groups ...[]string) []string {
+	seen := make(map[string]bool)
+	var merged []string
+	for _, group := range groups {
+		for _, word := range group {
+			word = strings.TrimSpace(strings.ToLower(word))
+			if len(word) < 3 || seen[word] {
+				continue
+			}
+			seen[word] = true
+			merged = append(merged, word)
+		}
+	}
+	return merged
 }

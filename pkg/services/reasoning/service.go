@@ -369,6 +369,83 @@ func (s *Service) gatherState() string {
 		}
 	}
 
+	// Recent self-critique failures so background reasoning can detect behavioral drift.
+	critiquePath := filepath.Join(s.workspace, "state", "critique_failures.json")
+	if data, err := os.ReadFile(critiquePath); err == nil {
+		var failures []struct {
+			Pattern string `json:"pattern"`
+		}
+		if json.Unmarshal(data, &failures) == nil && len(failures) > 0 {
+			start := len(failures) - 3
+			if start < 0 {
+				start = 0
+			}
+			var recent []string
+			for _, failure := range failures[start:] {
+				pattern := strings.TrimSpace(failure.Pattern)
+				if pattern == "" {
+					continue
+				}
+				recent = append(recent, "- "+truncate(pattern, 120))
+			}
+			if len(recent) > 0 {
+				parts = append(parts, "Fallas recientes de autocrítica:\n"+strings.Join(recent, "\n"))
+			}
+		}
+	}
+
+	// Persistent topic tracks turn repeated chat themes into ongoing lines of thought.
+	tracksPath := filepath.Join(s.workspace, "state", "topic_tracks.json")
+	if data, err := os.ReadFile(tracksPath); err == nil {
+		var tracks []struct {
+			Topic      string `json:"topic"`
+			Status     string `json:"status"`
+			Mentions   int    `json:"mentions"`
+			LastMessage string `json:"last_message"`
+		}
+		if json.Unmarshal(data, &tracks) == nil && len(tracks) > 0 {
+			var active []string
+			for _, track := range tracks {
+				if track.Status != "active" {
+					continue
+				}
+				active = append(active, fmt.Sprintf("- %s (%d menciones): %s",
+					track.Topic, track.Mentions, truncate(track.LastMessage, 80)))
+				if len(active) >= 3 {
+					break
+				}
+			}
+			if len(active) > 0 {
+				parts = append(parts, "Tracks activos:\n"+strings.Join(active, "\n"))
+			}
+		}
+	}
+
+	// Recent monologue decisions to surface repeated challenge/identity patterns.
+	monologuePath := filepath.Join(s.workspace, "state", "monologue_log.json")
+	if data, err := os.ReadFile(monologuePath); err == nil {
+		var entries []struct {
+			Decision string `json:"decision"`
+		}
+		if json.Unmarshal(data, &entries) == nil && len(entries) > 0 {
+			start := len(entries) - 3
+			if start < 0 {
+				start = 0
+			}
+			var recent []string
+			for _, entry := range entries[start:] {
+				decision := strings.TrimSpace(entry.Decision)
+				if decision == "" {
+					continue
+				}
+				recent = append(recent, "- "+truncate(decision, 120))
+			}
+			if len(recent) > 0 {
+				parts = append(parts, "Decisiones recientes del monólogo:\n"+strings.Join(recent, "\n"))
+			}
+		}
+	}
+
 	if len(parts) == 0 {
 		return ""
 	}
@@ -425,6 +502,7 @@ Si action=notify:
 
 Si action=investigate:
 → Investigá usando tus tools (memory search, web_search, tasks list, gmail, etc.)
+→ Si detectás un tema recurrente que conviene conservar, preferí learn(action='start', topic='...', purpose='...', depth='overview') para dejar conocimiento persistente
 → Guardá lo que encontraste como insight: memory(action='save', key='insight-FECHA', folder='insights')
 
 Si action=execute:
@@ -442,9 +520,10 @@ Si hay un goal con sub-tasks pendientes, evaluá cuál es el siguiente paso lóg
 
 INVESTIGACIÓN PROACTIVA:
 Si en el snapshot o en insights recientes detectás un tema que se mencionó 2+ veces pero no hay knowledge guardado:
-→ Investigá brevemente: web_search + memory search
+→ Preferí learn(action='start', topic='...', purpose='investigación proactiva de background', depth='overview') para dejar knowledge persistente
+→ Si no alcanza el contexto o no podés usar learn, hacé web_search + memory search
 → Guardá un resumen: memory(action='save', key='knowledge-TEMA', folder='insights', tags=['proactive-research'])
-→ No notifiques a Diego por esto (es background learning silencioso)
+→ No notifiques a Diego por esto salvo que el hallazgo sea accionable o urgente
 
 VERIFICACIÓN DE ACCIONES PREVIAS:
 Si hay "Acciones pendientes de verificación" en el snapshot:

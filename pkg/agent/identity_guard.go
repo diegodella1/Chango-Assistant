@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"regexp"
 	"strings"
 )
 
@@ -49,12 +50,18 @@ var capabilityGuards = []capabilityGuard{
 	},
 }
 
+var genericIdentityPhrases = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(as an ai|as a language model)\b`),
+	regexp.MustCompile(`(?i)\b(i am an ai assistant|i'm an ai assistant|soy un asistente de ia|soy una ia|soy un modelo de lenguaje|soy un asistente virtual)\b`),
+	regexp.MustCompile(`(?i)\bcomo modelo de lenguaje\b`),
+}
+
 // guardIdentity checks if the LLM denied a capability that Chango actually has.
 // Uses co-occurrence detection: if the response contains BOTH a negation marker AND
 // a topic word near each other, it's a denial — regardless of exact phrasing.
 func (al *AgentLoop) guardIdentity(response, userMessage string) string {
 	if response == "" || userMessage == "" {
-		return response
+		return normalizeIdentityBoilerplate(response)
 	}
 
 	lowerResp := strings.ToLower(response)
@@ -93,5 +100,20 @@ func (al *AgentLoop) guardIdentity(response, userMessage string) string {
 		}
 	}
 
-	return response
+	return normalizeIdentityBoilerplate(response)
+}
+
+func normalizeIdentityBoilerplate(response string) string {
+	normalized := response
+	for _, phrase := range genericIdentityPhrases {
+		normalized = phrase.ReplaceAllString(normalized, "Chango")
+	}
+
+	trimmed := strings.TrimSpace(strings.ToLower(normalized))
+	switch trimmed {
+	case "chango.", "chango", "soy chango.", "soy chango":
+		return "Soy Chango, agente autónomo de Diego Dell Agostino. No soy un asistente genérico."
+	}
+
+	return normalized
 }

@@ -39,11 +39,19 @@ The user just sent a message. Before the main agent responds, analyze:
 2. CONTEXT: What do I know from memory/history that's relevant? Any patterns or contradictions?
 3. APPROACH: Should I listen, advise, challenge, or execute? What's the best angle?
 4. RISKS: What could go wrong if I respond naively? Am I about to be a yes-man?
-5. PLAN: In 1-2 sentences, what should my response focus on?
+5. IDENTITY: What would sound generic or out-of-character for Chango here?
+6. PLAN: In 1-2 sentences, what should my response focus on?
 
 Be concise — 3-5 lines max. This is internal thinking, not a response to the user.
-
-User's message: ` + userMessage
+`
+	recurringTopics := formatRecurringTopicsForPrompt(userMessage, history)
+	if recurringTopics != "" {
+		prompt += "\n" + recurringTopics
+	}
+	if shouldChallengeUser(userMessage, history) {
+		prompt += "\nThe user is likely asking for judgment on a risky or weak plan. Default to honest challenge, not agreement."
+	}
+	prompt += "\nUser's message: " + userMessage
 
 	// Use the last 6 history messages for context (keep it light)
 	var contextMsgs []providers.Message
@@ -99,7 +107,7 @@ User's message: ` + userMessage
 	// Persist notable monologue decisions for pattern analysis
 	content := resp.Content
 	lower := strings.ToLower(content)
-	if strings.Contains(lower, "challenge") || strings.Contains(lower, "execute") || strings.Contains(lower, "disagree") {
+	if strings.Contains(lower, "challenge") || strings.Contains(lower, "execute") || strings.Contains(lower, "disagree") || strings.Contains(lower, "generic") {
 		al.recordMonologueDecision(userMessage, content)
 	}
 
