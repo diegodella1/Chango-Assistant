@@ -421,6 +421,67 @@ func (s *Service) gatherState() string {
 		}
 	}
 
+	// Autonomy agenda gives the background loop a prioritized focus, not just raw signals.
+	agendaPath := filepath.Join(s.workspace, "state", "autonomy_agenda.json")
+	if data, err := os.ReadFile(agendaPath); err == nil {
+		var agenda struct {
+			Focus []struct {
+				Goal        string `json:"goal"`
+				NextAction  string `json:"next_action"`
+				Priority    int    `json:"priority"`
+				SourceTopic string `json:"source_topic"`
+			} `json:"focus"`
+		}
+		if json.Unmarshal(data, &agenda) == nil && len(agenda.Focus) > 0 {
+			var focus []string
+			for _, item := range agenda.Focus {
+				focus = append(focus, fmt.Sprintf("- P%d %s [%s] (%s)",
+					item.Priority, item.Goal, item.NextAction, item.SourceTopic))
+				if len(focus) >= 3 {
+					break
+				}
+			}
+			if len(focus) > 0 {
+				parts = append(parts, "Agenda autónoma:\n"+strings.Join(focus, "\n"))
+			}
+		}
+	}
+
+	// Goal plan adds hierarchy: one primary goal, supporting goals, and the next executable step.
+	planPath := filepath.Join(s.workspace, "state", "autonomy_plan.json")
+	if data, err := os.ReadFile(planPath); err == nil {
+		var plan struct {
+			PrimaryGoal *struct {
+				Goal           string `json:"goal"`
+				ExecutableStep string `json:"executable_step"`
+				Status         string `json:"status"`
+				BlockedBy      string `json:"blocked_by"`
+			} `json:"primary_goal"`
+			CurrentStep string `json:"current_step"`
+			Supporting []struct {
+				Goal   string `json:"goal"`
+				Status string `json:"status"`
+			} `json:"supporting"`
+		}
+		if json.Unmarshal(data, &plan) == nil && plan.PrimaryGoal != nil {
+			lines := []string{
+				"Goal principal:",
+				fmt.Sprintf("- %s [%s]", plan.PrimaryGoal.Goal, plan.PrimaryGoal.Status),
+				fmt.Sprintf("- Próximo paso: %s", plan.PrimaryGoal.ExecutableStep),
+			}
+			if plan.CurrentStep != "" {
+				lines = append(lines, fmt.Sprintf("- Current step: %s", plan.CurrentStep))
+			}
+			if plan.PrimaryGoal.BlockedBy != "" {
+				lines = append(lines, fmt.Sprintf("- Bloqueado por: %s", plan.PrimaryGoal.BlockedBy))
+			}
+			if len(plan.Supporting) > 0 {
+				lines = append(lines, fmt.Sprintf("- Goals de soporte: %d", len(plan.Supporting)))
+			}
+			parts = append(parts, strings.Join(lines, "\n"))
+		}
+	}
+
 	// Recent monologue decisions to surface repeated challenge/identity patterns.
 	monologuePath := filepath.Join(s.workspace, "state", "monologue_log.json")
 	if data, err := os.ReadFile(monologuePath); err == nil {

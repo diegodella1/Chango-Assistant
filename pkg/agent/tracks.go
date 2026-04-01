@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/telemetry"
@@ -23,6 +24,9 @@ type TopicTrack struct {
 	Mentions        int       `json:"mentions"`
 	Priority        int       `json:"priority"`
 	Confidence      float64   `json:"confidence"`
+	RiskLevel       string    `json:"risk_level,omitempty"`
+	RequiresApproval bool     `json:"requires_approval,omitempty"`
+	DecisionReason  string    `json:"decision_reason,omitempty"`
 	NextAction      string    `json:"next_action"`
 	CooldownUntil   time.Time `json:"cooldown_until,omitempty"`
 	LastPromotedAt  time.Time `json:"last_promoted_at,omitempty"`
@@ -35,12 +39,12 @@ type TopicTrack struct {
 }
 
 func updateTopicTracks(workspace, current string, history []providers.Message) []TopicTrack {
+	tracks := reconcileTopicTracks(workspace)
 	topics := detectRecurringTopics(current, history, 3)
 	if len(topics) == 0 {
-		return loadTopicTracks(workspace)
+		return tracks
 	}
 
-	tracks := loadTopicTracks(workspace)
 	byTopic := make(map[string]*TopicTrack, len(tracks))
 	for i := range tracks {
 		track := &tracks[i]
@@ -85,31 +89,82 @@ func updateTopicTracks(workspace, current string, history []providers.Message) [
 	return tracks
 }
 
+func reconcileTopicTracks(workspace string) []TopicTrack {
+	tracks := loadTopicTracks(workspace)
+	if len(tracks) == 0 {
+		return nil
+	}
+
+	changed := false
+	now := time.Now()
+	for i := range tracks {
+		track := &tracks[i]
+		prevStatus := track.Status
+		prevAction := track.NextAction
+		prevKnowledge := track.KnowledgeStatus
+		prevTask := track.TaskStatus
+
+		track.KnowledgeStatus = knowledgeStatusForTopic(workspace, track.Topic)
+		track.TaskStatus = taskStatusForTopic(workspace, track.Topic)
+
+		switch {
+		case track.TaskStatus == "done":
+			track.Status = "resolved"
+			track.NextAction = "none"
+			if track.CooldownUntil.Before(now.Add(24 * time.Hour)) {
+				track.CooldownUntil = now.Add(24 * time.Hour)
+			}
+		case track.KnowledgeStatus == "ready" && (track.TaskStatus == "" || track.TaskStatus == "cancelled"):
+			track.Status = "resolved"
+			track.NextAction = "none"
+			if track.CooldownUntil.Before(now.Add(24 * time.Hour)) {
+				track.CooldownUntil = now.Add(24 * time.Hour)
+			}
+		case track.TaskStatus == "in_progress" || track.KnowledgeStatus == "researching":
+			track.Status = "active"
+			track.NextAction = "monitor"
+		case track.KnowledgeStatus == "failed":
+			track.Status = "active"
+			track.NextAction = "watch"
+			track.Confidence = minFloat(track.Confidence, 0.45)
+		case track.TaskStatus == "cancelled":
+			track.Status = "active"
+			track.NextAction = "watch"
+		default:
+			evaluateTopicTrack(workspace, track)
+		}
+
+		if prevStatus != track.Status || prevAction != track.NextAction || prevKnowledge != track.KnowledgeStatus || prevTask != track.TaskStatus {
+			changed = true
+		}
+	}
+
+	sort.Slice(tracks, func(i, j int) bool {
+		return tracks[i].LastSeenAt.After(tracks[j].LastSeenAt)
+	})
+	if changed {
+		saveTopicTracks(workspace, tracks)
+	}
+	return tracks
+}
+
 func evaluateTopicTrack(workspace string, track *TopicTrack) {
 	track.Priority = minInt(track.Mentions+1, 5)
 	track.Confidence = minFloat(0.3+float64(track.Mentions)*0.15, 0.95)
 	track.KnowledgeStatus = knowledgeStatusForTopic(workspace, track.Topic)
 	track.TaskStatus = taskStatusForTopic(workspace, track.Topic)
+	track.RiskLevel = classifyTrackRisk(track.LastMessage)
+	track.RequiresApproval = track.RiskLevel == "high"
 
 	if !track.CooldownUntil.IsZero() && time.Now().Before(track.CooldownUntil) {
 		track.NextAction = "cooldown"
+		track.DecisionReason = "track in cooldown"
 		return
 	}
 
-	switch {
-	case track.KnowledgeStatus == "ready":
-		track.NextAction = "monitor"
-	case track.KnowledgeStatus == "researching":
-		track.NextAction = "monitor"
-	case track.Mentions >= 3 && track.KnowledgeStatus == "":
-		track.NextAction = "learn"
-	case track.Mentions >= 2 && isActionableTrackMessage(track.LastMessage) && track.TaskStatus == "":
-		track.NextAction = "task"
-	case track.TaskStatus != "":
-		track.NextAction = "monitor"
-	default:
-		track.NextAction = "watch"
-	}
+	action, reason := decideTrackPolicy(track)
+	track.NextAction = action
+	track.DecisionReason = reason
 }
 
 func (al *AgentLoop) maybePromoteTopicTracks(tracks []TopicTrack, opts processOptions) {
@@ -122,6 +177,20 @@ func (al *AgentLoop) maybePromoteTopicTracks(tracks []TopicTrack, opts processOp
 			continue
 		}
 		switch track.NextAction {
+		case "ask_user":
+			if opts.Channel == "" || opts.ChatID == "" {
+				continue
+			}
+			al.bus.PublishOutbound(bus.OutboundMessage{
+				Channel: opts.Channel,
+				ChatID:  opts.ChatID,
+				Content: buildApprovalRequest(track),
+			})
+			updateTrackPromotion(al.workspace, track.Topic, track.KnowledgeStatus, track.TaskStatus, 12*time.Hour)
+			logger.InfoCF("agent", "Track promoted to approval request", map[string]interface{}{
+				"topic": track.Topic,
+				"risk":  track.RiskLevel,
+			})
 		case "learn":
 			if al.learnTool == nil {
 				continue
@@ -322,6 +391,60 @@ func isActionableTrackMessage(msg string) bool {
 		}
 	}
 	return false
+}
+
+func classifyTrackRisk(msg string) string {
+	lower := strings.ToLower(msg)
+	highRisk := []string{
+		"producción", "produccion", "prod", "deploy", "desplegar",
+		"pagar", "wallet", "dinero", "transfer", "invoice",
+		"email", "mail", "gmail", "externo", "cliente", "usuario",
+		"borrar", "delete", "eliminar", "credenciales", "password",
+	}
+	mediumRisk := []string{
+		"config", "settings", "automatizar", "cron", "recordatorio",
+		"seguimiento", "task", "agenda", "calendar", "archivo",
+	}
+
+	for _, token := range highRisk {
+		if strings.Contains(lower, token) {
+			return "high"
+		}
+	}
+	for _, token := range mediumRisk {
+		if strings.Contains(lower, token) {
+			return "medium"
+		}
+	}
+	return "low"
+}
+
+func decideTrackPolicy(track *TopicTrack) (string, string) {
+	switch {
+	case track.TaskStatus == "done":
+		return "none", "task already completed"
+	case track.KnowledgeStatus == "ready" && (track.TaskStatus == "" || track.TaskStatus == "cancelled"):
+		return "none", "knowledge already available"
+	case track.TaskStatus == "in_progress" || track.KnowledgeStatus == "researching":
+		return "monitor", "work already in progress"
+	case track.RequiresApproval && isActionableTrackMessage(track.LastMessage):
+		return "ask_user", "high-risk action requires approval"
+	case track.Mentions >= 3 && track.KnowledgeStatus == "":
+		return "learn", "recurrent topic without knowledge"
+	case track.Mentions >= 2 && isActionableTrackMessage(track.LastMessage) && track.TaskStatus == "":
+		return "task", "actionable repeated topic without follow-up task"
+	case track.Mentions <= 1 && track.Confidence < 0.5:
+		return "ignore", "weak signal"
+	default:
+		return "watch", "keep monitoring"
+	}
+}
+
+func buildApprovalRequest(track TopicTrack) string {
+	return "Quiero avanzar con un track sensible: " + track.Topic + ". " +
+		"Riesgo: " + track.RiskLevel + ". " +
+		"Razón: " + track.DecisionReason + ". " +
+		"¿Procedo o preferís que solo lo siga observando?"
 }
 
 func minInt(a, b int) int {

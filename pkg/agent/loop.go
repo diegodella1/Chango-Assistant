@@ -556,6 +556,8 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	if !opts.NoHistory && opts.Feature == telemetry.FeatureChat && opts.UserMessage != "" {
 		tracks := updateTopicTracks(al.workspace, opts.UserMessage, history)
 		al.maybePromoteTopicTracks(tracks, opts)
+		refreshAutonomyAgenda(al.workspace)
+		refreshAutonomyPlan(al.workspace)
 	}
 
 	// 4. Run LLM iteration loop (or Tree of Thought for complex decisions)

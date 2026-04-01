@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/knowledge"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
@@ -84,16 +85,35 @@ func TestEvaluateTopicTrackPromotesToLearnWhenKnowledgeMissing(t *testing.T) {
 func TestEvaluateTopicTrackPromotesToTaskWhenActionable(t *testing.T) {
 	workspace := t.TempDir()
 	track := TopicTrack{
-		Topic:       "deploy",
+		Topic:       "documentacion",
 		Mentions:    2,
 		Status:      "active",
-		LastMessage: "Hay que revisar y desplegar esto en producción.",
+		LastMessage: "Hay que revisar y ordenar la documentacion del proyecto.",
 	}
 
 	evaluateTopicTrack(workspace, &track)
 
 	if track.NextAction != "task" {
 		t.Fatalf("expected task, got %q", track.NextAction)
+	}
+}
+
+func TestEvaluateTopicTrackRequiresApprovalForHighRisk(t *testing.T) {
+	workspace := t.TempDir()
+	track := TopicTrack{
+		Topic:       "deploy",
+		Mentions:    2,
+		Status:      "active",
+		LastMessage: "Hay que desplegar esto en producción y tocar config.",
+	}
+
+	evaluateTopicTrack(workspace, &track)
+
+	if track.NextAction != "ask_user" {
+		t.Fatalf("expected ask_user, got %q", track.NextAction)
+	}
+	if !track.RequiresApproval {
+		t.Fatalf("expected requires_approval=true")
 	}
 }
 
@@ -132,5 +152,99 @@ func TestCreateTrackTaskAvoidsDuplicates(t *testing.T) {
 	created := createTrackTask(workspace, TopicTrack{Topic: "deploy", Priority: 4})
 	if created {
 		t.Fatalf("expected duplicate task creation to be skipped")
+	}
+}
+
+func TestDecideTrackPolicyIgnoresWeakSignals(t *testing.T) {
+	track := &TopicTrack{
+		Topic:      "idea",
+		Mentions:   1,
+		Confidence: 0.4,
+	}
+
+	action, _ := decideTrackPolicy(track)
+	if action != "ignore" {
+		t.Fatalf("expected ignore, got %q", action)
+	}
+}
+
+func TestReconcileTopicTracksResolvesReadyKnowledge(t *testing.T) {
+	workspace := t.TempDir()
+	now := time.Now()
+	saveTopicTracks(workspace, []TopicTrack{
+		{
+			Topic:          "autonomia",
+			Status:         "active",
+			NextAction:     "monitor",
+			KnowledgeStatus: "researching",
+			Mentions:       4,
+			FirstSeenAt:    now,
+			LastSeenAt:     now,
+		},
+	})
+
+	loader := knowledge.NewLoader(workspace)
+	if err := loader.SaveMeta(knowledge.KnowledgeMeta{
+		Slug:       "autonomia",
+		Title:      "autonomia",
+		Status:     "ready",
+		CreatedAt:  knowledge.Now(),
+		UpdatedAt:  knowledge.Now(),
+		Version:    1,
+		AutoInject: true,
+	}); err != nil {
+		t.Fatalf("SaveMeta: %v", err)
+	}
+
+	tracks := reconcileTopicTracks(workspace)
+	if len(tracks) != 1 {
+		t.Fatalf("expected 1 track, got %d", len(tracks))
+	}
+	if tracks[0].Status != "resolved" {
+		t.Fatalf("expected resolved status, got %q", tracks[0].Status)
+	}
+	if tracks[0].NextAction != "none" {
+		t.Fatalf("expected next_action none, got %q", tracks[0].NextAction)
+	}
+}
+
+func TestReconcileTopicTracksResolvesDoneTask(t *testing.T) {
+	workspace := t.TempDir()
+	now := time.Now()
+	saveTopicTracks(workspace, []TopicTrack{
+		{
+			Topic:       "deploy",
+			Status:      "active",
+			NextAction:  "monitor",
+			TaskStatus:  "pending",
+			Mentions:    3,
+			FirstSeenAt: now,
+			LastSeenAt:  now,
+		},
+	})
+
+	if err := os.MkdirAll(filepath.Join(workspace, "tasks"), 0755); err != nil {
+		t.Fatalf("mkdir tasks: %v", err)
+	}
+	data, _ := json.Marshal([]map[string]any{
+		{
+			"title":  "Seguimiento autonomo: deploy",
+			"status": "done",
+			"tags":   []string{"autonomy-track", "topic:deploy"},
+		},
+	})
+	if err := os.WriteFile(filepath.Join(workspace, "tasks", "tasks.json"), data, 0644); err != nil {
+		t.Fatalf("write tasks: %v", err)
+	}
+
+	tracks := reconcileTopicTracks(workspace)
+	if len(tracks) != 1 {
+		t.Fatalf("expected 1 track, got %d", len(tracks))
+	}
+	if tracks[0].Status != "resolved" {
+		t.Fatalf("expected resolved status, got %q", tracks[0].Status)
+	}
+	if tracks[0].TaskStatus != "done" {
+		t.Fatalf("expected task status done, got %q", tracks[0].TaskStatus)
 	}
 }
