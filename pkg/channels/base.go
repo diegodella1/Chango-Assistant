@@ -48,10 +48,12 @@ func (c *BaseChannel) IsAllowed(senderID string) bool {
 		return true
 	}
 
-	// Extract numeric ID from compound senderID like "123456|username"
+	// Extract parts from compound senderID like "123456|username"
 	idPart := senderID
+	usernamePart := ""
 	if idx := strings.Index(senderID, "|"); idx > 0 {
 		idPart = senderID[:idx]
+		usernamePart = senderID[idx+1:]
 	}
 
 	for _, allowed := range c.allowList {
@@ -67,10 +69,16 @@ func (c *BaseChannel) IsAllowed(senderID string) bool {
 			return true
 		}
 
+		// Plain username allowlist entry — match against sender's username part
+		if usernamePart != "" && !strings.Contains(trimmed, "|") && usernamePart == trimmed {
+			return true
+		}
+
 		// Allowed entry is compound "id|user" — only match if numeric IDs match
 		if idx := strings.Index(trimmed, "|"); idx > 0 {
 			allowedID := trimmed[:idx]
-			if idPart == allowedID {
+			allowedUsername := trimmed[idx+1:]
+			if idPart == allowedID || (usernamePart != "" && allowedUsername != "" && usernamePart == allowedUsername) {
 				return true
 			}
 		}

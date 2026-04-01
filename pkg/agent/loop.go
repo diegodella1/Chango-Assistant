@@ -10,12 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
@@ -28,36 +22,42 @@ import (
 	"github.com/sipeed/picoclaw/pkg/telemetry"
 	"github.com/sipeed/picoclaw/pkg/tools"
 	"github.com/sipeed/picoclaw/pkg/utils"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 type AgentLoop struct {
-	bus            *bus.MessageBus
-	provider       providers.LLMProvider
-	workspace      string
-	model          string
-	contextWindow  int // Maximum context window size in tokens
-	maxIterations  int
-	sessions       *session.SessionManager
-	state          *state.Manager
-	contextBuilder *ContextBuilder
-	tools          *tools.ToolRegistry
-	memoryTool     *tools.MemoryTool          // Direct reference for programmatic access (distillation, relevance search)
-	knowledgeGraph *tools.KnowledgeGraphTool // Direct reference for analogical reasoning (graph search)
-	running        atomic.Bool
-	summarizing    sync.Map // Tracks which sessions are currently being summarized
-	cfg            *config.Config // Reference to config for runtime updates
-	configPath     string         // Path to config.json for persistence
-	tracker        *telemetry.Tracker
-	subagentMgr    *tools.SubagentManager
-	scoring        *ScoringEngine
+	bus                *bus.MessageBus
+	provider           providers.LLMProvider
+	workspace          string
+	model              string
+	contextWindow      int // Maximum context window size in tokens
+	maxIterations      int
+	sessions           *session.SessionManager
+	state              *state.Manager
+	contextBuilder     *ContextBuilder
+	tools              *tools.ToolRegistry
+	memoryTool         *tools.MemoryTool         // Direct reference for programmatic access (distillation, relevance search)
+	knowledgeGraph     *tools.KnowledgeGraphTool // Direct reference for analogical reasoning (graph search)
+	running            atomic.Bool
+	summarizing        sync.Map       // Tracks which sessions are currently being summarized
+	cfg                *config.Config // Reference to config for runtime updates
+	configPath         string         // Path to config.json for persistence
+	tracker            *telemetry.Tracker
+	subagentMgr        *tools.SubagentManager
+	scoring            *ScoringEngine
 	localProvider      providers.LLMProvider // local model for inner monologue (zero cost, private)
 	backgroundProvider providers.LLMProvider // cheap cloud provider for background escalation (e.g. Groq)
 	backgroundModel    string                // model for background provider
 	onEvent            func(string)          // callback for real-time activity events (SSE)
-	tokenBudget    *telemetry.TokenBudget
-	scratchpad     *Scratchpad // per-session working memory (active thoughts)
-	startedAt      time.Time  // when the agent loop was created (for uptime)
-	consecutiveFails int       // consecutive LLM failures for auto-recovery
+	tokenBudget        *telemetry.TokenBudget
+	scratchpad         *Scratchpad // per-session working memory (active thoughts)
+	startedAt          time.Time   // when the agent loop was created (for uptime)
+	consecutiveFails   int         // consecutive LLM failures for auto-recovery
 }
 
 // GetMemoryTool returns the memory tool for programmatic vault access (used by reasoning service).
@@ -117,7 +117,6 @@ type processOptions struct {
 	NoHistory       bool     // If true, don't load session history (for heartbeat)
 	Feature         string   // Telemetry feature label (chat, heartbeat, cron, summarize)
 }
-
 
 func NewAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers.LLMProvider, configPath string) *AgentLoop {
 	workspace := cfg.WorkspacePath()
@@ -439,7 +438,6 @@ func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMe
 	return "", nil
 }
 
-
 // runAgentLoop is the core message processing logic.
 // It handles context building, LLM calls, tool execution, and response handling.
 func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (string, []string, error) {
@@ -706,6 +704,26 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 	iteration := 0
 	var finalContent string
 	var collectedMedia []string
+	hasVisionInput := providers.HasVisionInput(messages)
+	modelCaps := providers.ResolveCapabilities(al.provider, al.model)
+	visionNotice := ""
+
+	if hasVisionInput {
+		logger.InfoCF("agent", "Vision input detected", map[string]interface{}{
+			"provider":       modelCaps.Provider,
+			"model":          modelCaps.Model,
+			"vision_support": string(modelCaps.Vision),
+			"media_count":    len(opts.Media),
+		})
+		if modelCaps.Vision == providers.CapabilityUnsupported {
+			visionNotice = providers.VisionUnsupportedNotice(modelCaps.Model)
+			logger.WarnCF("agent", "Active model does not support vision", map[string]interface{}{
+				"provider":       modelCaps.Provider,
+				"model":          modelCaps.Model,
+				"vision_support": string(modelCaps.Vision),
+			})
+		}
+	}
 
 	for iteration < al.maxIterations {
 		iteration++
@@ -794,9 +812,9 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 			finalContent = response.Content
 			logger.InfoCF("agent", "LLM response without tool calls (direct answer)",
 				map[string]interface{}{
-					"iteration":      iteration,
-					"content_chars":  len(finalContent),
-					"media_count":    len(collectedMedia),
+					"iteration":     iteration,
+					"content_chars": len(finalContent),
+					"media_count":   len(collectedMedia),
 				})
 			break
 		}
@@ -911,6 +929,10 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		}
 	}
 
+	if visionNotice != "" && finalContent != "" && !strings.Contains(finalContent, visionNotice) {
+		finalContent = visionNotice + "\n\n" + finalContent
+	}
+
 	return finalContent, iteration, collectedMedia, nil
 }
 
@@ -939,7 +961,6 @@ func (al *AgentLoop) updateToolContexts(channel, chatID string) {
 	}
 }
 
-
 // GetStartupInfo returns information about loaded tools and skills for logging.
 func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
 	info := make(map[string]interface{})
@@ -956,10 +977,3 @@ func (al *AgentLoop) GetStartupInfo() map[string]interface{} {
 
 	return info
 }
-
-
-
-
-
-
-

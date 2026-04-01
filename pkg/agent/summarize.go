@@ -45,12 +45,12 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 	history := al.sessions.GetHistory(sessionKey)
 	summary := al.sessions.GetSummary(sessionKey)
 
-	// Keep last 4 messages for continuity
-	if len(history) <= 4 {
+	// Keep last 8 messages for continuity (was 4 — too aggressive, lost context)
+	if len(history) <= 8 {
 		return
 	}
 
-	toSummarize := history[:len(history)-4]
+	toSummarize := history[:len(history)-8]
 
 	// Oversized Message Guard
 	// Skip messages larger than 50% of context window to prevent summarizer overflow
@@ -127,7 +127,7 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 		}
 
 		// Only truncate after summary and distillation are complete
-		al.sessions.TruncateHistory(sessionKey, 4)
+		al.sessions.TruncateHistory(sessionKey, 8)
 		al.sessions.Save(sessionKey)
 	}
 }

@@ -525,7 +525,7 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 		return
 	}
 
-		// Welcome removed: Chango personality comes from AGENTS.md system prompt.
+	// Welcome removed: Chango personality comes from AGENTS.md system prompt.
 	// Hardcoded greeting reset on every restart and felt robotic.
 
 	content := ""
@@ -591,6 +591,12 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 				content += "\n"
 			}
 			content += "[image: photo]"
+			logger.InfoCF("telegram", "Image attached from Telegram photo", map[string]interface{}{
+				"chat_id":     fmt.Sprintf("%d", chatID),
+				"media_count": len(mediaPaths),
+				"source":      "photo",
+				"has_caption": message.Caption != "",
+			})
 		}
 	}
 
@@ -663,8 +669,34 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 				fileName = message.Document.FileName
 			}
 
-			// Extract text from PDFs using pdftotext
-			if mimeType == "application/pdf" || strings.HasSuffix(strings.ToLower(fileName), ".pdf") {
+			// Telegram images sent as "document" should still reach the model as images.
+			if isImageDocument(mimeType, fileName) {
+				dataURI, err := fileToDataURI(docPath, mimeType)
+				if err != nil {
+					logger.ErrorCF("telegram", "Failed to encode image document as data URI", map[string]interface{}{
+						"path":  docPath,
+						"error": err.Error(),
+					})
+				} else {
+					mediaPaths = append(mediaPaths, dataURI)
+					if content != "" {
+						content += "\n"
+					}
+					if fileName != "" {
+						content += fmt.Sprintf("[image: %s]", fileName)
+					} else {
+						content += "[image: document]"
+					}
+					logger.InfoCF("telegram", "Image attached from Telegram document", map[string]interface{}{
+						"chat_id":     fmt.Sprintf("%d", chatID),
+						"file_name":   fileName,
+						"mime_type":   mimeType,
+						"media_count": len(mediaPaths),
+						"source":      "document",
+					})
+				}
+			} else if mimeType == "application/pdf" || strings.HasSuffix(strings.ToLower(fileName), ".pdf") {
+				// Extract text from PDFs using pdftotext
 				pdfText := c.extractPDFText(docPath)
 				if pdfText != "" {
 					if content != "" {
@@ -696,6 +728,12 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, update telego.Updat
 		"chat_id":   fmt.Sprintf("%d", chatID),
 		"preview":   utils.Truncate(content, 50),
 	})
+	if len(mediaPaths) > 0 {
+		logger.InfoCF("telegram", "Telegram media prepared for provider", map[string]interface{}{
+			"chat_id":     fmt.Sprintf("%d", chatID),
+			"media_count": len(mediaPaths),
+		})
+	}
 
 	// Thinking indicator
 	err := c.bot.SendChatAction(ctx, tu.ChatAction(tu.ID(chatID), telego.ChatActionTyping))
@@ -1112,6 +1150,50 @@ func extensionFromDataURIHeader(header string) string {
 		return ".webp"
 	case strings.HasPrefix(header, "data:application/pdf"):
 		return ".pdf"
+	default:
+		return ""
+	}
+}
+
+func isImageDocument(mimeType, fileName string) bool {
+	if strings.HasPrefix(strings.ToLower(mimeType), "image/") {
+		return true
+	}
+	lowerName := strings.ToLower(fileName)
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp"} {
+		if strings.HasSuffix(lowerName, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+func fileToDataURI(path, mimeType string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if mimeType == "" {
+		mimeType = mimeTypeFromFilename(path)
+	}
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
+func mimeTypeFromFilename(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".pdf":
+		return "application/pdf"
 	default:
 		return ""
 	}
