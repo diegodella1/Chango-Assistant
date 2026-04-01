@@ -54,7 +54,7 @@ func TestPrivacyRouter_LocalImageWithoutVisionAddsNotice(t *testing.T) {
 	}
 	router := NewPrivacyRouter(cloud, local, NewPrivacyClassifier(PrivacyClassifierConfig{
 		AlwaysPrivateMedia: true,
-	}), false)
+	}), false, false)
 
 	resp, err := router.Chat(context.Background(), []Message{
 		{
@@ -73,5 +73,38 @@ func TestPrivacyRouter_LocalImageWithoutVisionAddsNotice(t *testing.T) {
 	}
 	if !strings.Contains(resp.Content, "respuesta local") {
 		t.Fatalf("response missing local content: %q", resp.Content)
+	}
+}
+
+func TestPrivacyRouter_ImageUsesCloudVisionWhenAllowed(t *testing.T) {
+	cloud := &fakeCapabilityProvider{
+		caps: ModelCapabilities{Provider: "cloud", Model: "gpt-4o", Vision: CapabilitySupported},
+		resp: &LLMResponse{Content: "respuesta vision cloud"},
+	}
+	local := &fakeCapabilityProvider{
+		caps: ModelCapabilities{Provider: "local", Model: "qwen-local", Vision: CapabilityUnsupported},
+		resp: &LLMResponse{Content: "respuesta local"},
+	}
+	router := NewPrivacyRouter(cloud, local, NewPrivacyClassifier(PrivacyClassifierConfig{
+		AlwaysPrivateMedia: true,
+	}), false, true)
+
+	resp, err := router.Chat(context.Background(), []Message{
+		{
+			Role: "user",
+			Parts: []ContentPart{
+				{Type: "text", Text: "decime que ves"},
+				{Type: "image_url", ImageURL: &ImageURL{URL: "data:image/png;base64,abc"}},
+			},
+		},
+	}, nil, "gpt-4o", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if strings.Contains(resp.Content, "no soporta vision") {
+		t.Fatalf("response should not include vision warning: %q", resp.Content)
+	}
+	if !strings.Contains(resp.Content, "respuesta vision cloud") {
+		t.Fatalf("response missing cloud vision content: %q", resp.Content)
 	}
 }

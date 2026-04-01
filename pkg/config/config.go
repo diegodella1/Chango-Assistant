@@ -114,6 +114,7 @@ type ReasoningConfig struct {
 type PrivacyConfig struct {
 	Enabled            bool     `json:"enabled" env:"PICOCLAW_PRIVACY_ENABLED"`                          // Enable privacy routing
 	AlwaysPrivateMedia bool     `json:"always_private_media" env:"PICOCLAW_PRIVACY_ALWAYS_PRIVATE_MEDIA"` // Images/docs never go to cloud
+	AllowCloudVisionMedia bool   `json:"allow_cloud_vision_media" env:"PICOCLAW_PRIVACY_ALLOW_CLOUD_VISION_MEDIA"` // Allow image turns to use cloud only when the cloud model supports vision
 	ExtraKeywords      []string `json:"extra_keywords,omitempty"`                                         // User-configurable sensitive keywords
 	ExtraPatterns      []string `json:"extra_patterns,omitempty"`                                         // User-configurable regex patterns
 	FailClosed         bool     `json:"fail_closed" env:"PICOCLAW_PRIVACY_FAIL_CLOSED"`                  // If unsure, route local
@@ -510,10 +511,11 @@ func DefaultConfig() *Config {
 			Token:   "",
 		},
 		Privacy: PrivacyConfig{
-			Enabled:            false,
-			AlwaysPrivateMedia: true,
-			FailClosed:         true,
-			LogDecisions:       true,
+			Enabled:               false,
+			AlwaysPrivateMedia:    true,
+			AllowCloudVisionMedia: false,
+			FailClosed:            true,
+			LogDecisions:          true,
 		},
 		Health: HealthConfig{
 			Enabled:  false,

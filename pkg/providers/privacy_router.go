@@ -25,6 +25,7 @@ type PrivacyRouter struct {
 	local      LLMProvider
 	classifier *PrivacyClassifier
 	logEnabled bool
+	allowCloudVisionMedia bool
 
 	// Per-session sensitivity tracking with TTL: sensitive sessions decay
 	// after a period of inactivity or message count.
@@ -46,18 +47,21 @@ const (
 )
 
 // NewPrivacyRouter creates a privacy-aware provider wrapper.
-func NewPrivacyRouter(cloud, local LLMProvider, classifier *PrivacyClassifier, logEnabled bool) *PrivacyRouter {
+func NewPrivacyRouter(cloud, local LLMProvider, classifier *PrivacyClassifier, logEnabled, allowCloudVisionMedia bool) *PrivacyRouter {
 	return &PrivacyRouter{
-		cloud:      cloud,
-		local:      local,
-		classifier: classifier,
-		logEnabled: logEnabled,
+		cloud:                 cloud,
+		local:                 local,
+		classifier:            classifier,
+		logEnabled:            logEnabled,
+		allowCloudVisionMedia: allowCloudVisionMedia,
 	}
 }
 
 // Chat implements LLMProvider. It classifies the message and routes accordingly.
 func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) (*LLMResponse, error) {
 	atomic.AddInt64(&pr.stats.TotalMessages, 1)
+	hasVisionInput := HasVisionInput(messages)
+	cloudCaps := ResolveCapabilities(pr.cloud, model)
 
 	// Extract session key from options if available (set by agent loop)
 	sessionKey, _ := options["session_key"].(string)
@@ -80,7 +84,7 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 			} else {
 				// Still locked — but if tools are requested, escalate to cloud
 				// (local model can't use tools reliably)
-				if len(tools) > 0 {
+				if len(tools) > 0 || pr.shouldRouteVisionToCloud(hasVisionInput, cloudCaps) {
 					logger.InfoCF("privacy", "Session locked but tools needed — escalating to cloud", map[string]interface{}{
 						"session": sessionKey,
 					})
@@ -95,6 +99,14 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 	result := pr.classifier.Classify(ctx, messages)
 
 	if result.Level == Sensitive {
+		if result.Reason == "image_detected" && pr.shouldRouteVisionToCloud(hasVisionInput, cloudCaps) {
+			logger.InfoCF("privacy", "Image turn allowed to use cloud vision", map[string]interface{}{
+				"model":    cloudCaps.Model,
+				"provider": cloudCaps.Provider,
+			})
+			return pr.routeCloud(ctx, messages, tools, model, options)
+		}
+
 		// Mark session as sensitive with decay tracking
 		if sessionKey != "" {
 			pr.sensitiveSessions.Store(sessionKey, &sensitiveSession{
@@ -189,6 +201,12 @@ func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, opt
 	}
 
 	return resp, nil
+}
+
+func (pr *PrivacyRouter) shouldRouteVisionToCloud(hasVisionInput bool, cloudCaps ModelCapabilities) bool {
+	return hasVisionInput &&
+		pr.allowCloudVisionMedia &&
+		cloudCaps.Vision == CapabilitySupported
 }
 
 // routeCloud sends the message to the cloud provider with full capabilities.

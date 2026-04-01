@@ -617,12 +617,13 @@ func wrapWithPrivacy(provider LLMProvider, cfg *config.Config) (LLMProvider, err
 	}
 
 	classifier := NewPrivacyClassifier(classifierCfg)
-	router := NewPrivacyRouter(provider, localProv, classifier, cfg.Privacy.LogDecisions)
+	router := NewPrivacyRouter(provider, localProv, classifier, cfg.Privacy.LogDecisions, cfg.Privacy.AllowCloudVisionMedia)
 
 	logger.InfoCF("provider", "Privacy router enabled", map[string]interface{}{
-		"fail_closed":    cfg.Privacy.FailClosed,
-		"private_media":  cfg.Privacy.AlwaysPrivateMedia,
-		"extra_keywords": len(cfg.Privacy.ExtraKeywords),
+		"fail_closed":              cfg.Privacy.FailClosed,
+		"private_media":            cfg.Privacy.AlwaysPrivateMedia,
+		"allow_cloud_vision_media": cfg.Privacy.AllowCloudVisionMedia,
+		"extra_keywords":           len(cfg.Privacy.ExtraKeywords),
 	})
 
 	return router, nil

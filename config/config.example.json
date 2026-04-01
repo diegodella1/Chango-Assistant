@@ -139,6 +139,13 @@
     "enabled": false,
     "monitor_usb": true
   },
+  "privacy": {
+    "enabled": false,
+    "always_private_media": true,
+    "allow_cloud_vision_media": false,
+    "fail_closed": true,
+    "log_decisions": true
+  },
   "gateway": {
     "host": "0.0.0.0",
     "port": 18790
