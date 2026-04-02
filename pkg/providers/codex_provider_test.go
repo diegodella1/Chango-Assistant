@@ -63,6 +63,49 @@ func TestBuildCodexParams_ToolCallConversation(t *testing.T) {
 	}
 }
 
+func TestBuildCodexParams_MultimodalUserMessage(t *testing.T) {
+	params := buildCodexParams([]Message{
+		{
+			Role:    "user",
+			Content: "Que ves aca?",
+			Parts: []ContentPart{
+				{Type: "text", Text: "Que ves aca?"},
+				{Type: "image_url", ImageURL: &ImageURL{URL: "data:image/png;base64,abc", Detail: "high"}},
+			},
+		},
+	}, nil, "gpt-4o", map[string]interface{}{})
+
+	if params.Input.OfInputItemList == nil || len(params.Input.OfInputItemList) != 1 {
+		t.Fatalf("expected one input item, got %#v", params.Input.OfInputItemList)
+	}
+
+	item := params.Input.OfInputItemList[0]
+	if item.OfMessage == nil {
+		t.Fatal("expected message input item")
+	}
+
+	content := item.OfMessage.Content.OfInputItemContentList
+	if len(content) != 2 {
+		t.Fatalf("expected 2 multimodal content parts, got %d", len(content))
+	}
+
+	if content[0].OfInputText == nil || content[0].OfInputText.Text != "Que ves aca?" {
+		t.Fatalf("expected first content part to be text, got %#v", content[0])
+	}
+
+	if content[1].OfInputImage == nil {
+		t.Fatalf("expected second content part to be image, got %#v", content[1])
+	}
+
+	if !content[1].OfInputImage.ImageURL.Valid() || content[1].OfInputImage.ImageURL.Value != "data:image/png;base64,abc" {
+		t.Fatalf("unexpected image url: %#v", content[1].OfInputImage.ImageURL)
+	}
+
+	if content[1].OfInputImage.Detail != responses.ResponseInputImageDetailHigh {
+		t.Fatalf("unexpected image detail: %q", content[1].OfInputImage.Detail)
+	}
+}
+
 func TestBuildCodexParams_WithTools(t *testing.T) {
 	tools := []ToolDefinition{
 		{

@@ -101,6 +101,11 @@ func buildCodexParams(messages []Message, tools []ToolDefinition, model string, 
 						Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{OfString: openai.Opt(msg.Content)},
 					},
 				})
+			} else if len(msg.Parts) > 0 {
+				inputItems = append(inputItems, responses.ResponseInputItemParamOfMessage(
+					buildCodexInputContent(msg),
+					responses.EasyInputMessageRoleUser,
+				))
 			} else {
 				inputItems = append(inputItems, responses.ResponseInputItemUnionParam{
 					OfMessage: &responses.EasyInputMessageParam{
@@ -188,6 +193,55 @@ func buildCodexParams(messages []Message, tools []ToolDefinition, model string, 
 	}
 
 	return params
+}
+
+func buildCodexInputContent(msg Message) responses.ResponseInputMessageContentListParam {
+	content := make(responses.ResponseInputMessageContentListParam, 0, len(msg.Parts))
+
+	for _, part := range msg.Parts {
+		switch part.Type {
+		case "text":
+			if part.Text == "" {
+				continue
+			}
+			content = append(content, responses.ResponseInputContentUnionParam{
+				OfInputText: &responses.ResponseInputTextParam{
+					Text: part.Text,
+				},
+			})
+		case "image_url":
+			if part.ImageURL == nil || part.ImageURL.URL == "" {
+				continue
+			}
+			content = append(content, responses.ResponseInputContentUnionParam{
+				OfInputImage: &responses.ResponseInputImageParam{
+					Detail: codexImageDetail(part.ImageURL.Detail),
+					ImageURL: openai.Opt(part.ImageURL.URL),
+				},
+			})
+		}
+	}
+
+	if len(content) == 0 && msg.Content != "" {
+		content = append(content, responses.ResponseInputContentUnionParam{
+			OfInputText: &responses.ResponseInputTextParam{
+				Text: msg.Content,
+			},
+		})
+	}
+
+	return content
+}
+
+func codexImageDetail(detail string) responses.ResponseInputImageDetail {
+	switch strings.ToLower(strings.TrimSpace(detail)) {
+	case "low":
+		return responses.ResponseInputImageDetailLow
+	case "high":
+		return responses.ResponseInputImageDetailHigh
+	default:
+		return responses.ResponseInputImageDetailAuto
+	}
 }
 
 func translateToolsForCodex(tools []ToolDefinition) []responses.ToolUnionParam {
