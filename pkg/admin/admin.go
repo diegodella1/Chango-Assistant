@@ -252,7 +252,13 @@ func (h *Handler) serveHome(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/pitch/", http.StatusMovedPermanently)
+	data, err := homeFS.ReadFile("static/home.html")
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
 }
 
 func (h *Handler) serveBrain(w http.ResponseWriter, r *http.Request) {
