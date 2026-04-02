@@ -676,15 +676,56 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 		finalContent = opts.DefaultResponse
 	}
 
+	// 5a. Response quality guard for chat turns.
+	// If the model leaked internal prompt text, defaulted to a greeting, or denied
+	// live system access incorrectly, retry once with an explicit repair hint.
+	if opts.Feature == telemetry.FeatureChat && !opts.NoHistory && finalContent != "" {
+		if repairHint := responseRepairHint(opts.UserMessage, finalContent); repairHint != "" {
+			logger.WarnCF("agent", "Suspicious response detected, attempting repair", map[string]interface{}{
+				"session_key": opts.SessionKey,
+				"hint":        repairHint,
+			})
+
+			repairMsgs := append([]providers.Message{}, messages...)
+			repairMsgs = append(repairMsgs,
+				providers.Message{Role: "assistant", Content: finalContent},
+				providers.Message{Role: "system", Content: "RESPONSE REPAIR REQUIRED: " + repairHint},
+			)
+
+			origProvider := al.provider
+			origModel := al.model
+			al.provider = escalationProvider
+			al.model = escalationModel
+			repairedContent, repairedIteration, repairedMedia, repairErr := al.runLLMIteration(ctx, repairMsgs, opts)
+			al.provider = origProvider
+			al.model = origModel
+
+			if repairErr == nil && repairedContent != "" && responseRepairHint(opts.UserMessage, repairedContent) == "" {
+				finalContent = repairedContent
+				iteration += repairedIteration
+				if len(repairedMedia) > 0 {
+					media = append(media, repairedMedia...)
+				}
+			} else {
+				logger.WarnCF("agent", "Response repair failed, keeping original response out of session history", map[string]interface{}{
+					"session_key": opts.SessionKey,
+					"error":       fmt.Sprintf("%v", repairErr),
+				})
+			}
+		}
+	}
+
 	// 5b. Identity guard: if the LLM denied a capability Chango has, correct it
 	finalContent = al.guardIdentity(finalContent, opts.UserMessage)
 
-	// 6. Save final assistant message to session
-	al.sessions.AddMessage(opts.SessionKey, "assistant", finalContent)
-	al.sessions.Save(opts.SessionKey)
+	// 6. Save final assistant message to session unless it is a low-quality fallback.
+	if shouldPersistAssistantResponse(opts.UserMessage, finalContent, opts.DefaultResponse) {
+		al.sessions.AddMessage(opts.SessionKey, "assistant", finalContent)
+		al.sessions.Save(opts.SessionKey)
+	}
 
 	// 6b. Update working memory scratchpad with this exchange
-	if !opts.NoHistory {
+	if !opts.NoHistory && shouldPersistAssistantResponse(opts.UserMessage, finalContent, opts.DefaultResponse) {
 		al.scratchpad.Update(opts.SessionKey, opts.UserMessage, finalContent)
 	}
 
@@ -785,9 +826,11 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		// Call LLM
 		al.emitEvent("think")
 		response, err := al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
-			"max_tokens":  constants.DefaultMaxTokens,
-			"temperature": constants.DefaultTemperature,
-			"session_key": opts.SessionKey,
+			"max_tokens":        constants.DefaultMaxTokens,
+			"temperature":       constants.DefaultTemperature,
+			"session_key":       opts.SessionKey,
+			"feature":           opts.Feature,
+			"telemetry_tracker": al.tracker,
 		})
 
 		// Record token usage

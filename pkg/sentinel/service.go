@@ -38,6 +38,11 @@ type SentinelState struct {
 	Alerts          []string  `json:"alerts"`
 }
 
+type pendingAlert struct {
+	key     string
+	message string
+}
+
 // Service monitors system health and persists state.
 type Service struct {
 	cfg       Config
@@ -136,15 +141,24 @@ func (s *Service) collect() {
 	st.DiskTotalGB, st.DiskFreeGB, st.DiskUsedPercent = readDisk()
 
 	// Check thresholds and build alerts
-	var alerts []string
+	var (
+		alerts        []string
+		pendingAlerts []pendingAlert
+	)
 	if st.CPUTempC > 80 {
-		alerts = append(alerts, fmt.Sprintf("CPU temperatura alta: %.1f°C", st.CPUTempC))
+		msg := fmt.Sprintf("CPU temperatura alta: %.1f°C", st.CPUTempC)
+		alerts = append(alerts, msg)
+		pendingAlerts = append(pendingAlerts, pendingAlert{key: "cpu_temp", message: msg})
 	}
 	if st.RAMUsedPercent > 90 {
-		alerts = append(alerts, fmt.Sprintf("RAM crítica: %.1f%% usada", st.RAMUsedPercent))
+		msg := fmt.Sprintf("RAM crítica: %.1f%% usada", st.RAMUsedPercent)
+		alerts = append(alerts, msg)
+		pendingAlerts = append(pendingAlerts, pendingAlert{key: "ram", message: msg})
 	}
 	if st.DiskUsedPercent > 95 {
-		alerts = append(alerts, fmt.Sprintf("Disco casi lleno: %.1f%% usado", st.DiskUsedPercent))
+		msg := fmt.Sprintf("Disco casi lleno: %.1f%% usado", st.DiskUsedPercent)
+		alerts = append(alerts, msg)
+		pendingAlerts = append(pendingAlerts, pendingAlert{key: "disk", message: msg})
 	}
 	st.Alerts = alerts
 
@@ -152,8 +166,8 @@ func (s *Service) collect() {
 	s.saveState(&st)
 
 	// Send critical alerts via MessageBus (max 1 per alert type per hour)
-	for _, alert := range alerts {
-		s.sendAlert(alert)
+	for _, alert := range pendingAlerts {
+		s.sendAlert(alert.key, alert.message)
 	}
 
 	logger.DebugCF("sentinel", "Collected metrics", map[string]interface{}{
@@ -188,14 +202,14 @@ func (s *Service) saveState(st *SentinelState) {
 	}
 }
 
-func (s *Service) sendAlert(alert string) {
+func (s *Service) sendAlert(alertKey, alert string) {
 	s.mu.Lock()
-	lastTime, exists := s.lastAlertTime[alert]
+	lastTime, exists := s.lastAlertTime[alertKey]
 	if exists && time.Since(lastTime) < time.Hour {
 		s.mu.Unlock()
 		return
 	}
-	s.lastAlertTime[alert] = time.Now()
+	s.lastAlertTime[alertKey] = time.Now()
 	msgBus := s.bus
 	s.mu.Unlock()
 
