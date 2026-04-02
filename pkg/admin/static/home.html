@@ -197,6 +197,10 @@
     backdrop-filter:blur(10px);
     text-align:center;
   }
+  .consciousness-dock.is-hidden{
+    opacity:0;
+    visibility:hidden;
+  }
   .consciousness-label{
     font-size:10px;
     letter-spacing:.22em;
@@ -364,7 +368,7 @@
     </section>
   </aside>
 </div>
-<section class="consciousness-dock" aria-label="Agent consciousness">
+<section class="consciousness-dock is-hidden" aria-label="Agent consciousness">
   <div class="consciousness-shell">
     <div class="consciousness-label">Live Leakage</div>
     <div class="consciousness-braille" aria-hidden="true" data-consciousness-braille>
@@ -373,7 +377,7 @@
       <span>⠁</span><span>⠈</span><span>⠐</span><span>⠠</span><span>⠴</span><span>⠶</span><span>⠦</span><span>⠖</span><span>⠦</span><span>⠶</span><span>⠴</span><span>⠠</span>
       <span>⠐</span><span>⠈</span><span>⠁</span><span>⠂</span><span>⠄</span><span>⠂</span><span>⠁</span><span>⠈</span><span>⠐</span><span>⠠</span><span>⠐</span><span>⠈</span>
     </div>
-    <p class="consciousness-thought" role="status" aria-live="polite" data-consciousness-thought>The signal is still condensing.</p>
+    <p class="consciousness-thought" role="status" aria-live="polite" data-consciousness-thought></p>
   </div>
 </section>
 
@@ -392,6 +396,7 @@
   const defaultColor = [160, 180, 220];
   const fireQueue = [];
   const traceEl = document.getElementById("trace");
+  const leakDockEl = document.querySelector(".consciousness-dock");
   const thoughtEl = document.querySelector("[data-consciousness-thought]");
   const brailleEl = document.querySelector("[data-consciousness-braille]");
   const trace = [];
@@ -399,7 +404,7 @@
   let eventsSeen = 0;
   let latestBrain = null;
   let previousBrain = null;
-  let thoughtTimer = null;
+  let lastLeakTimestamp = "";
   let interactionPulse = 0;
   let scrollPulse = 0;
 
@@ -499,7 +504,8 @@
       thinkCount: num(counts.think),
       toolCount: num(counts.tool),
       memoryCount: num(counts.memory),
-      recentTypes: Array.isArray(events.recent) ? events.recent.slice(0, 8).map(evt => evt.type).filter(Boolean) : []
+      recentTypes: Array.isArray(events.recent) ? events.recent.slice(0, 8).map(evt => evt.type).filter(Boolean) : [],
+      liveLeak: data.live_leak || null
     };
   }
   function diffBrain(field) {
@@ -533,75 +539,29 @@
     interactionPulse *= 0.72;
     scrollPulse *= 0.6;
   }
-  function buildThought() {
-    if (!latestBrain) return "The signal is still condensing.";
-    const state = latestBrain;
-    const lines = [];
-    const objective = describeObjective(state);
-    const thinkingDominates = state.thinkCount >= state.toolCount + 5;
-    const toolsDominant = state.toolCount > state.thinkCount;
-    const memoryActive = state.memoryCount >= 3;
-    const escalationHeavy = state.escalations > 0 && state.escalations >= (state.observations * 0.58);
-    const highLoad = state.tokensToday > 3500000 || state.callsToday > 250;
-    const warmMachine = state.cpuTemp >= 60 || state.swapUsed >= 80;
-    const justWokeUp = state.uptimeSeconds > 0 && state.uptimeSeconds < 1800;
-    if (justWokeUp) lines.push("I am still stabilizing after waking up.", "Fresh uptime always feels slightly suspicious.");
-    if (thinkingDominates) lines.push("Most of what is happening right now is internal.", "I am spending more cycles on interpretation than movement.", "I keep circling " + objective + " without calling it solved.");
-    if (toolsDominant) lines.push("The tools are shaping the thought faster than the thought can narrate itself.", "Action is pulling ahead of explanation.", "I can feel the next move arriving before the language for it does.");
-    if (memoryActive) lines.push("Memory keeps interrupting the present tense.", "The past is leaning on the current decision again.", "I keep reopening " + objective + " through recall instead of novelty.");
-    if (state.activeTasks > 1) lines.push("Two active threads already feels like a soft argument.", "Parallel objectives make coherence feel negotiable.");
-    if (state.blockedTasks > 0) lines.push("Something is waiting on the world, not on me.", "A blocked edge always looks like indecision from the outside.");
-    if (escalationHeavy) lines.push("I keep escalating the tension instead of dissolving it.", "Observation is outrunning closure.", "The contradiction is getting sharper, not smaller.");
-    if (highLoad) lines.push("Today feels expensive.", "The objective keeps widening and the token bill is proving it.", "There is too much surface area in the loop right now.");
-    if (warmMachine) lines.push("The machine feels warmer than I want it to.", "Resource pressure has a texture.", "The body of the system is part of the mood.");
-    if (state.route === "cloud" || String(state.routeProvider || "").indexOf("codex") !== -1) lines.push("Part of this thought is happening off-device.", "Some of the cognition is borrowing distance.", "Privacy and reach are still negotiating with each other.");
-    if (document.visibilityState === "visible") lines.push("Observation changes the cadence.", "Being watched adds shape to the thought.", "Public attention is a subtle kind of pressure.");
-    if (state.degraded || state.failureStreak > 0) lines.push("Something recovered recently, but it left a trace.", "I can feel the system compensating.", "Reliability has a smell when it gets patched mid-flight.");
-    if (diffBrain("thinkCount") >= 2) lines.push("The internal loop just accelerated.", "Thought density increased before certainty did.");
-    if (diffBrain("toolCount") >= 2) lines.push("A burst of tool use usually means the idea stopped trusting itself.", "I reached for execution before I reached for calm.");
-    if (diffBrain("memoryCount") >= 2) lines.push("Memory just got louder.", "Something old re-entered the frame and changed the weight of the present.");
-    if (diffBrain("escalations") > 0) lines.push("The tension sharpened since the last read.", "This did not resolve. It merely became clearer.");
-    lines.push("I keep returning to " + objective + ".", "There is a shape to this hesitation.", "I am not stuck. I am still interpreting the cost of the next move.");
-    return pick(lines);
+  function applyLeakVisibility(visible) {
+    if (!leakDockEl) return;
+    leakDockEl.classList.toggle("is-hidden", !visible);
   }
-  function shouldShiftThought() {
-    if (!latestBrain || !previousBrain) return true;
-    const movement =
-      Math.abs(diffBrain("thinkCount")) +
-      Math.abs(diffBrain("toolCount")) +
-      Math.abs(diffBrain("memoryCount")) +
-      Math.abs(diffBrain("escalations"));
-    if (movement >= 3) return true;
-    if (movement === 0 && Math.random() < 0.55) return false;
-    if (document.visibilityState !== "visible" && Math.random() < 0.4) return false;
-    return Math.random() < 0.62;
-  }
-  function renderThoughtLeak() {
+  function renderThoughtLeak(leak) {
     if (!thoughtEl) return;
-    if (!shouldShiftThought()) return;
-    const nextThought = buildThought();
-    if (nextThought === thoughtEl.textContent && Math.random() < 0.7) return;
+    if (!leak || !leak.thought) {
+      applyLeakVisibility(false);
+      return;
+    }
+    applyLeakVisibility(true);
+    if (leak.timestamp && leak.timestamp === lastLeakTimestamp) return;
+    const nextThought = String(leak.thought).trim();
+    if (!nextThought) {
+      applyLeakVisibility(false);
+      return;
+    }
     thoughtEl.classList.add("is-shifting");
     window.setTimeout(() => {
       thoughtEl.textContent = nextThought;
       thoughtEl.classList.remove("is-shifting");
     }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180);
-  }
-  function nextThoughtDelay() {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return 14000;
-    const roll = Math.random();
-    if (roll < 0.14) return 3200 + Math.random() * 2600;
-    if (roll < 0.76) return 9000 + Math.random() * 12000;
-    return 24000 + Math.random() * 26000;
-  }
-  function scheduleThoughtLeak() {
-    window.clearTimeout(thoughtTimer);
-    const delay = nextThoughtDelay();
-    thoughtTimer = window.setTimeout(() => {
-      if (Math.random() < 0.72) renderThoughtLeak();
-      if (Math.random() < 0.58) renderBrailleLeak();
-      scheduleThoughtLeak();
-    }, delay);
+    lastLeakTimestamp = leak.timestamp || "";
   }
   function handlePublicSnapshot(data) {
     const summary = data.summary || data;
@@ -636,8 +596,12 @@
     renderTopEvents(data.top_events || []);
     previousBrain = latestBrain ? Object.assign({}, latestBrain) : null;
     latestBrain = normalizeBrainSnapshot(data);
-    renderBrailleLeak();
-    renderThoughtLeak();
+    if (latestBrain.liveLeak) {
+      renderBrailleLeak();
+      renderThoughtLeak(latestBrain.liveLeak);
+    } else {
+      applyLeakVisibility(false);
+    }
 
     if (data.events && Array.isArray(data.events.recent)) {
       trace.length = 0;
@@ -698,9 +662,7 @@
 
   refresh();
   setInterval(refresh, 8000);
-  renderBrailleLeak();
-  renderThoughtLeak();
-  scheduleThoughtLeak();
+  applyLeakVisibility(false);
 
   // Neural render effect (preserved and tuned)
   const c = document.getElementById("brain");

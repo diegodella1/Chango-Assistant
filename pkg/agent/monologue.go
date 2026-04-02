@@ -108,6 +108,7 @@ Be concise — 3-5 lines max. This is internal thinking, not a response to the u
 
 	// Persist notable monologue decisions for pattern analysis
 	content := resp.Content
+	al.recordLiveLeak("monologue", userMessage, content)
 	lower := strings.ToLower(content)
 	if strings.Contains(lower, "challenge") || strings.Contains(lower, "execute") || strings.Contains(lower, "disagree") || strings.Contains(lower, "generic") {
 		al.recordMonologueDecision(userMessage, content)
@@ -121,6 +122,13 @@ type monologueEntry struct {
 	Timestamp string `json:"timestamp"`
 	Trigger   string `json:"trigger"`  // user message excerpt
 	Decision  string `json:"decision"` // monologue output excerpt
+}
+
+type liveLeakEntry struct {
+	Timestamp string `json:"timestamp"`
+	Source    string `json:"source"`
+	Trigger   string `json:"trigger"`
+	Thought   string `json:"thought"`
 }
 
 // recordMonologueDecision persists notable monologue decisions (challenge/execute)
@@ -161,4 +169,37 @@ func (al *AgentLoop) recordMonologueDecision(userMsg, monologue string) {
 			os.Rename(tmp, logPath)
 		}
 	}
+}
+
+func (al *AgentLoop) recordLiveLeak(source, trigger, thought string) {
+	thought = strings.TrimSpace(thought)
+	if thought == "" {
+		return
+	}
+
+	entry := liveLeakEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Source:    source,
+		Trigger:   truncateLeakField(trigger, 140),
+		Thought:   truncateLeakField(thought, 320),
+	}
+
+	path := filepath.Join(al.workspace, "state", "live_leak.json")
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return
+	}
+	os.MkdirAll(filepath.Dir(path), 0755)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err == nil {
+		_ = os.Rename(tmp, path)
+	}
+}
+
+func truncateLeakField(value string, max int) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= max {
+		return value
+	}
+	return strings.TrimSpace(value[:max]) + "..."
 }

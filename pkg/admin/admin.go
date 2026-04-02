@@ -515,6 +515,9 @@ func (h *Handler) publicBrain(w http.ResponseWriter, r *http.Request) {
 	if runtime, err := h.buildRuntimeDashboard(); err == nil {
 		resp["runtime"] = runtime
 	}
+	if leak, ok := h.readLiveLeak(15 * time.Minute); ok {
+		resp["live_leak"] = leak
+	}
 
 	// Event trace and counters.
 	if h.eventBus != nil {
@@ -553,6 +556,29 @@ func (h *Handler) publicBrain(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) readLiveLeak(maxAge time.Duration) (map[string]interface{}, bool) {
+	data, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "live_leak.json"))
+	if err != nil {
+		return nil, false
+	}
+	var leak map[string]interface{}
+	if json.Unmarshal(data, &leak) != nil {
+		return nil, false
+	}
+	ts, _ := leak["timestamp"].(string)
+	if ts == "" {
+		return nil, false
+	}
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return nil, false
+	}
+	if maxAge > 0 && time.Since(t) > maxAge {
+		return nil, false
+	}
+	return leak, true
 }
 
 func (h *Handler) runtimeDashboard(w http.ResponseWriter, r *http.Request) {
