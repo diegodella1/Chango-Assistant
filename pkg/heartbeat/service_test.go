@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
@@ -217,5 +218,71 @@ func TestHeartbeatFilePath(t *testing.T) {
 	expectedPath := filepath.Join(tmpDir, "HEARTBEAT.md")
 	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
 		t.Errorf("Expected HEARTBEAT.md at %s, but it doesn't exist", expectedPath)
+	}
+}
+
+func TestProcessDueFollowUps_EscalatesBlockedGoal(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "heartbeat-followup-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	hs := NewHeartbeatService(tmpDir, 30, true)
+	sm := state.NewManager(tmpDir)
+
+	now := time.Now().UTC()
+	if err := sm.ReplaceTasks([]state.TaskRecord{
+		{
+			ID:        "autonomy_goal:test-goal",
+			Title:     "Test blocked goal",
+			Status:    "blocked",
+			Priority:  "high",
+			CreatedAt: now.Add(-24 * time.Hour).Format(time.RFC3339),
+			UpdatedAt: now.Add(-2 * time.Hour).Format(time.RFC3339),
+		},
+	}); err != nil {
+		t.Fatalf("ReplaceTasks failed: %v", err)
+	}
+
+	if err := sm.ReplaceFollowUps([]state.FollowUpRecord{
+		{
+			ID:           "autonomy_followup:test-goal",
+			Title:        "Test blocked goal",
+			Status:       "blocked",
+			ReferenceID:  "autonomy_goal:test-goal",
+			AttemptCount: 2,
+			NextCheckAt:  now.Add(-1 * time.Hour).Format(time.RFC3339),
+			CreatedAt:    now.Add(-24 * time.Hour).Format(time.RFC3339),
+			UpdatedAt:    now.Add(-2 * time.Hour).Format(time.RFC3339),
+		},
+	}); err != nil {
+		t.Fatalf("ReplaceFollowUps failed: %v", err)
+	}
+
+	summary := hs.processDueFollowUps("telegram", "123")
+	if summary == "" {
+		t.Fatalf("expected escalation summary")
+	}
+
+	tasks := sm.GetTasks()
+	if len(tasks) != 1 || tasks[0].Status != "waiting_external" {
+		t.Fatalf("expected task escalated to waiting_external, got %+v", tasks)
+	}
+
+	followUps := sm.GetFollowUps()
+	if len(followUps) != 1 {
+		t.Fatalf("expected one follow-up, got %d", len(followUps))
+	}
+	if followUps[0].Status != "waiting_external" {
+		t.Fatalf("expected follow-up waiting_external, got %q", followUps[0].Status)
+	}
+	if followUps[0].AttemptCount != 3 {
+		t.Fatalf("expected attempt count 3, got %d", followUps[0].AttemptCount)
+	}
+
+	logs := sm.GetAutonomyLog()
+	if len(logs) == 0 {
+		t.Fatalf("expected autonomy log entry")
 	}
 }

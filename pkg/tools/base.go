@@ -2,6 +2,16 @@ package tools
 
 import "context"
 
+type ToolRiskClass string
+
+const (
+	RiskReadOnly           ToolRiskClass = "read_only"
+	RiskLowRiskWrite       ToolRiskClass = "low_risk_write"
+	RiskSensitiveWrite     ToolRiskClass = "sensitive_write"
+	RiskExternalSideEffect ToolRiskClass = "external_side_effect"
+	RiskDestructive        ToolRiskClass = "destructive"
+)
+
 // Tool is the interface that all tools must implement.
 type Tool interface {
 	Name() string

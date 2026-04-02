@@ -61,6 +61,9 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 				"temperature": constants.DefaultTemperature,
 			}
 		}
+		if _, ok := llmOpts["feature"]; !ok {
+			llmOpts["feature"] = "toolloop"
+		}
 
 		// 3. Call LLM
 		response, err := config.Provider.Chat(ctx, messages, providerToolDefs, config.Model, llmOpts)

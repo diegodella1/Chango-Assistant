@@ -243,6 +243,47 @@
   .health-meta { font-size: 11px; color: var(--text-muted); margin-top: 16px; font-family: var(--font-mono); }
   .health-section { margin-top: 32px; }
   .health-section h3 { font-size: 10px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .runtime-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-top: 12px;
+  }
+  .runtime-card {
+    background: var(--bg);
+    padding: 14px 16px;
+  }
+  .runtime-card .label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .runtime-card .value {
+    font-size: 22px;
+    font-weight: 600;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+  .runtime-card .sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .pill.good { color: var(--success); border-color: rgba(34,197,94,0.35); }
+  .pill.warn { color: var(--warning); border-color: rgba(234,179,8,0.35); }
+  .pill.crit { color: var(--error); border-color: rgba(239,68,68,0.35); }
   .health-table {
     width: 100%;
     border-collapse: collapse;
@@ -813,16 +854,18 @@ function hideHealth() {
 }
 
 function loadHealth() {
-  fetch(API + '/api/health', { headers: headers() })
-    .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
-    .then(renderHealth)
+  Promise.all([
+    fetch(API + '/api/health', { headers: headers() }).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); }),
+    fetch(API + '/api/runtime', { headers: headers() }).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+  ])
+    .then(([health, runtime]) => renderHealth(health, runtime))
     .catch(e => {
       document.getElementById('healthPanel').innerHTML =
         '<div class="empty-state">Error cargando datos: ' + e.message + '</div>';
     });
 }
 
-function renderHealth(d) {
+function renderHealth(d, runtime) {
   const s = d.sentinel || {};
   const tempCls = s.cpu_temp_c >= 80 ? 'crit' : s.cpu_temp_c >= 70 ? 'warn' : 'good';
   const ramCls = s.ram_used_percent >= 90 ? 'crit' : s.ram_used_percent >= 80 ? 'warn' : 'good';
@@ -883,6 +926,8 @@ function renderHealth(d) {
     html += '</table></div>';
   }
 
+  html += renderRuntimeSection(runtime);
+
   // Action buttons
   html += '<div class="health-actions">';
   html += '<button class="btn-action" id="btnFreeSwap" onclick="freeSwap()">Free Swap</button>';
@@ -895,6 +940,118 @@ function renderHealth(d) {
 
   html += '<div class="health-meta">sentinel: ' + ago + ' // refresh 30s</div>';
   document.getElementById('healthPanel').innerHTML = html;
+}
+
+function renderRuntimeSection(runtime) {
+  if (!runtime) return '';
+
+  const backlog = runtime.backlog || {};
+  const backlogDetails = runtime.backlog_details || {};
+  const followUps = runtime.follow_ups || {};
+  const autonomy = runtime.autonomy || {};
+  const system = runtime.system || {};
+  const reasoning = runtime.reasoning || {};
+  const providers = runtime.provider_routes || {};
+  const degraded = !!runtime.degraded;
+  const healthClass = degraded ? 'crit' : 'good';
+
+  let html = '<div class="health-section"><h3>Runtime</h3>';
+  html += '<div class="runtime-grid">';
+  html += runtimeCard('Runtime', degraded ? 'DEGRADED' : 'HEALTHY', healthClass, degraded ? 'attention needed' : 'stable');
+  html += runtimeCard('Active Tasks', String(backlog.active_tasks || 0), 'good', 'open work');
+  html += runtimeCard('Blocked Tasks', String(backlog.blocked_tasks || 0), (backlog.blocked_tasks || 0) > 0 ? 'warn' : 'good', 'blocked or waiting');
+  html += runtimeCard('Overdue', String(backlog.overdue_tasks || 0), (backlog.overdue_tasks || 0) > 0 ? 'crit' : 'good', 'past due');
+  html += runtimeCard('Reminders', String(backlog.pending_reminders || 0), 'good', 'pending');
+  html += runtimeCard('Follow-ups', String(followUps.count || 0), (followUps.overdue_count || 0) > 0 ? 'warn' : 'good', (followUps.overdue_count || 0) > 0 ? String(followUps.overdue_count) + ' overdue' : 'scheduled');
+  html += runtimeCard('CPU', system.cpu_temp_c != null ? Number(system.cpu_temp_c).toFixed(1) + '°' : '-', (system.cpu_temp_c || 0) >= 80 ? 'crit' : (system.cpu_temp_c || 0) >= 70 ? 'warn' : 'good', 'runtime signal');
+  html += runtimeCard('Reasoning Obs', String(reasoning.observations_today || 0), 'good', 'today');
+  html += runtimeCard('Escalations', String(reasoning.escalations_today || 0), (reasoning.escalations_today || 0) > 0 ? 'warn' : 'good', 'today');
+  html += '</div>';
+
+  const blocked = backlogDetails.blocked || [];
+  const overdue = backlogDetails.overdue || [];
+  if (blocked.length || overdue.length) {
+    html += '<div class="health-section"><h3>Backlog Detail</h3>';
+    if (blocked.length) {
+      html += '<div class="alert-item"><strong>Blocked</strong><br>' + blocked.map(t => esc(t.title || '-') + ' [' + esc(t.status || '-') + ']').join('<br>') + '</div>';
+    }
+    if (overdue.length) {
+      html += '<div class="alert-item"><strong>Overdue</strong><br>' + overdue.map(t => esc(t.title || '-') + ' // due ' + esc(t.due_date || '-')).join('<br>') + '</div>';
+    }
+    html += '</div>';
+  }
+
+  const providerKeys = Object.keys(providers);
+  if (providerKeys.length) {
+    html += '<div class="health-section"><h3>Provider Routes</h3><table class="health-table">';
+    html += '<tr><th>Provider</th><th>Workload</th><th>Calls</th><th>Success</th><th>Fail</th><th>Fallback</th><th>Streak</th><th>Last Error</th></tr>';
+    providerKeys.forEach(key => {
+      const p = providers[key] || {};
+      const streak = Number(p.failure_streak || 0);
+      const streakClass = streak > 0 ? 'crit' : 'good';
+      html += '<tr>';
+      html += '<td>' + esc(p.provider || key) + '</td>';
+      html += '<td>' + esc(p.workload || '-') + '</td>';
+      html += '<td>' + esc(String(p.calls || 0)) + '</td>';
+      html += '<td>' + esc(String(p.successes || 0)) + '</td>';
+      html += '<td>' + esc(String(p.failures || 0)) + '</td>';
+      html += '<td>' + esc(String(p.fallbacks || 0)) + '</td>';
+      html += '<td><span class="pill ' + streakClass + '">' + esc(String(streak)) + '</span></td>';
+      html += '<td>' + esc(p.last_error_class || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</table></div>';
+  }
+
+  if (followUps.next_scheduled && followUps.next_scheduled.length) {
+    html += '<div class="health-section"><h3>Follow-ups</h3><table class="health-table">';
+    html += '<tr><th>Title</th><th>Status</th><th>Attempts</th><th>Last Outcome</th><th>Next Check</th><th>Ref</th></tr>';
+    followUps.next_scheduled.forEach(f => {
+      html += '<tr>';
+      html += '<td>' + esc(f.title || '-') + '</td>';
+      html += '<td>' + esc(f.status || '-') + '</td>';
+      html += '<td>' + esc(String(f.attempt_count || 0)) + '</td>';
+      html += '<td>' + esc(f.last_outcome || '-') + '</td>';
+      html += '<td>' + esc(f.next_check_at || '-') + '</td>';
+      html += '<td>' + esc(f.reference_id || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</table></div>';
+  }
+
+  if (autonomy.recent_actions && autonomy.recent_actions.length) {
+    html += '<div class="health-section"><h3>Autonomy Log</h3><table class="health-table">';
+    html += '<tr><th>When</th><th>Tool</th><th>Status</th><th>Risk</th><th>Summary</th><th>Verification</th></tr>';
+    autonomy.recent_actions.slice().reverse().forEach(a => {
+      html += '<tr>';
+      html += '<td>' + esc(a.timestamp || '-') + '</td>';
+      html += '<td>' + esc(a.tool || '-') + '</td>';
+      html += '<td>' + esc(a.status || '-') + '</td>';
+      html += '<td>' + esc(a.risk || '-') + '</td>';
+      html += '<td>' + esc(a.summary || '-') + '</td>';
+      html += '<td>' + esc(a.verification || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</table></div>';
+  }
+
+  if (runtime.alerts && runtime.alerts.length) {
+    html += '<div class="health-section"><h3>Runtime Alerts</h3>';
+    runtime.alerts.forEach(a => { html += '<div class="alert-item">' + esc(String(a)) + '</div>'; });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function runtimeCard(label, value, cls, sub) {
+  let html = '<div class="runtime-card">';
+  html += '<div class="label">' + label + '</div>';
+  html += '<div class="value ' + cls + '">' + esc(String(value)) + '</div>';
+  if (sub) html += '<div class="sub">' + esc(String(sub)) + '</div>';
+  html += '</div>';
+  return html;
 }
 
 function fmtBytes(b) {
@@ -1907,8 +2064,8 @@ function applyUpdate() {
 
 // Inject updates section into health panel
 const origRenderHealth = renderHealth;
-renderHealth = function(d) {
-  origRenderHealth(d);
+renderHealth = function(d, runtime) {
+  origRenderHealth(d, runtime);
   const panel = document.getElementById('healthPanel');
   if (panel) {
     const updateHtml = '<div class="update-section"><h3 style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px">Updates</h3>' +

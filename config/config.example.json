@@ -153,5 +153,13 @@
   "admin": {
     "enabled": false,
     "token": "YOUR_ADMIN_TOKEN"
+  },
+  "autonomy": {
+    "enabled": false,
+    "require_approval_for_risk": [
+      "sensitive_write",
+      "external_side_effect",
+      "destructive"
+    ]
   }
 }

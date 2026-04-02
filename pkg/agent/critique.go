@@ -64,8 +64,10 @@ If any fail, reply: REVISE: [one line explaining what to fix]`
 	al.emitEvent("think")
 
 	resp, err := al.localProvider.Chat(critiqueCtx, messages, nil, "", map[string]interface{}{
-		"max_tokens":  constants.CritiqueMaxTokens,
-		"temperature": constants.MinimalTemperature,
+		"max_tokens":        constants.CritiqueMaxTokens,
+		"temperature":       constants.MinimalTemperature,
+		"feature":           "critique",
+		"telemetry_tracker": al.tracker,
 	})
 	if err != nil {
 		logger.DebugCF("agent", "Self-critique failed (non-critical)", map[string]interface{}{"error": err.Error()})

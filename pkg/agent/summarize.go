@@ -96,9 +96,11 @@ func (al *AgentLoop) summarizeSession(sessionKey string) {
 		// Merge them
 		mergePrompt := fmt.Sprintf("Merge these two conversation summaries into one cohesive summary:\n\n1: %s\n\n2: %s", s1, s2)
 		resp, err := al.bgProvider().Chat(ctx, []providers.Message{{Role: "user", Content: mergePrompt}}, nil, al.bgModel(), map[string]interface{}{
-			"max_tokens":   1024,
-			"temperature":  0.3,
-			"session_key": sessionKey,
+			"max_tokens":        1024,
+			"temperature":       0.3,
+			"session_key":       sessionKey,
+			"feature":           telemetry.FeatureSummarize,
+			"telemetry_tracker": al.tracker,
 		})
 		if resp != nil && resp.Usage != nil && al.tracker != nil {
 			al.tracker.Record(telemetry.FeatureSummarize, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
@@ -177,9 +179,11 @@ Return ONLY valid JSON array, no markdown fences:`
 	defer cancel()
 
 	resp, err := al.bgProvider().Chat(distillCtx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.bgModel(), map[string]interface{}{
-		"max_tokens":   constants.SummarizeMaxTokens,
-		"temperature":  constants.MinimalTemperature,
-		"session_key": sessionKey,
+		"max_tokens":        constants.SummarizeMaxTokens,
+		"temperature":       constants.MinimalTemperature,
+		"session_key":       sessionKey,
+		"feature":           telemetry.FeatureSummarize,
+		"telemetry_tracker": al.tracker,
 	})
 	if err != nil {
 		logger.WarnCF("agent", "Memory distillation failed", map[string]interface{}{"error": err.Error()})
@@ -251,8 +255,10 @@ func (al *AgentLoop) summarizeBatch(ctx context.Context, batch []providers.Messa
 	}
 
 	response, err := al.bgProvider().Chat(ctx, []providers.Message{{Role: "user", Content: prompt}}, nil, al.bgModel(), map[string]interface{}{
-		"max_tokens":  constants.SummarizeMaxTokens,
-		"temperature": constants.LowTemperature,
+		"max_tokens":        constants.SummarizeMaxTokens,
+		"temperature":       constants.LowTemperature,
+		"feature":           telemetry.FeatureSummarize,
+		"telemetry_tracker": al.tracker,
 	})
 	if response != nil && response.Usage != nil && al.tracker != nil {
 		al.tracker.Record(telemetry.FeatureSummarize, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)

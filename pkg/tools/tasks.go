@@ -11,13 +11,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/state"
 )
 
 type Task struct {
 	ID          string   `json:"id"`
 	Title       string   `json:"title"`
 	Description string   `json:"description,omitempty"`
-	Status      string   `json:"status"` // pending, in_progress, done, cancelled
+	Status      string   `json:"status"`             // pending, in_progress, done, cancelled
 	Priority    string   `json:"priority,omitempty"` // high, medium, low
 	DueDate     string   `json:"due_date,omitempty"` // YYYY-MM-DD
 	Tags        []string `json:"tags,omitempty"`
@@ -30,14 +32,18 @@ type Task struct {
 type TasksTool struct {
 	filePath string
 	mu       sync.Mutex
+	state    *state.Manager
 }
 
 func NewTasksTool(workspace string) *TasksTool {
 	dir := filepath.Join(workspace, "tasks")
 	os.MkdirAll(dir, 0755)
-	return &TasksTool{
+	tool := &TasksTool{
 		filePath: filepath.Join(dir, "tasks.json"),
+		state:    state.NewManager(workspace),
 	}
+	tool.migrateLegacyTasks()
+	return tool
 }
 
 func (t *TasksTool) Name() string { return "tasks" }
@@ -69,7 +75,7 @@ func (t *TasksTool) Parameters() map[string]interface{} {
 			},
 			"status": map[string]interface{}{
 				"type":        "string",
-				"enum":        []string{"pending", "in_progress", "done", "cancelled"},
+				"enum":        []string{"pending", "in_progress", "blocked", "waiting_external", "verification_failed", "done", "cancelled"},
 				"description": "Task status (for update)",
 			},
 			"priority": map[string]interface{}{
@@ -136,26 +142,20 @@ func generateTaskID() string {
 }
 
 func (t *TasksTool) loadTasks() ([]Task, error) {
-	data, err := os.ReadFile(t.filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var tasks []Task
-	if err := json.Unmarshal(data, &tasks); err != nil {
-		return nil, err
+	records := t.state.GetTasks()
+	tasks := make([]Task, 0, len(records))
+	for _, record := range records {
+		tasks = append(tasks, taskFromRecord(record))
 	}
 	return tasks, nil
 }
 
 func (t *TasksTool) saveTasks(tasks []Task) error {
-	data, err := json.MarshalIndent(tasks, "", "  ")
-	if err != nil {
-		return err
+	records := make([]state.TaskRecord, 0, len(tasks))
+	for _, task := range tasks {
+		records = append(records, taskRecordFromTask(task))
 	}
-	return os.WriteFile(t.filePath, data, 0644)
+	return t.state.ReplaceTasks(records)
 }
 
 func (t *TasksTool) add(args map[string]interface{}) *ToolResult {
@@ -185,12 +185,9 @@ func (t *TasksTool) add(args map[string]interface{}) *ToolResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var tasks []Task
-	data, err := os.ReadFile(t.filePath)
-	if err == nil {
-		if err := json.Unmarshal(data, &tasks); err != nil {
-			return ErrorResult(fmt.Sprintf("corrupted tasks file: %v", err))
-		}
+	tasks, err := t.loadTasks()
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to load tasks: %v", err))
 	}
 
 	now := time.Now().Format(time.RFC3339)
@@ -336,13 +333,9 @@ func (t *TasksTool) update(args map[string]interface{}) *ToolResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var tasks []Task
-	data, err := os.ReadFile(t.filePath)
+	tasks, err := t.loadTasks()
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to load tasks: %v", err))
-	}
-	if err := json.Unmarshal(data, &tasks); err != nil {
-		return ErrorResult(fmt.Sprintf("corrupted tasks file: %v", err))
 	}
 
 	found := false
@@ -421,13 +414,9 @@ func (t *TasksTool) del(args map[string]interface{}) *ToolResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var tasks []Task
-	data, err := os.ReadFile(t.filePath)
+	tasks, err := t.loadTasks()
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to load tasks: %v", err))
-	}
-	if err := json.Unmarshal(data, &tasks); err != nil {
-		return ErrorResult(fmt.Sprintf("corrupted tasks file: %v", err))
 	}
 
 	found := false
@@ -448,6 +437,60 @@ func (t *TasksTool) del(args map[string]interface{}) *ToolResult {
 		return ErrorResult(fmt.Sprintf("failed to save: %v", err))
 	}
 	return SilentResult(fmt.Sprintf("Task '%s' deleted", id))
+}
+
+func (t *TasksTool) migrateLegacyTasks() {
+	if _, err := os.Stat(t.filePath); err != nil {
+		return
+	}
+
+	if tasks, _ := t.loadTasks(); len(tasks) > 0 {
+		return
+	}
+
+	data, err := os.ReadFile(t.filePath)
+	if err != nil {
+		return
+	}
+
+	var legacy []Task
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return
+	}
+
+	_ = t.saveTasks(legacy)
+}
+
+func taskRecordFromTask(task Task) state.TaskRecord {
+	return state.TaskRecord{
+		ID:          task.ID,
+		Title:       task.Title,
+		Description: task.Description,
+		Status:      task.Status,
+		Priority:    task.Priority,
+		DueDate:     task.DueDate,
+		Tags:        append([]string(nil), task.Tags...),
+		Notes:       task.Notes,
+		GoalID:      task.GoalID,
+		CreatedAt:   task.CreatedAt,
+		UpdatedAt:   task.UpdatedAt,
+	}
+}
+
+func taskFromRecord(record state.TaskRecord) Task {
+	return Task{
+		ID:          record.ID,
+		Title:       record.Title,
+		Description: record.Description,
+		Status:      record.Status,
+		Priority:    record.Priority,
+		DueDate:     record.DueDate,
+		Tags:        append([]string(nil), record.Tags...),
+		Notes:       record.Notes,
+		GoalID:      record.GoalID,
+		CreatedAt:   record.CreatedAt,
+		UpdatedAt:   record.UpdatedAt,
+	}
 }
 
 func (t *TasksTool) search(args map[string]interface{}) *ToolResult {

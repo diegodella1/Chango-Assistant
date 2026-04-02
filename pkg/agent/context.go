@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/skills"
+	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
@@ -20,7 +22,8 @@ type ContextBuilder struct {
 	workspace       string
 	skillsLoader    *skills.SkillsLoader
 	memory          *MemoryStore
-	memoryTool      *tools.MemoryTool // For relevance-based memory search (TF-IDF)
+	stateManager    *state.Manager
+	memoryTool      *tools.MemoryTool   // For relevance-based memory search (TF-IDF)
 	tools           *tools.ToolRegistry // Direct reference to tool registry
 	model           string
 	knowledgeLoader *knowledge.Loader
@@ -47,6 +50,7 @@ func NewContextBuilder(workspace string) *ContextBuilder {
 		workspace:    workspace,
 		skillsLoader: skills.NewSkillsLoader(workspace, globalSkillsDir, builtinSkillsDir),
 		memory:       NewMemoryStore(workspace),
+		stateManager: state.NewManager(workspace),
 	}
 }
 
@@ -197,6 +201,11 @@ The following skills extend your capabilities. To use a skill, read its SKILL.md
 		parts = append(parts, "# Memory\n\n"+memoryContext)
 	}
 
+	operationalContext := cb.buildOperationalStateContext()
+	if operationalContext != "" {
+		parts = append(parts, "# Active State\n\n"+operationalContext)
+	}
+
 	// Intent detection reinforcement — reminds the LLM to classify before acting
 	parts = append(parts, `# Behavioral Reminder
 
@@ -288,6 +297,105 @@ func (cb *ContextBuilder) buildMemoryContext(query string) string {
 	}
 
 	return result
+}
+
+func (cb *ContextBuilder) buildOperationalStateContext() string {
+	if cb.stateManager == nil {
+		return ""
+	}
+
+	tasks := cb.stateManager.GetTasks()
+	reminders := cb.stateManager.GetReminders()
+	today := time.Now().Format("2006-01-02")
+
+	var activeTasks []state.TaskRecord
+	var overdueTasks []state.TaskRecord
+	for _, task := range tasks {
+		switch task.Status {
+		case "done", "cancelled":
+			continue
+		default:
+			activeTasks = append(activeTasks, task)
+			if task.DueDate != "" && task.DueDate < today {
+				overdueTasks = append(overdueTasks, task)
+			}
+		}
+	}
+
+	sort.Slice(activeTasks, func(i, j int) bool {
+		if activeTasks[i].Priority == activeTasks[j].Priority {
+			return activeTasks[i].UpdatedAt > activeTasks[j].UpdatedAt
+		}
+		return taskPriorityRank(activeTasks[i].Priority) < taskPriorityRank(activeTasks[j].Priority)
+	})
+
+	var pendingReminders []state.ReminderRecord
+	for _, reminder := range reminders {
+		if reminder.Fired {
+			continue
+		}
+		pendingReminders = append(pendingReminders, reminder)
+	}
+	sort.Slice(pendingReminders, func(i, j int) bool {
+		return pendingReminders[i].DueAt < pendingReminders[j].DueAt
+	})
+
+	var parts []string
+	if len(overdueTasks) > 0 {
+		lines := make([]string, 0, minInt(5, len(overdueTasks)))
+		for _, task := range overdueTasks[:minInt(5, len(overdueTasks))] {
+			lines = append(lines, fmt.Sprintf("- %s [%s] due %s", task.Title, task.Status, task.DueDate))
+		}
+		parts = append(parts, "## Overdue Tasks\n"+strings.Join(lines, "\n"))
+	}
+
+	if len(activeTasks) > 0 {
+		lines := make([]string, 0, minInt(8, len(activeTasks)))
+		for _, task := range activeTasks[:minInt(8, len(activeTasks))] {
+			line := fmt.Sprintf("- %s [%s]", task.Title, task.Status)
+			if task.Priority != "" {
+				line += fmt.Sprintf(" priority=%s", task.Priority)
+			}
+			if task.DueDate != "" {
+				line += fmt.Sprintf(" due=%s", task.DueDate)
+			}
+			if task.GoalID != "" {
+				line += fmt.Sprintf(" goal=%s", task.GoalID)
+			}
+			lines = append(lines, line)
+		}
+		parts = append(parts, "## Active Tasks\n"+strings.Join(lines, "\n"))
+	}
+
+	if len(pendingReminders) > 0 {
+		lines := make([]string, 0, minInt(5, len(pendingReminders)))
+		for _, reminder := range pendingReminders[:minInt(5, len(pendingReminders))] {
+			lines = append(lines, fmt.Sprintf("- %s at %s", reminder.Message, reminder.DueAt))
+		}
+		parts = append(parts, "## Pending Reminders\n"+strings.Join(lines, "\n"))
+	}
+
+	return strings.Join(parts, "\n\n")
+}
+
+func taskPriorityRank(priority string) int {
+	switch strings.ToLower(strings.TrimSpace(priority)) {
+	case "high":
+		return 0
+	case "medium":
+		return 1
+	case "low":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // buildFeedbackHint generates a system prompt section with correction patterns

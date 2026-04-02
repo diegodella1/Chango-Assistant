@@ -83,8 +83,10 @@ Be concise — 3-5 lines max. This is internal thinking, not a response to the u
 	}
 
 	resp, err := monologueProvider.Chat(monologueCtx, contextMsgs, nil, monologueModel, map[string]interface{}{
-		"max_tokens":  constants.MonologueMaxTokens,
-		"temperature": constants.LowTemperature,
+		"max_tokens":        constants.MonologueMaxTokens,
+		"temperature":       constants.LowTemperature,
+		"feature":           "monologue",
+		"telemetry_tracker": al.tracker,
 	})
 	if err != nil {
 		logger.DebugCF("agent", "Inner monologue failed (non-critical)", map[string]interface{}{"error": err.Error()})
@@ -117,7 +119,7 @@ Be concise — 3-5 lines max. This is internal thinking, not a response to the u
 // monologueEntry records a notable inner monologue decision.
 type monologueEntry struct {
 	Timestamp string `json:"timestamp"`
-	Trigger   string `json:"trigger"` // user message excerpt
+	Trigger   string `json:"trigger"`  // user message excerpt
 	Decision  string `json:"decision"` // monologue output excerpt
 }
 

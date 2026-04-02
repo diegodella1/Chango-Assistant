@@ -3,6 +3,7 @@ package agent
 import (
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
@@ -17,6 +18,8 @@ type createToolRegistryResult struct {
 // This is shared between main agent and subagents.
 func createToolRegistry(workspace string, restrict bool, cfg *config.Config, msgBus *bus.MessageBus) createToolRegistryResult {
 	registry := tools.NewToolRegistry()
+	registry.SetAutonomyPolicy(cfg.Autonomy)
+	registry.SetStateManager(state.NewManager(workspace))
 
 	// File system tools
 	registry.Register(tools.NewReadFileTool(workspace, restrict))

@@ -22,6 +22,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	statepkg "github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
@@ -164,6 +165,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/public/status", h.publicStatus)
 	mux.HandleFunc("/api/public/brain", h.publicBrain)
 	mux.HandleFunc("/api/public/events", h.sseEvents)
+	mux.HandleFunc("/api/runtime", h.withAuth(h.runtimeDashboard))
 	mux.HandleFunc("/api/health", h.withAuth(h.systemHealth))
 	mux.HandleFunc("/api/swap/free", h.withAuth(h.freeSwap))
 	mux.HandleFunc("/api/wifi/scan", h.withAuth(h.wifiScan))
@@ -287,6 +289,13 @@ func (h *Handler) publicStatus(w http.ResponseWriter, r *http.Request) {
 	result := map[string]interface{}{
 		"status":  "ok",
 		"version": h.version,
+	}
+
+	if runtime, err := h.buildRuntimeDashboard(); err == nil {
+		result["runtime"] = runtime
+		if degraded, ok := runtime["degraded"].(bool); ok && degraded {
+			result["status"] = "degraded"
+		}
 	}
 
 	// Uptime from sentinel
@@ -488,6 +497,9 @@ func (h *Handler) publicBrain(w http.ResponseWriter, r *http.Request) {
 	if ps, err := h.buildPublicStatus(); err == nil {
 		resp["summary"] = ps
 	}
+	if runtime, err := h.buildRuntimeDashboard(); err == nil {
+		resp["runtime"] = runtime
+	}
 
 	// Event trace and counters.
 	if h.eventBus != nil {
@@ -526,6 +538,184 @@ func (h *Handler) publicBrain(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) runtimeDashboard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	runtime, err := h.buildRuntimeDashboard()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "runtime dashboard unavailable: "+err.Error())
+		return
+	}
+	jsonOK(w, runtime)
+}
+
+func (h *Handler) buildRuntimeDashboard() (map[string]interface{}, error) {
+	result := map[string]interface{}{
+		"generated_at": time.Now().UTC().Format(time.RFC3339),
+		"degraded":     false,
+	}
+
+	if stateData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "state.json")); err == nil {
+		var st statepkg.State
+		if json.Unmarshal(stateData, &st) == nil {
+			activeTasks := 0
+			blockedTasks := 0
+			overdueTasks := 0
+			blockedDetails := make([]map[string]interface{}, 0, 5)
+			overdueDetails := make([]map[string]interface{}, 0, 5)
+			today := time.Now().Format("2006-01-02")
+			for _, task := range st.Tasks {
+				switch task.Status {
+				case "done", "cancelled":
+					continue
+				default:
+					activeTasks++
+				}
+				if task.Status == "blocked" || task.Status == "waiting_external" || task.Status == "verification_failed" {
+					blockedTasks++
+					if len(blockedDetails) < 5 {
+						blockedDetails = append(blockedDetails, map[string]interface{}{
+							"id":       task.ID,
+							"title":    task.Title,
+							"status":   task.Status,
+							"priority": task.Priority,
+						})
+					}
+				}
+				if task.DueDate != "" && task.DueDate < today {
+					overdueTasks++
+					if len(overdueDetails) < 5 {
+						overdueDetails = append(overdueDetails, map[string]interface{}{
+							"id":       task.ID,
+							"title":    task.Title,
+							"due_date": task.DueDate,
+							"status":   task.Status,
+						})
+					}
+				}
+			}
+
+			pendingReminders := 0
+			for _, reminder := range st.Reminders {
+				if !reminder.Fired {
+					pendingReminders++
+				}
+			}
+
+			result["backlog"] = map[string]interface{}{
+				"active_tasks":      activeTasks,
+				"blocked_tasks":     blockedTasks,
+				"overdue_tasks":     overdueTasks,
+				"pending_reminders": pendingReminders,
+			}
+			result["backlog_details"] = map[string]interface{}{
+				"blocked": blockedDetails,
+				"overdue": overdueDetails,
+			}
+
+			followUps := make([]map[string]interface{}, 0, 5)
+			overdueFollowUps := 0
+			now := time.Now().UTC()
+			for _, followUp := range st.FollowUps {
+				if followUp.Status == "done" || followUp.Status == "cancelled" {
+					continue
+				}
+				if followUp.NextCheckAt != "" {
+					if dueAt, err := time.Parse(time.RFC3339, followUp.NextCheckAt); err == nil && dueAt.Before(now) {
+						overdueFollowUps++
+					}
+				}
+				if len(followUps) < 5 {
+					followUps = append(followUps, map[string]interface{}{
+						"id":            followUp.ID,
+						"title":         followUp.Title,
+						"status":        followUp.Status,
+						"next_check_at": followUp.NextCheckAt,
+						"attempt_count": followUp.AttemptCount,
+						"last_outcome":  followUp.LastOutcome,
+						"reference_id":  followUp.ReferenceID,
+					})
+				}
+			}
+			result["follow_ups"] = map[string]interface{}{
+				"count":          len(st.FollowUps),
+				"overdue_count":  overdueFollowUps,
+				"next_scheduled": followUps,
+			}
+
+			if len(st.AutonomyLog) > 0 {
+				start := len(st.AutonomyLog) - 8
+				if start < 0 {
+					start = 0
+				}
+				result["autonomy"] = map[string]interface{}{
+					"recent_actions": st.AutonomyLog[start:],
+				}
+			}
+			if blockedTasks > 0 || overdueTasks > 0 {
+				result["degraded"] = true
+			}
+			if overdueFollowUps > 0 {
+				result["degraded"] = true
+			}
+		}
+	}
+
+	if telemetryData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "telemetry.json")); err == nil {
+		var telemetry struct {
+			Days []struct {
+				Date      string                            `json:"date"`
+				Providers map[string]map[string]interface{} `json:"providers"`
+				Totals    map[string]interface{}            `json:"totals"`
+			} `json:"days"`
+		}
+		if json.Unmarshal(telemetryData, &telemetry) == nil {
+			today := time.Now().Format("2006-01-02")
+			for _, day := range telemetry.Days {
+				if day.Date != today {
+					continue
+				}
+				result["provider_routes"] = day.Providers
+				result["tokens_today"] = day.Totals
+				for _, provider := range day.Providers {
+					if streak, ok := provider["failure_streak"].(float64); ok && streak > 0 {
+						result["degraded"] = true
+					}
+				}
+				break
+			}
+		}
+	}
+
+	if sentinelData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "sentinel.json")); err == nil {
+		var sentinel map[string]interface{}
+		if json.Unmarshal(sentinelData, &sentinel) == nil {
+			result["system"] = map[string]interface{}{
+				"cpu_temp_c":        sentinel["cpu_temp_c"],
+				"ram_used_percent":  sentinel["ram_used_percent"],
+				"disk_used_percent": sentinel["disk_used_percent"],
+				"uptime_seconds":    sentinel["uptime_seconds"],
+			}
+			if alerts, ok := sentinel["alerts"].([]interface{}); ok && len(alerts) > 0 {
+				result["alerts"] = alerts
+				result["degraded"] = true
+			}
+		}
+	}
+
+	if reasoningData, err := os.ReadFile(filepath.Join(h.workspacePath, "state", "reasoning_state.json")); err == nil {
+		var reasoning map[string]interface{}
+		if json.Unmarshal(reasoningData, &reasoning) == nil {
+			result["reasoning"] = reasoning
+		}
+	}
+
+	return result, nil
 }
 
 func (h *Handler) buildPublicStatus() (map[string]interface{}, error) {

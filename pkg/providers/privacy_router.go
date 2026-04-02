@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/telemetry"
 )
 
 // PrivacyStats tracks routing decisions for observability.
@@ -21,17 +22,33 @@ type PrivacyStats struct {
 // PrivacyRouter implements LLMProvider, routing messages between a cloud and local
 // provider based on content sensitivity. Sensitive data never leaves the Pi.
 type PrivacyRouter struct {
-	cloud      LLMProvider
-	local      LLMProvider
-	classifier *PrivacyClassifier
-	logEnabled bool
+	cloud                 LLMProvider
+	local                 LLMProvider
+	classifier            *PrivacyClassifier
+	logEnabled            bool
 	allowCloudVisionMedia bool
 
 	// Per-session sensitivity tracking with TTL: sensitive sessions decay
 	// after a period of inactivity or message count.
 	sensitiveSessions sync.Map // string → *sensitiveSession
 
-	stats PrivacyStats
+	stats     PrivacyStats
+	runtimeMu sync.RWMutex
+	runtime   RouterRuntimeStatus
+}
+
+type RouterRuntimeStatus struct {
+	Workload            string `json:"workload,omitempty"`
+	LastRoute           string `json:"last_route,omitempty"`
+	LastProvider        string `json:"last_provider,omitempty"`
+	LastModel           string `json:"last_model,omitempty"`
+	LastReason          string `json:"last_reason,omitempty"`
+	Degraded            bool   `json:"degraded"`
+	LastError           string `json:"last_error,omitempty"`
+	LastErrorClass      string `json:"last_error_class,omitempty"`
+	LastErrorAt         string `json:"last_error_at,omitempty"`
+	LastSuccessAt       string `json:"last_success_at,omitempty"`
+	ConsecutiveFailures int64  `json:"consecutive_failures"`
 }
 
 // sensitiveSession tracks when and why a session was marked sensitive.
@@ -60,6 +77,9 @@ func NewPrivacyRouter(cloud, local LLMProvider, classifier *PrivacyClassifier, l
 // Chat implements LLMProvider. It classifies the message and routes accordingly.
 func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) (*LLMResponse, error) {
 	atomic.AddInt64(&pr.stats.TotalMessages, 1)
+	policy := policyForOptions(messages, tools, options)
+	messages, degraded := applyPolicyGuardrails(messages, policy)
+	pr.setDegraded(degraded, string(policy.Workload))
 	hasVisionInput := HasVisionInput(messages)
 	cloudCaps := ResolveCapabilities(pr.cloud, model)
 
@@ -88,9 +108,9 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 					logger.InfoCF("privacy", "Session locked but tools needed — escalating to cloud", map[string]interface{}{
 						"session": sessionKey,
 					})
-					return pr.routeCloud(ctx, messages, tools, model, options)
+					return pr.routeCloud(ctx, messages, tools, model, options, policy, "session_locked_with_tools")
 				}
-				return pr.routeLocal(ctx, messages, options, "session_locked")
+				return pr.routeLocal(ctx, messages, options, policy, "session_locked")
 			}
 		}
 	}
@@ -104,7 +124,7 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 				"model":    cloudCaps.Model,
 				"provider": cloudCaps.Provider,
 			})
-			return pr.routeCloud(ctx, messages, tools, model, options)
+			return pr.routeCloud(ctx, messages, tools, model, options, policy, "cloud_vision_allowed")
 		}
 
 		// Mark session as sensitive with decay tracking
@@ -125,14 +145,14 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 				"reason": result.Reason,
 				"score":  result.Score,
 			})
-			return pr.routeCloud(ctx, messages, tools, model, options)
+			return pr.routeCloud(ctx, messages, tools, model, options, policy, "sensitive_with_tools")
 		}
 
-		return pr.routeLocal(ctx, messages, options, result.Reason)
+		return pr.routeLocal(ctx, messages, options, policy, result.Reason)
 	}
 
 	// Safe — route to cloud
-	return pr.routeCloud(ctx, messages, tools, model, options)
+	return pr.routeCloud(ctx, messages, tools, model, options, policy, "safe")
 }
 
 // GetDefaultModel returns the cloud provider's default model.
@@ -151,8 +171,9 @@ func (pr *PrivacyRouter) Stats() PrivacyStats {
 }
 
 // routeLocal sends the message to the local model, stripping tools and media.
-func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, options map[string]interface{}, reason string) (*LLMResponse, error) {
+func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, options map[string]interface{}, policy ProviderPolicy, reason string) (*LLMResponse, error) {
 	atomic.AddInt64(&pr.stats.RoutedLocal, 1)
+	start := time.Now()
 
 	localCaps := ResolveCapabilities(pr.local, "")
 	hasVisionInput := HasVisionInput(messages)
@@ -180,10 +201,12 @@ func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, opt
 
 	// Sanitize messages for local model: strip image Parts, keep text only
 	sanitized := sanitizeForLocal(messages)
+	sanitized = trimMessagesForLocalPolicy(sanitized, policy)
 
 	// Local model: no tools (unreliable on small models), use its default model
 	resp, err := pr.local.Chat(ctx, sanitized, nil, "", options)
 	if err != nil {
+		pr.recordRouteResult(options, string(policy.Workload), "local", localCaps.Provider, localCaps.Model, start, err, false, reason)
 		// If local model can't handle the context size, escalate to cloud.
 		// Privacy is important but a total failure is worse.
 		errStr := err.Error()
@@ -191,10 +214,13 @@ func (pr *PrivacyRouter) routeLocal(ctx context.Context, messages []Message, opt
 			logger.WarnCF("privacy", "Local model context exceeded, escalating to cloud", map[string]interface{}{
 				"error": errStr,
 			})
-			return pr.cloud.Chat(ctx, messages, nil, "", options)
+			resp, cloudErr := pr.cloud.Chat(ctx, messages, nil, "", options)
+			pr.recordRouteResult(options, string(policy.Workload), "cloud", ResolveCapabilities(pr.cloud, "").Provider, ResolveCapabilities(pr.cloud, "").Model, start, cloudErr, true, "local_context_escalation")
+			return resp, cloudErr
 		}
 		return nil, err
 	}
+	pr.recordRouteResult(options, string(policy.Workload), "local", localCaps.Provider, localCaps.Model, start, nil, false, reason)
 
 	if hasVisionInput && localCaps.Vision == CapabilityUnsupported {
 		resp.Content = strings.TrimSpace(VisionUnsupportedNotice(localCaps.Model) + "\n\n" + resp.Content)
@@ -210,8 +236,9 @@ func (pr *PrivacyRouter) shouldRouteVisionToCloud(hasVisionInput bool, cloudCaps
 }
 
 // routeCloud sends the message to the cloud provider with full capabilities.
-func (pr *PrivacyRouter) routeCloud(ctx context.Context, messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) (*LLMResponse, error) {
+func (pr *PrivacyRouter) routeCloud(ctx context.Context, messages []Message, tools []ToolDefinition, model string, options map[string]interface{}, policy ProviderPolicy, reason string) (*LLMResponse, error) {
 	atomic.AddInt64(&pr.stats.RoutedCloud, 1)
+	start := time.Now()
 
 	cloudCaps := ResolveCapabilities(pr.cloud, model)
 	hasVisionInput := HasVisionInput(messages)
@@ -237,8 +264,10 @@ func (pr *PrivacyRouter) routeCloud(ctx context.Context, messages []Message, too
 
 	resp, err := pr.cloud.Chat(ctx, messages, tools, model, options)
 	if err != nil {
+		pr.recordRouteResult(options, string(policy.Workload), "cloud", cloudCaps.Provider, cloudCaps.Model, start, err, false, reason)
 		return nil, err
 	}
+	pr.recordRouteResult(options, string(policy.Workload), "cloud", cloudCaps.Provider, cloudCaps.Model, start, nil, false, reason)
 	if hasVisionInput && cloudCaps.Vision == CapabilityUnsupported {
 		resp.Content = strings.TrimSpace(VisionUnsupportedNotice(cloudCaps.Model) + "\n\n" + resp.Content)
 	}
@@ -316,6 +345,135 @@ func (pr *PrivacyRouter) String() string {
 	return "PrivacyRouter: total=" + itoa(s.TotalMessages) +
 		" local=" + itoa(s.RoutedLocal) +
 		" cloud=" + itoa(s.RoutedCloud)
+}
+
+func (pr *PrivacyRouter) RuntimeStatus() RouterRuntimeStatus {
+	pr.runtimeMu.RLock()
+	defer pr.runtimeMu.RUnlock()
+	return pr.runtime
+}
+
+func (pr *PrivacyRouter) setDegraded(degraded bool, workload string) {
+	pr.runtimeMu.Lock()
+	defer pr.runtimeMu.Unlock()
+	pr.runtime.Degraded = degraded
+	pr.runtime.Workload = workload
+}
+
+func (pr *PrivacyRouter) recordRouteResult(options map[string]interface{}, workload, route, provider, model string, started time.Time, err error, fallback bool, reason string) {
+	errClass := ""
+	if err != nil {
+		errClass = classifyProviderError(err)
+	}
+	if tracker, ok := options["telemetry_tracker"].(*telemetry.Tracker); ok && tracker != nil {
+		tracker.RecordProviderCall(provider, model, workload, route, time.Since(started), err == nil, fallback, errClass)
+	}
+
+	pr.runtimeMu.Lock()
+	defer pr.runtimeMu.Unlock()
+	pr.runtime.Workload = workload
+	pr.runtime.LastRoute = route
+	pr.runtime.LastProvider = provider
+	pr.runtime.LastModel = model
+	pr.runtime.LastReason = reason
+	if err != nil {
+		pr.runtime.LastError = err.Error()
+		pr.runtime.LastErrorClass = errClass
+		pr.runtime.LastErrorAt = time.Now().Format(time.RFC3339)
+		pr.runtime.ConsecutiveFailures++
+		return
+	}
+	pr.runtime.LastError = ""
+	pr.runtime.LastErrorClass = ""
+	pr.runtime.LastSuccessAt = time.Now().Format(time.RFC3339)
+	pr.runtime.ConsecutiveFailures = 0
+}
+
+func applyPolicyGuardrails(messages []Message, policy ProviderPolicy) ([]Message, bool) {
+	if len(messages) == 0 {
+		return messages, false
+	}
+	degraded := false
+	trimmed := messages
+	if policy.MaxMessages > 0 && len(trimmed) > policy.MaxMessages {
+		degraded = true
+		system := trimmed[0]
+		trimmed = append([]Message{system}, trimmed[len(trimmed)-(policy.MaxMessages-1):]...)
+	}
+
+	totalChars := 0
+	for _, msg := range trimmed {
+		totalChars += len(msg.Content)
+		for _, part := range msg.Parts {
+			totalChars += len(part.Text)
+			if part.ImageURL != nil {
+				totalChars += len(part.ImageURL.URL)
+			}
+		}
+	}
+	if policy.MaxChars > 0 && totalChars > policy.MaxChars {
+		degraded = true
+		overflow := totalChars - policy.MaxChars
+		for i := len(trimmed) - 1; i >= 1 && overflow > 0; i-- {
+			if len(trimmed[i].Content) == 0 {
+				continue
+			}
+			if len(trimmed[i].Content) > 800 {
+				cut := len(trimmed[i].Content) - 800
+				trimmed[i].Content = trimmed[i].Content[:800] + "\n[...context trimmed for runtime budget]"
+				overflow -= cut
+			}
+		}
+	}
+	if policy.DegradedChars > 0 && totalChars > policy.DegradedChars {
+		degraded = true
+	}
+	return trimmed, degraded
+}
+
+func trimMessagesForLocalPolicy(messages []Message, policy ProviderPolicy) []Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	result := messages
+	if policy.MaxLocalMessages > 0 && len(result) > policy.MaxLocalMessages+1 {
+		system := result[0]
+		result = append([]Message{system}, result[len(result)-policy.MaxLocalMessages:]...)
+	}
+	totalChars := 0
+	for i := range result {
+		totalChars += len(result[i].Content)
+	}
+	if policy.MaxLocalChars > 0 && totalChars > policy.MaxLocalChars {
+		for i := len(result) - 1; i >= 1 && totalChars > policy.MaxLocalChars; i-- {
+			if len(result[i].Content) <= 500 {
+				continue
+			}
+			removed := len(result[i].Content) - 500
+			result[i].Content = result[i].Content[:500] + "\n[...trimmed for local context]"
+			totalChars -= removed
+		}
+	}
+	return result
+}
+
+func classifyProviderError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "429"), strings.Contains(msg, "rate limit"), strings.Contains(msg, "usage limit"):
+		return "rate_limit"
+	case strings.Contains(msg, "402"), strings.Contains(msg, "insufficient credits"), strings.Contains(msg, "quota"):
+		return "quota"
+	case strings.Contains(msg, "413"), strings.Contains(msg, "context"), strings.Contains(msg, "request too large"), strings.Contains(msg, "exceed"):
+		return "context_pressure"
+	case strings.Contains(msg, "deadline exceeded"), strings.Contains(msg, "timeout"):
+		return "timeout"
+	default:
+		return "provider_error"
+	}
 }
 
 func itoa(n int64) string {

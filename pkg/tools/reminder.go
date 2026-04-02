@@ -13,6 +13,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/state"
 )
 
 type reminder struct {
@@ -33,14 +34,18 @@ type ReminderTool struct {
 	mu       sync.Mutex
 	nextID   int
 	timers   map[string]*time.Timer
+	state    *state.Manager
 }
 
 func NewReminderTool(workspace string, msgBus *bus.MessageBus) *ReminderTool {
-	return &ReminderTool{
+	tool := &ReminderTool{
 		filePath: filepath.Join(workspace, "reminders.json"),
 		msgBus:   msgBus,
 		timers:   make(map[string]*time.Timer),
+		state:    state.NewManager(workspace),
 	}
+	tool.migrateLegacyReminders()
+	return tool
 }
 
 func (t *ReminderTool) Name() string { return "reminder" }
@@ -123,7 +128,7 @@ func (t *ReminderTool) StartPendingReminders() {
 	if purged > 0 {
 		t.saveRemindersLocked(reminders)
 		logger.InfoCF("reminder", "Purged old fired reminders", map[string]interface{}{
-			"purged": purged,
+			"purged":    purged,
 			"remaining": len(reminders),
 		})
 	}
@@ -284,42 +289,61 @@ func (t *ReminderTool) fireReminder(id, message, channel, chatID string) {
 }
 
 func (t *ReminderTool) loadRemindersLocked() []reminder {
-	data, err := os.ReadFile(t.filePath)
-	if err != nil {
-		return nil
-	}
-	var reminders []reminder
-	if err := json.Unmarshal(data, &reminders); err != nil {
-		logger.ErrorCF("reminder", "Failed to parse reminders file", map[string]interface{}{
-			"error": err.Error(),
-			"path":  t.filePath,
+	records := t.state.GetReminders()
+	reminders := make([]reminder, 0, len(records))
+	for _, record := range records {
+		reminders = append(reminders, reminder{
+			ID:        record.ID,
+			Message:   record.Message,
+			DueAt:     record.DueAt,
+			Channel:   record.Channel,
+			ChatID:    record.ChatID,
+			CreatedAt: record.CreatedAt,
+			Fired:     record.Fired,
 		})
-		return nil
 	}
 	return reminders
 }
 
 func (t *ReminderTool) saveRemindersLocked(reminders []reminder) {
-	data, err := json.MarshalIndent(reminders, "", "  ")
+	records := make([]state.ReminderRecord, 0, len(reminders))
+	for _, item := range reminders {
+		records = append(records, state.ReminderRecord{
+			ID:        item.ID,
+			Message:   item.Message,
+			DueAt:     item.DueAt,
+			Channel:   item.Channel,
+			ChatID:    item.ChatID,
+			CreatedAt: item.CreatedAt,
+			Fired:     item.Fired,
+		})
+	}
+	if err := t.state.ReplaceReminders(records); err != nil {
+		logger.ErrorCF("reminder", "Failed to save reminders state", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+}
+
+func (t *ReminderTool) migrateLegacyReminders() {
+	if _, err := os.Stat(t.filePath); err != nil {
+		return
+	}
+	if reminders := t.state.GetReminders(); len(reminders) > 0 {
+		return
+	}
+	data, err := os.ReadFile(t.filePath)
 	if err != nil {
-		logger.ErrorCF("reminder", "Failed to marshal reminders", map[string]interface{}{
-			"error": err.Error(),
-		})
 		return
 	}
-	// Atomic write
-	tmpPath := t.filePath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		logger.ErrorCF("reminder", "Failed to write reminders file", map[string]interface{}{
-			"error": err.Error(),
-		})
+	var legacy []reminder
+	if err := json.Unmarshal(data, &legacy); err != nil {
 		return
 	}
-	if err := os.Rename(tmpPath, t.filePath); err != nil {
-		logger.ErrorCF("reminder", "Failed to rename reminders file", map[string]interface{}{
-			"error": err.Error(),
-		})
-	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.saveRemindersLocked(legacy)
 }
 
 // parseDuration parses duration strings like "30m", "2h", "1d", "1h30m"

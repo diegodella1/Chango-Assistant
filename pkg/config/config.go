@@ -45,17 +45,18 @@ func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
 }
 
 type Config struct {
-	Agents    AgentsConfig    `json:"agents"`
-	Channels  ChannelsConfig  `json:"channels"`
-	Providers ProvidersConfig `json:"providers"`
-	Gateway   GatewayConfig   `json:"gateway"`
-	Tools     ToolsConfig     `json:"tools"`
-	Heartbeat HeartbeatConfig `json:"heartbeat"`
-	Devices   DevicesConfig   `json:"devices"`
-	Sentinel  SentinelConfig  `json:"sentinel"`
-	Council   CouncilConfig   `json:"council"`
-	Admin     AdminConfig     `json:"admin"`
-	Briefing  BriefingConfig  `json:"briefing"`
+	Agents      AgentsConfig      `json:"agents"`
+	Channels    ChannelsConfig    `json:"channels"`
+	Providers   ProvidersConfig   `json:"providers"`
+	Gateway     GatewayConfig     `json:"gateway"`
+	Tools       ToolsConfig       `json:"tools"`
+	Heartbeat   HeartbeatConfig   `json:"heartbeat"`
+	Devices     DevicesConfig     `json:"devices"`
+	Sentinel    SentinelConfig    `json:"sentinel"`
+	Council     CouncilConfig     `json:"council"`
+	Admin       AdminConfig       `json:"admin"`
+	Autonomy    AutonomyConfig    `json:"autonomy"`
+	Briefing    BriefingConfig    `json:"briefing"`
 	Privacy     PrivacyConfig     `json:"privacy"`
 	Wallet      WalletConfig      `json:"wallet"`
 	TokenBudget TokenBudgetConfig `json:"token_budget"`
@@ -84,7 +85,7 @@ type HealthEndpoint struct {
 type RSSConfig struct {
 	Enabled   bool      `json:"enabled" env:"PICOCLAW_RSS_ENABLED"`
 	Feeds     []RSSFeed `json:"feeds"`
-	Interests []string  `json:"interests"` // topics to filter for relevance
+	Interests []string  `json:"interests"`                                    // topics to filter for relevance
 	Interval  int       `json:"interval_seconds" env:"PICOCLAW_RSS_INTERVAL"` // default 14400
 }
 
@@ -103,22 +104,22 @@ type BackgroundConfig struct {
 
 // ReasoningConfig controls the background reasoning loop (local triage + cloud escalation).
 type ReasoningConfig struct {
-	Enabled              bool `json:"enabled" env:"PICOCLAW_REASONING_ENABLED"`
-	IntervalMinutes      int  `json:"interval_minutes" env:"PICOCLAW_REASONING_INTERVAL"`        // default 30
-	EscalationThreshold  int  `json:"escalation_threshold" env:"PICOCLAW_REASONING_THRESHOLD"`    // default 7
-	MaxObservationsPerDay int  `json:"max_observations_per_day"`                                   // default 48
-	NotifyOnInsight      bool `json:"notify_on_insight"`                                           // default true
+	Enabled               bool `json:"enabled" env:"PICOCLAW_REASONING_ENABLED"`
+	IntervalMinutes       int  `json:"interval_minutes" env:"PICOCLAW_REASONING_INTERVAL"`      // default 30
+	EscalationThreshold   int  `json:"escalation_threshold" env:"PICOCLAW_REASONING_THRESHOLD"` // default 7
+	MaxObservationsPerDay int  `json:"max_observations_per_day"`                                // default 48
+	NotifyOnInsight       bool `json:"notify_on_insight"`                                       // default true
 }
 
 // PrivacyConfig controls the privacy router that prevents sensitive data from leaving the Pi.
 type PrivacyConfig struct {
-	Enabled            bool     `json:"enabled" env:"PICOCLAW_PRIVACY_ENABLED"`                          // Enable privacy routing
-	AlwaysPrivateMedia bool     `json:"always_private_media" env:"PICOCLAW_PRIVACY_ALWAYS_PRIVATE_MEDIA"` // Images/docs never go to cloud
-	AllowCloudVisionMedia bool   `json:"allow_cloud_vision_media" env:"PICOCLAW_PRIVACY_ALLOW_CLOUD_VISION_MEDIA"` // Allow image turns to use cloud only when the cloud model supports vision
-	ExtraKeywords      []string `json:"extra_keywords,omitempty"`                                         // User-configurable sensitive keywords
-	ExtraPatterns      []string `json:"extra_patterns,omitempty"`                                         // User-configurable regex patterns
-	FailClosed         bool     `json:"fail_closed" env:"PICOCLAW_PRIVACY_FAIL_CLOSED"`                  // If unsure, route local
-	LogDecisions       bool     `json:"log_decisions" env:"PICOCLAW_PRIVACY_LOG_DECISIONS"`              // Log routing decisions (no content)
+	Enabled               bool     `json:"enabled" env:"PICOCLAW_PRIVACY_ENABLED"`                                   // Enable privacy routing
+	AlwaysPrivateMedia    bool     `json:"always_private_media" env:"PICOCLAW_PRIVACY_ALWAYS_PRIVATE_MEDIA"`         // Images/docs never go to cloud
+	AllowCloudVisionMedia bool     `json:"allow_cloud_vision_media" env:"PICOCLAW_PRIVACY_ALLOW_CLOUD_VISION_MEDIA"` // Allow image turns to use cloud only when the cloud model supports vision
+	ExtraKeywords         []string `json:"extra_keywords,omitempty"`                                                 // User-configurable sensitive keywords
+	ExtraPatterns         []string `json:"extra_patterns,omitempty"`                                                 // User-configurable regex patterns
+	FailClosed            bool     `json:"fail_closed" env:"PICOCLAW_PRIVACY_FAIL_CLOSED"`                           // If unsure, route local
+	LogDecisions          bool     `json:"log_decisions" env:"PICOCLAW_PRIVACY_LOG_DECISIONS"`                       // Log routing decisions (no content)
 }
 
 type BriefingConfig struct {
@@ -275,6 +276,11 @@ type AdminConfig struct {
 	Token   string `json:"token" env:"PICOCLAW_ADMIN_TOKEN"`
 }
 
+type AutonomyConfig struct {
+	Enabled                bool     `json:"enabled" env:"PICOCLAW_AUTONOMY_ENABLED"`
+	RequireApprovalForRisk []string `json:"require_approval_for_risk,omitempty"`
+}
+
 type WalletConfig struct {
 	LNbitsURL    string `json:"lnbits_url" env:"PICOCLAW_WALLET_LNBITS_URL"`
 	AdminKey     string `json:"admin_key" env:"PICOCLAW_WALLET_ADMIN_KEY"`
@@ -308,16 +314,16 @@ type ProvidersConfig struct {
 type LlamaCppConfig struct {
 	Enabled      bool    `json:"enabled" env:"PICOCLAW_PROVIDERS_LLAMACPP_ENABLED"`
 	Mode         string  `json:"mode" env:"PICOCLAW_PROVIDERS_LLAMACPP_MODE"`                   // "server" or "binary"
-	APIBase      string  `json:"api_base" env:"PICOCLAW_PROVIDERS_LLAMACPP_API_BASE"`            // server mode: e.g. http://localhost:8080/v1
-	BinaryPath   string  `json:"binary_path" env:"PICOCLAW_PROVIDERS_LLAMACPP_BINARY_PATH"`      // binary mode: path to llama-cli
-	ModelPath    string  `json:"model_path" env:"PICOCLAW_PROVIDERS_LLAMACPP_MODEL_PATH"`        // binary mode: path to .gguf file
-	DefaultModel string  `json:"default_model" env:"PICOCLAW_PROVIDERS_LLAMACPP_DEFAULT_MODEL"`  // model name for server mode
-	ContextSize  int     `json:"context_size" env:"PICOCLAW_PROVIDERS_LLAMACPP_CONTEXT_SIZE"`    // context window (default 2048)
-	Threads      int     `json:"threads" env:"PICOCLAW_PROVIDERS_LLAMACPP_THREADS"`              // CPU threads (default 4)
-	GPULayers    int     `json:"gpu_layers" env:"PICOCLAW_PROVIDERS_LLAMACPP_GPU_LAYERS"`        // GPU offload layers (0 for Pi 5)
-	MaxTokens    int     `json:"max_tokens" env:"PICOCLAW_PROVIDERS_LLAMACPP_MAX_TOKENS"`        // max output tokens (default 512)
-	Temperature  float64 `json:"temperature" env:"PICOCLAW_PROVIDERS_LLAMACPP_TEMPERATURE"`      // sampling temperature
-	Fallback     bool    `json:"fallback" env:"PICOCLAW_PROVIDERS_LLAMACPP_FALLBACK"`            // use as fallback when cloud fails
+	APIBase      string  `json:"api_base" env:"PICOCLAW_PROVIDERS_LLAMACPP_API_BASE"`           // server mode: e.g. http://localhost:8080/v1
+	BinaryPath   string  `json:"binary_path" env:"PICOCLAW_PROVIDERS_LLAMACPP_BINARY_PATH"`     // binary mode: path to llama-cli
+	ModelPath    string  `json:"model_path" env:"PICOCLAW_PROVIDERS_LLAMACPP_MODEL_PATH"`       // binary mode: path to .gguf file
+	DefaultModel string  `json:"default_model" env:"PICOCLAW_PROVIDERS_LLAMACPP_DEFAULT_MODEL"` // model name for server mode
+	ContextSize  int     `json:"context_size" env:"PICOCLAW_PROVIDERS_LLAMACPP_CONTEXT_SIZE"`   // context window (default 2048)
+	Threads      int     `json:"threads" env:"PICOCLAW_PROVIDERS_LLAMACPP_THREADS"`             // CPU threads (default 4)
+	GPULayers    int     `json:"gpu_layers" env:"PICOCLAW_PROVIDERS_LLAMACPP_GPU_LAYERS"`       // GPU offload layers (0 for Pi 5)
+	MaxTokens    int     `json:"max_tokens" env:"PICOCLAW_PROVIDERS_LLAMACPP_MAX_TOKENS"`       // max output tokens (default 512)
+	Temperature  float64 `json:"temperature" env:"PICOCLAW_PROVIDERS_LLAMACPP_TEMPERATURE"`     // sampling temperature
+	Fallback     bool    `json:"fallback" env:"PICOCLAW_PROVIDERS_LLAMACPP_FALLBACK"`           // use as fallback when cloud fails
 }
 
 type ProviderConfig struct {
@@ -529,11 +535,11 @@ func DefaultConfig() *Config {
 			PreferLocal: true,
 		},
 		Reasoning: ReasoningConfig{
-			Enabled:              false,
-			IntervalMinutes:      30,
-			EscalationThreshold:  7,
+			Enabled:               false,
+			IntervalMinutes:       30,
+			EscalationThreshold:   7,
 			MaxObservationsPerDay: 48,
-			NotifyOnInsight:      true,
+			NotifyOnInsight:       true,
 		},
 	}
 }

@@ -30,9 +30,27 @@ type FeatureBucket struct {
 
 // DayBucket tracks token usage for a single day.
 type DayBucket struct {
-	Date     string                    `json:"date"` // "2006-01-02"
-	Features map[string]*FeatureBucket `json:"features"`
-	Totals   FeatureBucket             `json:"totals"`
+	Date      string                     `json:"date"` // "2006-01-02"
+	Features  map[string]*FeatureBucket  `json:"features"`
+	Providers map[string]*ProviderBucket `json:"providers,omitempty"`
+	Totals    FeatureBucket              `json:"totals"`
+}
+
+type ProviderBucket struct {
+	Provider       string `json:"provider"`
+	Model          string `json:"model,omitempty"`
+	Workload       string `json:"workload,omitempty"`
+	Route          string `json:"route,omitempty"`
+	Calls          int64  `json:"calls"`
+	Successes      int64  `json:"successes"`
+	Failures       int64  `json:"failures"`
+	Fallbacks      int64  `json:"fallbacks"`
+	TotalLatencyMS int64  `json:"total_latency_ms"`
+	LastLatencyMS  int64  `json:"last_latency_ms"`
+	LastErrorClass string `json:"last_error_class,omitempty"`
+	LastErrorAt    string `json:"last_error_at,omitempty"`
+	LastSuccessAt  string `json:"last_success_at,omitempty"`
+	FailureStreak  int64  `json:"failure_streak"`
 }
 
 // TelemetryData is the on-disk format.
@@ -109,6 +127,72 @@ func (t *Tracker) Record(feature string, prompt, completion, total int) {
 	bucket.Totals.Calls++
 
 	t.dirty = true
+}
+
+func (t *Tracker) RecordProviderCall(provider, model, workload, route string, latency time.Duration, success bool, fallback bool, errClass string) {
+	provider = normalizeProviderLabel(provider)
+	if provider == "" {
+		provider = "unknown"
+	}
+
+	today := time.Now().Format("2006-01-02")
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	bucket := t.getOrCreateDay(today)
+	if bucket.Providers == nil {
+		bucket.Providers = make(map[string]*ProviderBucket)
+	}
+	key := provider
+	if workload != "" {
+		key += ":" + workload
+	}
+	pb, ok := bucket.Providers[key]
+	if !ok {
+		pb = &ProviderBucket{
+			Provider: provider,
+			Model:    model,
+			Workload: workload,
+			Route:    route,
+		}
+		bucket.Providers[key] = pb
+	}
+	pb.Calls++
+	pb.Model = model
+	pb.Workload = workload
+	pb.Route = route
+	latencyMS := latency.Milliseconds()
+	if latencyMS < 0 {
+		latencyMS = 0
+	}
+	pb.TotalLatencyMS += latencyMS
+	pb.LastLatencyMS = latencyMS
+	if fallback {
+		pb.Fallbacks++
+	}
+	if success {
+		pb.Successes++
+		pb.FailureStreak = 0
+		pb.LastSuccessAt = time.Now().Format(time.RFC3339)
+	} else {
+		pb.Failures++
+		pb.FailureStreak++
+		pb.LastErrorClass = errClass
+		pb.LastErrorAt = time.Now().Format(time.RFC3339)
+	}
+	t.dirty = true
+}
+
+func (t *Tracker) GetTodayProviderSnapshot() map[string]ProviderBucket {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	bucket := t.getOrCreateDay(time.Now().Format("2006-01-02"))
+	result := make(map[string]ProviderBucket, len(bucket.Providers))
+	for key, value := range bucket.Providers {
+		result[key] = *value
+	}
+	return result
 }
 
 // GetToday returns today's bucket (copy). Returns nil if no data yet.
@@ -195,8 +279,9 @@ func (t *Tracker) getOrCreateDay(date string) *DayBucket {
 		}
 	}
 	bucket := &DayBucket{
-		Date:     date,
-		Features: make(map[string]*FeatureBucket),
+		Date:      date,
+		Features:  make(map[string]*FeatureBucket),
+		Providers: make(map[string]*ProviderBucket),
 	}
 	t.data.Days = append(t.data.Days, bucket)
 	return bucket
@@ -215,13 +300,18 @@ func (t *Tracker) prune(keepDays int) {
 
 func copyDayBucket(src *DayBucket) *DayBucket {
 	cp := &DayBucket{
-		Date:     src.Date,
-		Totals:   src.Totals,
-		Features: make(map[string]*FeatureBucket, len(src.Features)),
+		Date:      src.Date,
+		Totals:    src.Totals,
+		Features:  make(map[string]*FeatureBucket, len(src.Features)),
+		Providers: make(map[string]*ProviderBucket, len(src.Providers)),
 	}
 	for k, v := range src.Features {
 		fb := *v
 		cp.Features[k] = &fb
+	}
+	for k, v := range src.Providers {
+		pb := *v
+		cp.Providers[k] = &pb
 	}
 	return cp
 }
@@ -243,5 +333,24 @@ func FormatDayBucket(b *DayBucket) string {
 				name, fb.TotalTokens, fb.PromptTokens, fb.CompletionTokens, fb.Calls)
 		}
 	}
+	if len(b.Providers) > 0 {
+		result += "\nBy provider:\n"
+		for _, pb := range b.Providers {
+			avgLatency := int64(0)
+			if pb.Calls > 0 {
+				avgLatency = pb.TotalLatencyMS / pb.Calls
+			}
+			result += fmt.Sprintf("  %s [%s]: calls=%d success=%d fail=%d fallback=%d avg_latency=%dms\n",
+				pb.Provider, pb.Workload, pb.Calls, pb.Successes, pb.Failures, pb.Fallbacks, avgLatency)
+		}
+	}
 	return result
+}
+
+func normalizeProviderLabel(provider string) string {
+	provider = fmt.Sprintf("%s", provider)
+	if provider == "" {
+		return provider
+	}
+	return provider
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -193,23 +194,39 @@ func (hs *HeartbeatService) executeHeartbeat() {
 
 	logger.DebugC("heartbeat", "Executing heartbeat")
 
-	prompt := hs.buildPrompt()
-	if prompt == "" {
-		logger.InfoC("heartbeat", "No heartbeat prompt (HEARTBEAT.md empty or missing)")
-		return
-	}
-
-	if handler == nil {
-		hs.logError("Heartbeat handler not configured")
-		return
-	}
-
 	// Get last channel info for context
 	lastChannel := hs.state.GetLastChannel()
 	channel, chatID := hs.parseLastChannel(lastChannel)
 
 	// Debug log for channel resolution
 	hs.logInfo("Resolved channel: %s, chatID: %s (from lastChannel: %s)", channel, chatID, lastChannel)
+
+	followUpContext := hs.processDueFollowUps(channel, chatID)
+
+	prompt := hs.buildPrompt()
+	if prompt == "" {
+		if followUpContext == "" {
+			logger.InfoC("heartbeat", "No heartbeat prompt (HEARTBEAT.md empty or missing)")
+			return
+		}
+		prompt = fmt.Sprintf(`# Heartbeat Check
+
+Current time: %s
+
+You are a proactive AI assistant. This is a scheduled heartbeat check.
+Review the autonomous follow-up state below and take any necessary action.
+If there is nothing that requires attention, respond ONLY with: HEARTBEAT_OK
+
+%s
+`, time.Now().Format("2006-01-02 15:04:05"), followUpContext)
+	} else if followUpContext != "" {
+		prompt = strings.TrimSpace(prompt) + "\n\n## Autonomous Follow-ups\n\n" + followUpContext + "\n"
+	}
+
+	if handler == nil {
+		hs.logError("Heartbeat handler not configured")
+		return
+	}
 
 	result := handler(prompt, channel, chatID)
 
@@ -373,6 +390,152 @@ func (hs *HeartbeatService) parseLastChannel(lastChannel string) (platform, user
 	}
 
 	return platform, userID
+}
+
+func (hs *HeartbeatService) processDueFollowUps(channel, chatID string) string {
+	followUps := hs.state.GetFollowUps()
+	if len(followUps) == 0 {
+		return ""
+	}
+
+	tasks := hs.state.GetTasks()
+	taskIndex := make(map[string]int, len(tasks))
+	for i := range tasks {
+		taskIndex[tasks[i].ID] = i
+	}
+
+	now := time.Now().UTC()
+	changed := false
+	var summary []string
+
+	for i := range followUps {
+		followUp := &followUps[i]
+		if followUp.Status == "done" || followUp.Status == "cancelled" {
+			continue
+		}
+		if followUp.NextCheckAt == "" {
+			continue
+		}
+
+		nextCheck, err := time.Parse(time.RFC3339, followUp.NextCheckAt)
+		if err != nil || nextCheck.After(now) {
+			continue
+		}
+
+		followUp.AttemptCount++
+		followUp.LastCheckedAt = now.Format(time.RFC3339)
+		followUp.UpdatedAt = now.Format(time.RFC3339)
+		changed = true
+
+		taskIdx, ok := taskIndex[followUp.ReferenceID]
+		if !ok {
+			followUp.Status = "cancelled"
+			followUp.LastOutcome = "reference_missing"
+			followUp.NextCheckAt = ""
+			hs.appendAutonomyEvent("followup_reference_missing", followUp, channel, chatID, "referenced task no longer exists")
+			continue
+		}
+
+		task := &tasks[taskIdx]
+		task.UpdatedAt = now.Format(time.RFC3339)
+
+		switch task.Status {
+		case "done", "cancelled":
+			followUp.Status = "done"
+			followUp.LastOutcome = "closed"
+			followUp.NextCheckAt = ""
+			hs.appendAutonomyEvent("followup_closed", followUp, channel, chatID, "referenced task already closed")
+		case "waiting_external":
+			followUp.Status = "waiting_external"
+			followUp.LastOutcome = "approval_required"
+			followUp.NextCheckAt = now.Add(12 * time.Hour).Format(time.RFC3339)
+			if followUp.AttemptCount >= 2 {
+				followUp.EscalatedAt = now.Format(time.RFC3339)
+				summary = append(summary, fmt.Sprintf("- approval still needed: %s", followUp.Title))
+				hs.appendAutonomyEvent("followup_escalated", followUp, channel, chatID, "still waiting on external approval")
+			} else {
+				hs.appendAutonomyEvent("followup_waiting", followUp, channel, chatID, "waiting on external input")
+			}
+		case "blocked", "verification_failed":
+			if followUp.AttemptCount >= 3 {
+				task.Status = "waiting_external"
+				if !strings.Contains(task.Notes, "Escalated by follow-up engine") {
+					if strings.TrimSpace(task.Notes) != "" {
+						task.Notes += "\n"
+					}
+					task.Notes += "Escalated by follow-up engine after repeated blocked checks."
+				}
+				followUp.Status = "waiting_external"
+				followUp.LastOutcome = "escalated_for_review"
+				followUp.EscalatedAt = now.Format(time.RFC3339)
+				followUp.NextCheckAt = now.Add(12 * time.Hour).Format(time.RFC3339)
+				summary = append(summary, fmt.Sprintf("- blocked goal escalated: %s", followUp.Title))
+				hs.appendAutonomyEvent("followup_escalated", followUp, channel, chatID, "blocked goal escalated for review")
+			} else {
+				followUp.Status = task.Status
+				followUp.LastOutcome = "retry_scheduled"
+				followUp.NextCheckAt = now.Add(backoffForAttempt(followUp.AttemptCount)).Format(time.RFC3339)
+				hs.appendAutonomyEvent("followup_retry_scheduled", followUp, channel, chatID, "blocked goal scheduled for retry")
+			}
+		default:
+			followUp.Status = task.Status
+			followUp.LastOutcome = "monitoring"
+			followUp.NextCheckAt = now.Add(backoffForAttempt(followUp.AttemptCount)).Format(time.RFC3339)
+			hs.appendAutonomyEvent("followup_monitoring", followUp, channel, chatID, "goal still active")
+		}
+	}
+
+	if changed {
+		if err := hs.state.ReplaceTasks(tasks); err != nil {
+			hs.logError("Failed to save follow-up task state: %v", err)
+		}
+		if err := hs.state.ReplaceFollowUps(followUps); err != nil {
+			hs.logError("Failed to save follow-ups: %v", err)
+		}
+	}
+
+	if len(summary) == 0 {
+		return ""
+	}
+	sort.Strings(summary)
+	if len(summary) > 5 {
+		summary = summary[:5]
+	}
+	return strings.Join(summary, "\n")
+}
+
+func (hs *HeartbeatService) appendAutonomyEvent(status string, followUp *state.FollowUpRecord, channel, chatID, reason string) {
+	if followUp == nil {
+		return
+	}
+	entry := state.AutonomyLogRecord{
+		ID:          fmt.Sprintf("%s:%s:%d", status, followUp.ID, followUp.AttemptCount),
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Tool:        "followup_engine",
+		Risk:        "operational",
+		Status:      status,
+		Summary:     followUp.Title,
+		Reason:      reason,
+		ReferenceID: followUp.ReferenceID,
+		Channel:     channel,
+		ChatID:      chatID,
+	}
+	if err := hs.state.AppendAutonomyLog(entry); err != nil {
+		hs.logError("Failed to append autonomy event: %v", err)
+	}
+}
+
+func backoffForAttempt(attempt int) time.Duration {
+	switch {
+	case attempt <= 1:
+		return 2 * time.Hour
+	case attempt == 2:
+		return 4 * time.Hour
+	case attempt == 3:
+		return 8 * time.Hour
+	default:
+		return 12 * time.Hour
+	}
 }
 
 // logInfo logs an informational message to the heartbeat log

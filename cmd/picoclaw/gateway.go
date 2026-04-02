@@ -349,10 +349,41 @@ func gatewayCmd() {
 	healthMux := http.NewServeMux()
 	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		build, goVer := formatBuildInfo()
 		status := map[string]interface{}{
-			"status":  "ok",
-			"version": formatVersion(),
-			"uptime":  time.Since(startTime).String(),
+			"status":     "ok",
+			"version":    formatVersion(),
+			"git_commit": gitCommit,
+			"build_time": build,
+			"go_version": goVer,
+			"uptime":     time.Since(startTime).String(),
+		}
+		if pr, ok := providers.IsPrivacyRouter(provider); ok {
+			runtime := pr.RuntimeStatus()
+			status["provider"] = map[string]interface{}{
+				"router":               "privacy",
+				"last_route":           runtime.LastRoute,
+				"last_provider":        runtime.LastProvider,
+				"last_model":           runtime.LastModel,
+				"last_reason":          runtime.LastReason,
+				"workload":             runtime.Workload,
+				"degraded":             runtime.Degraded,
+				"last_error":           runtime.LastError,
+				"last_error_class":     runtime.LastErrorClass,
+				"last_error_at":        runtime.LastErrorAt,
+				"last_success_at":      runtime.LastSuccessAt,
+				"consecutive_failures": runtime.ConsecutiveFailures,
+				"stats":                pr.Stats(),
+			}
+			if runtime.Degraded || runtime.ConsecutiveFailures > 0 {
+				status["status"] = "degraded"
+			}
+		}
+		if tracker != nil {
+			status["telemetry"] = map[string]interface{}{
+				"today_tokens": tracker.GetToday(),
+				"providers":    tracker.GetTodayProviderSnapshot(),
+			}
 		}
 		json.NewEncoder(w).Encode(status)
 	})

@@ -25,6 +25,112 @@ type State struct {
 
 	// WelcomedUsers tracks which users have received the welcome message
 	WelcomedUsers map[string]bool `json:"welcomed_users,omitempty"`
+
+	// Structured operational state.
+	Tasks       []TaskRecord        `json:"tasks,omitempty"`
+	Projects    []ProjectRecord     `json:"projects,omitempty"`
+	Blockers    []BlockerRecord     `json:"blockers,omitempty"`
+	Reminders   []ReminderRecord    `json:"reminders,omitempty"`
+	Decisions   []DecisionRecord    `json:"decisions,omitempty"`
+	Commitments []CommitmentRecord  `json:"commitments,omitempty"`
+	FollowUps   []FollowUpRecord    `json:"follow_ups,omitempty"`
+	AutonomyLog []AutonomyLogRecord `json:"autonomy_log,omitempty"`
+}
+
+type TaskRecord struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description,omitempty"`
+	Status      string   `json:"status"`
+	Priority    string   `json:"priority,omitempty"`
+	DueDate     string   `json:"due_date,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Notes       string   `json:"notes,omitempty"`
+	GoalID      string   `json:"goal_id,omitempty"`
+	CreatedAt   string   `json:"created_at"`
+	UpdatedAt   string   `json:"updated_at"`
+}
+
+type ProjectRecord struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Status      string   `json:"status,omitempty"`
+	CurrentGoal string   `json:"current_goal,omitempty"`
+	NextAction  string   `json:"next_action,omitempty"`
+	RiskFlags   []string `json:"risk_flags,omitempty"`
+	UpdatedAt   string   `json:"updated_at,omitempty"`
+}
+
+type BlockerRecord struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
+	ProjectID   string `json:"project_id,omitempty"`
+	CreatedAt   string `json:"created_at,omitempty"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
+}
+
+type ReminderRecord struct {
+	ID        string `json:"id"`
+	Message   string `json:"message"`
+	DueAt     string `json:"due_at"`
+	Channel   string `json:"channel,omitempty"`
+	ChatID    string `json:"chat_id,omitempty"`
+	CreatedAt string `json:"created_at"`
+	Fired     bool   `json:"fired"`
+}
+
+type DecisionRecord struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Decision  string `json:"decision"`
+	Context   string `json:"context,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
+type CommitmentRecord struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
+	DueDate     string `json:"due_date,omitempty"`
+	CreatedAt   string `json:"created_at,omitempty"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
+}
+
+type FollowUpRecord struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	NextCheckAt   string `json:"next_check_at,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	Status        string `json:"status,omitempty"`
+	ReferenceID   string `json:"reference_id,omitempty"`
+	AttemptCount  int    `json:"attempt_count,omitempty"`
+	LastCheckedAt string `json:"last_checked_at,omitempty"`
+	LastOutcome   string `json:"last_outcome,omitempty"`
+	EscalatedAt   string `json:"escalated_at,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
+}
+
+type AutonomyLogRecord struct {
+	ID               string `json:"id"`
+	Timestamp        string `json:"timestamp"`
+	Tool             string `json:"tool,omitempty"`
+	Risk             string `json:"risk,omitempty"`
+	Status           string `json:"status,omitempty"`
+	Summary          string `json:"summary,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	ReferenceID      string `json:"reference_id,omitempty"`
+	Channel          string `json:"channel,omitempty"`
+	ChatID           string `json:"chat_id,omitempty"`
+	Approved         bool   `json:"approved,omitempty"`
+	Async            bool   `json:"async,omitempty"`
+	DurationMs       int64  `json:"duration_ms,omitempty"`
+	Verification     string `json:"verification,omitempty"`
+	Error            string `json:"error,omitempty"`
+	RequiresApproval bool   `json:"requires_approval,omitempty"`
 }
 
 // Manager manages persistent state with atomic saves.
@@ -123,6 +229,128 @@ func (sm *Manager) GetTimestamp() time.Time {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return sm.state.Timestamp
+}
+
+func (sm *Manager) GetTasks() []TaskRecord {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	result := make([]TaskRecord, len(sm.state.Tasks))
+	copy(result, sm.state.Tasks)
+	return result
+}
+
+func (sm *Manager) UpsertTask(task TaskRecord) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	replaced := false
+	for i := range sm.state.Tasks {
+		if sm.state.Tasks[i].ID == task.ID {
+			sm.state.Tasks[i] = task
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		sm.state.Tasks = append(sm.state.Tasks, task)
+	}
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
+}
+
+func (sm *Manager) ReplaceTasks(tasks []TaskRecord) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.state.Tasks = append([]TaskRecord(nil), tasks...)
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
+}
+
+func (sm *Manager) DeleteTask(id string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	filtered := sm.state.Tasks[:0]
+	for _, task := range sm.state.Tasks {
+		if task.ID == id {
+			continue
+		}
+		filtered = append(filtered, task)
+	}
+	sm.state.Tasks = filtered
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
+}
+
+func (sm *Manager) GetReminders() []ReminderRecord {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	result := make([]ReminderRecord, len(sm.state.Reminders))
+	copy(result, sm.state.Reminders)
+	return result
+}
+
+func (sm *Manager) ReplaceReminders(reminders []ReminderRecord) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.state.Reminders = append([]ReminderRecord(nil), reminders...)
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
+}
+
+func (sm *Manager) GetFollowUps() []FollowUpRecord {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	result := make([]FollowUpRecord, len(sm.state.FollowUps))
+	copy(result, sm.state.FollowUps)
+	return result
+}
+
+func (sm *Manager) UpsertFollowUp(followUp FollowUpRecord) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	replaced := false
+	for i := range sm.state.FollowUps {
+		if sm.state.FollowUps[i].ID == followUp.ID {
+			sm.state.FollowUps[i] = followUp
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		sm.state.FollowUps = append(sm.state.FollowUps, followUp)
+	}
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
+}
+
+func (sm *Manager) ReplaceFollowUps(followUps []FollowUpRecord) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.state.FollowUps = append([]FollowUpRecord(nil), followUps...)
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
+}
+
+func (sm *Manager) GetAutonomyLog() []AutonomyLogRecord {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	result := make([]AutonomyLogRecord, len(sm.state.AutonomyLog))
+	copy(result, sm.state.AutonomyLog)
+	return result
+}
+
+func (sm *Manager) AppendAutonomyLog(entry AutonomyLogRecord) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	sm.state.AutonomyLog = append(sm.state.AutonomyLog, entry)
+	if len(sm.state.AutonomyLog) > 250 {
+		sm.state.AutonomyLog = sm.state.AutonomyLog[len(sm.state.AutonomyLog)-250:]
+	}
+	sm.state.Timestamp = time.Now()
+	return sm.saveAtomic()
 }
 
 // saveAtomic performs an atomic save using temp file + rename.

@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/state"
 )
 
 type GoalStep struct {
@@ -31,17 +33,18 @@ type GoalNode struct {
 }
 
 type AutonomyPlan struct {
-	UpdatedAt          time.Time  `json:"updated_at"`
-	PrimaryGoal        *GoalNode  `json:"primary_goal,omitempty"`
-	PrimaryGoalReason  string     `json:"primary_goal_reason,omitempty"`
-	CurrentStep        string     `json:"current_step,omitempty"`
-	Supporting         []GoalNode `json:"supporting,omitempty"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	PrimaryGoal       *GoalNode  `json:"primary_goal,omitempty"`
+	PrimaryGoalReason string     `json:"primary_goal_reason,omitempty"`
+	CurrentStep       string     `json:"current_step,omitempty"`
+	Supporting        []GoalNode `json:"supporting,omitempty"`
 }
 
 func refreshAutonomyPlan(workspace string) AutonomyPlan {
 	agenda := loadAutonomyAgenda(workspace)
 	plan := buildAutonomyPlan(agenda)
 	saveAutonomyPlan(workspace, plan)
+	syncAutonomyOperationalState(workspace, plan)
 	return plan
 }
 
@@ -101,11 +104,11 @@ func executableStepForFocus(focus AutonomyFocus) string {
 func goalStatusForFocus(focus AutonomyFocus) string {
 	switch focus.NextAction {
 	case "ask_user":
-		return "blocked"
+		return "waiting_external"
 	case "monitor":
 		return "in_progress"
 	default:
-		return "ready"
+		return "pending"
 	}
 }
 
@@ -175,10 +178,11 @@ func selectPrimaryGoal(nodes []GoalNode) (int, string) {
 
 	bestReady := -1
 	bestActive := -1
+	bestWaiting := -1
 	bestBlocked := 0
 	for i, node := range nodes {
 		switch node.Status {
-		case "ready":
+		case "pending":
 			if bestReady == -1 || node.Priority > nodes[bestReady].Priority {
 				bestReady = i
 			}
@@ -186,7 +190,11 @@ func selectPrimaryGoal(nodes []GoalNode) (int, string) {
 			if bestActive == -1 || node.Priority > nodes[bestActive].Priority {
 				bestActive = i
 			}
-		case "blocked":
+		case "waiting_external":
+			if bestWaiting == -1 || node.Priority > nodes[bestWaiting].Priority {
+				bestWaiting = i
+			}
+		case "blocked", "verification_failed":
 			if node.Priority > nodes[bestBlocked].Priority {
 				bestBlocked = i
 			}
@@ -198,6 +206,9 @@ func selectPrimaryGoal(nodes []GoalNode) (int, string) {
 	}
 	if bestActive >= 0 {
 		return bestActive, "selected highest-priority in-progress goal"
+	}
+	if bestWaiting >= 0 {
+		return bestWaiting, "selected highest-priority waiting goal"
 	}
 	return bestBlocked, "all goals blocked, keeping highest-priority blocked goal visible"
 }
@@ -238,4 +249,138 @@ func loadAutonomyPlan(workspace string) AutonomyPlan {
 		return AutonomyPlan{}
 	}
 	return plan
+}
+
+func syncAutonomyOperationalState(workspace string, plan AutonomyPlan) {
+	sm := state.NewManager(workspace)
+	now := time.Now().UTC()
+
+	existingTasks := sm.GetTasks()
+	manualTasks := make([]state.TaskRecord, 0, len(existingTasks))
+	for _, task := range existingTasks {
+		if !strings.HasPrefix(task.ID, "autonomy_goal:") {
+			manualTasks = append(manualTasks, task)
+		}
+	}
+
+	goals := make([]GoalNode, 0, len(plan.Supporting)+1)
+	if plan.PrimaryGoal != nil {
+		goals = append(goals, *plan.PrimaryGoal)
+	}
+	goals = append(goals, plan.Supporting...)
+
+	autonomyTasks := make([]state.TaskRecord, 0, len(goals))
+	autonomyFollowUps := make([]state.FollowUpRecord, 0, len(goals))
+	for _, goal := range goals {
+		taskID := "autonomy_goal:" + slugGoal(goal.Goal)
+		createdAt := now.Format(time.RFC3339)
+		for _, existing := range existingTasks {
+			if existing.ID == taskID && existing.CreatedAt != "" {
+				createdAt = existing.CreatedAt
+				break
+			}
+		}
+
+		autonomyTasks = append(autonomyTasks, state.TaskRecord{
+			ID:          taskID,
+			Title:       goal.Goal,
+			Description: goal.Reason,
+			Status:      goal.Status,
+			Priority:    priorityBand(goal.Priority),
+			Notes:       goal.ExecutableStep,
+			GoalID:      goal.SourceTopic,
+			Tags:        []string{"autonomy", goal.SourceTopic},
+			CreatedAt:   createdAt,
+			UpdatedAt:   now.Format(time.RFC3339),
+		})
+
+		if followUp := buildAutonomyFollowUp(goal, now, taskID); followUp != nil {
+			autonomyFollowUps = append(autonomyFollowUps, *followUp)
+		}
+	}
+
+	if err := sm.ReplaceTasks(append(manualTasks, autonomyTasks...)); err != nil {
+		logger.WarnCF("agent", "Failed to sync autonomy tasks", map[string]interface{}{"error": err.Error()})
+	}
+
+	existingFollowUps := sm.GetFollowUps()
+	manualFollowUps := make([]state.FollowUpRecord, 0, len(existingFollowUps))
+	for _, followUp := range existingFollowUps {
+		if !strings.HasPrefix(followUp.ID, "autonomy_followup:") {
+			manualFollowUps = append(manualFollowUps, followUp)
+		}
+	}
+	if err := sm.ReplaceFollowUps(append(manualFollowUps, autonomyFollowUps...)); err != nil {
+		logger.WarnCF("agent", "Failed to sync autonomy follow-ups", map[string]interface{}{"error": err.Error()})
+	}
+}
+
+func buildAutonomyFollowUp(goal GoalNode, now time.Time, referenceID string) *state.FollowUpRecord {
+	status := strings.TrimSpace(goal.Status)
+	if status == "" || status == "done" || status == "cancelled" {
+		return nil
+	}
+
+	var delay time.Duration
+	switch status {
+	case "waiting_external":
+		delay = 12 * time.Hour
+	case "blocked", "verification_failed":
+		delay = 6 * time.Hour
+	case "in_progress":
+		delay = 2 * time.Hour
+	default:
+		delay = 4 * time.Hour
+	}
+
+	return &state.FollowUpRecord{
+		ID:          "autonomy_followup:" + slugGoal(goal.Goal),
+		Title:       goal.Goal,
+		NextCheckAt: now.Add(delay).Format(time.RFC3339),
+		Reason:      goal.ExecutableStep,
+		Status:      status,
+		ReferenceID: referenceID,
+		CreatedAt:   now.Format(time.RFC3339),
+		UpdatedAt:   now.Format(time.RFC3339),
+	}
+}
+
+func priorityBand(priority int) string {
+	switch {
+	case priority >= 8:
+		return "high"
+	case priority >= 5:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+func slugGoal(goal string) string {
+	goal = strings.ToLower(strings.TrimSpace(goal))
+	if goal == "" {
+		return "unnamed"
+	}
+	var b strings.Builder
+	lastDash := false
+	for _, r := range goal {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			lastDash = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastDash = false
+		default:
+			if !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	result := strings.Trim(b.String(), "-")
+	if result == "" {
+		return "unnamed"
+	}
+	return result
 }

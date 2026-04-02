@@ -59,8 +59,8 @@ func TestBuildAutonomyPlanMarksApprovalAsBlocked(t *testing.T) {
 	if plan.PrimaryGoal == nil {
 		t.Fatalf("expected primary goal")
 	}
-	if plan.PrimaryGoal.Status != "blocked" {
-		t.Fatalf("expected blocked status, got %q", plan.PrimaryGoal.Status)
+	if plan.PrimaryGoal.Status != "waiting_external" {
+		t.Fatalf("expected waiting_external status, got %q", plan.PrimaryGoal.Status)
 	}
 	if plan.PrimaryGoal.BlockedBy != "approval_from_diego" {
 		t.Fatalf("expected approval block, got %q", plan.PrimaryGoal.BlockedBy)
