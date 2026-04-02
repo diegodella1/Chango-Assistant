@@ -160,6 +160,7 @@ func (h *Handler) SetVersion(v string)                 { h.version = v }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", h.serveHome)
+	mux.HandleFunc("/brain", h.serveBrain)
 	mux.HandleFunc("/about", h.serveAbout)
 	mux.HandleFunc("/admin", h.serveSPA)
 	mux.HandleFunc("/api/public/status", h.publicStatus)
@@ -248,6 +249,14 @@ func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) serveHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "/pitch/", http.StatusMovedPermanently)
+}
+
+func (h *Handler) serveBrain(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/brain" {
 		http.NotFound(w, r)
 		return
 	}
