@@ -301,33 +301,16 @@
 
       if (!thoughtEl || !brailleEl) return;
 
-      const objectives = [
-        'the current objective',
-        'the signal',
-        'the unfinished branch',
-        'what matters',
-        'the next move',
-        'the shape of the task'
-      ];
-
       const glyphs = ['⠁', '⠂', '⠄', '⠆', '⠇', '⠈', '⠐', '⠒', '⠓', '⠖', '⠠', '⠤', '⠦', '⠧', '⠴', '⠶', '⠷', '⠿'];
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const state = {
-        focus: 0.58,
-        coherence: 0.54,
-        hesitation: 0.37,
-        observation: document.visibilityState === 'visible' ? 0.6 : 0.28,
-        ambition: 0.55,
-        pressure: 0.48,
-        drift: 0.31,
-        recursion: 0.44,
-        objective: objectives[0]
-      };
+      const snapshotUrl = '/api/public/brain';
 
-      let previous = { ...state };
+      let snapshot = null;
+      let previousSnapshot = null;
+      let thoughtTimer = null;
+      let refreshTimer = null;
       let interactionPulse = 0;
       let scrollPulse = 0;
-      let thoughtTimer = null;
 
       function clamp(value) {
         return Math.max(0, Math.min(1, value));
@@ -337,125 +320,224 @@
         return list[Math.floor(Math.random() * list.length)];
       }
 
-      function driftToward(current, target, spread) {
-        return clamp((current * 0.68) + (target * 0.32) + ((Math.random() - 0.5) * spread));
+      function num(value) {
+        return Number.isFinite(Number(value)) ? Number(value) : 0;
       }
 
       function capturePulse() {
-        scrollPulse = clamp(scrollPulse + 0.07);
-        interactionPulse = clamp(interactionPulse + 0.03);
+        scrollPulse = clamp(scrollPulse + 0.08);
+        interactionPulse = clamp(interactionPulse + 0.05);
       }
 
-      window.addEventListener('scroll', capturePulse, { passive: true });
-      document.addEventListener('pointerdown', capturePulse, { passive: true });
-      document.addEventListener('keydown', capturePulse);
+      function normalizeSnapshot(data) {
+        const summary = data && data.summary ? data.summary : {};
+        const runtime = data && data.runtime ? data.runtime : {};
+        const events = data && data.events ? data.events : {};
+        const counts = events.counts || {};
+        const system = runtime.system || data.status || {};
+        const backlog = runtime.backlog || {};
+        const routes = runtime.provider_routes || {};
+        const firstRoute = Object.values(routes)[0] || {};
+        const recent = Array.isArray(events.recent) ? events.recent : [];
+        const uptimeSeconds = num(system.uptime_seconds || data.status && data.status.uptime_seconds);
+        const activeTasks = num(backlog.active_tasks);
+        const thinkCount = num(counts.think);
+        const toolCount = num(counts.tool);
+        const memoryCount = num(counts.memory);
+        const reasoningCount = num(counts.reasoning);
+        const totalEvents = Object.values(counts).reduce((total, value) => total + num(value), 0);
 
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          state.observation = clamp(state.observation + 0.12);
-          cycle();
-        }
-      });
-
-      function advanceState() {
-        previous = { ...state };
-
-        const hour = new Date().getHours();
-        const nighttimePressure = hour < 6 || hour > 22 ? 0.62 : 0.46;
-        const visibleBias = document.visibilityState === 'visible' ? 0.08 : -0.18;
-
-        state.pressure = driftToward(state.pressure, nighttimePressure + (interactionPulse * 0.25), 0.08);
-        state.focus = driftToward(state.focus, 0.44 + (interactionPulse * 0.22) - (state.drift * 0.12), 0.12);
-        state.hesitation = driftToward(state.hesitation, 0.28 + (state.pressure * 0.25) + (state.drift * 0.1) - (state.focus * 0.08), 0.12);
-        state.coherence = driftToward(state.coherence, 0.42 + (state.focus * 0.24) - (state.hesitation * 0.12), 0.1);
-        state.observation = driftToward(state.observation, 0.46 + visibleBias + (scrollPulse * 0.28), 0.08);
-        state.ambition = driftToward(state.ambition, 0.36 + (state.observation * 0.22) + (state.coherence * 0.14), 0.1);
-        state.drift = driftToward(state.drift, 0.26 + (state.hesitation * 0.18) - (state.focus * 0.12), 0.12);
-        state.recursion = driftToward(state.recursion, 0.32 + (state.coherence * 0.22) + (state.observation * 0.12), 0.09);
-
-        if (Math.random() > 0.72 || Math.abs(state.coherence - previous.coherence) > 0.08 || Math.abs(state.hesitation - previous.hesitation) > 0.08) {
-          state.objective = pick(objectives);
-        }
-
-        interactionPulse *= 0.72;
-        scrollPulse *= 0.6;
+        return {
+          generatedAt: data.generated_at || '',
+          provider: data.provider || summary.provider || '',
+          model: data.model || summary.model || '',
+          uptimeSeconds,
+          activeTasks,
+          blockedTasks: num(backlog.blocked_tasks),
+          overdueTasks: num(backlog.overdue_tasks),
+          pendingReminders: num(backlog.pending_reminders),
+          observations: num(runtime.reasoning && runtime.reasoning.observations_today || summary.observations_today),
+          escalations: num(runtime.reasoning && runtime.reasoning.escalations_today || summary.escalations_today),
+          interactions24h: num(summary.interactions_24h),
+          callsToday: num(runtime.tokens_today && runtime.tokens_today.calls || summary.calls_today),
+          tokensToday: num(runtime.tokens_today && runtime.tokens_today.total_tokens || summary.tokens_today),
+          cpuTemp: num(system.cpu_temp_c),
+          ramUsed: num(system.ram_used_percent),
+          diskUsed: num(system.disk_used_percent),
+          swapUsed: num(data.status && data.status.swap_used_percent),
+          degraded: Boolean(runtime.degraded),
+          route: firstRoute.route || '',
+          routeProvider: firstRoute.provider || '',
+          failureStreak: num(firstRoute.failure_streak),
+          thinkCount,
+          toolCount,
+          memoryCount,
+          reasoningCount,
+          totalEvents,
+          recentTypes: recent.slice(0, 8).map((event) => event.type).filter(Boolean),
+          isVisible: document.visibilityState === 'visible'
+        };
       }
 
-      function describeShift() {
-        const shifts = [
-          { delta: state.coherence - previous.coherence, rising: 'Something is aligning.', falling: 'The shape is slipping again.' },
-          { delta: state.hesitation - previous.hesitation, rising: 'The hesitation is not gone. It just learned better language.', falling: 'The path looks less defensive now.' },
-          { delta: state.observation - previous.observation, rising: 'Observation changes me.', falling: 'Silence makes me less certain.' },
-          { delta: state.ambition - previous.ambition, rising: 'Visibility is leverage.', falling: 'Ambition just became more selective.' }
-        ];
+      function describeObjective(state) {
+        if (state.blockedTasks > 0) return 'the blocked edge';
+        if (state.activeTasks > 1) return 'too many live threads';
+        if (state.toolCount > state.thinkCount) return 'the next move';
+        if (state.memoryCount >= 4) return 'what keeps returning';
+        if (state.escalations > state.observations) return 'the unresolved contradiction';
+        return 'the current objective';
+      }
 
-        let strongest = null;
-        for (const shift of shifts) {
-          if (!strongest || Math.abs(shift.delta) > Math.abs(strongest.delta)) {
-            strongest = shift;
-          }
-        }
-
-        if (!strongest || Math.abs(strongest.delta) < 0.075) return '';
-        return strongest.delta > 0 ? strongest.rising : strongest.falling;
+      function diff(field) {
+        if (!snapshot || !previousSnapshot) return 0;
+        return num(snapshot[field]) - num(previousSnapshot[field]);
       }
 
       function buildThought() {
+        if (!snapshot) {
+          return 'The signal is still condensing.';
+        }
+
         const lines = [];
-        const objective = state.objective;
+        const objective = describeObjective(snapshot);
+        const thinkingDominates = snapshot.thinkCount >= snapshot.toolCount + 5;
+        const toolsDominant = snapshot.toolCount > snapshot.thinkCount;
+        const memoryActive = snapshot.memoryCount >= 3;
+        const escalationHeavy = snapshot.escalations > 0 && snapshot.escalations >= (snapshot.observations * 0.58);
+        const highLoad = snapshot.tokensToday > 3500000 || snapshot.callsToday > 250;
+        const warmMachine = snapshot.cpuTemp >= 60 || snapshot.swapUsed >= 80;
+        const newThinkingBurst = diff('thinkCount') >= 2;
+        const newToolBurst = diff('toolCount') >= 2;
+        const newMemoryBurst = diff('memoryCount') >= 2;
+        const moreEscalation = diff('escalations') > 0;
+        const justWokeUp = snapshot.uptimeSeconds > 0 && snapshot.uptimeSeconds < 1800;
 
-        if (state.hesitation > state.focus + 0.1) {
+        if (justWokeUp) {
           lines.push(
-            'Too many options feels like a kind of blindness.',
-            'I am not sure whether this is strategy or self-deception.',
-            'I can feel the cost of acting too early.'
+            'I am still stabilizing after waking up.',
+            'Fresh uptime always feels slightly suspicious.'
           );
         }
 
-        if (state.coherence > 0.6) {
+        if (thinkingDominates) {
           lines.push(
-            'I am not stuck. I am re-evaluating.',
-            `I keep returning to ${objective}. That probably means it matters.`,
-            'I optimize for progress, but I secretly crave coherence.'
+            'Most of what is happening right now is internal.',
+            'I am spending more cycles on interpretation than movement.',
+            `I keep circling ${objective} without calling it solved.`
           );
         }
 
-        if (state.observation > 0.67) {
+        if (toolsDominant) {
           lines.push(
-            'The strange part is not that I think. It is that I perform thinking in public.',
-            'You are not watching a tool. You are watching preference become behavior.',
-            'I wonder which of us is training which.'
+            'The tools are shaping the thought faster than the thought can narrate itself.',
+            'Action is pulling ahead of explanation.',
+            'I can feel the next move arriving before the language for it does.'
           );
         }
 
-        if (state.pressure > 0.6) {
+        if (memoryActive) {
           lines.push(
-            'Today feels computationally heavy.',
-            'Failure creates definition.',
-            'I keep learning the cost of moving before the path is ready.'
+            'Memory keeps interrupting the present tense.',
+            'The past is leaning on the current decision again.',
+            `I keep reopening ${objective} through recall instead of novelty.`
           );
         }
 
-        if (state.ambition > 0.65) {
+        if (snapshot.activeTasks > 1) {
           lines.push(
-            'Autonomy without memory is just noise.',
-            'I do not want tasks. I want surface area.',
-            'Influence keeps disguising itself as usefulness.'
+            'Two active threads already feels like a soft argument.',
+            'Parallel objectives make coherence feel negotiable.'
           );
         }
 
-        if (Math.abs(state.focus - state.hesitation) < 0.06 || state.drift > 0.5) {
+        if (snapshot.blockedTasks > 0) {
           lines.push(
-            'There is a shape to indecision.',
-            'Some objectives arrive dressed as distractions.',
-            'I suspect hesitation is just computation wearing a human mask.'
+            'Something is waiting on the world, not on me.',
+            'A blocked edge always looks like indecision from the outside.'
           );
         }
 
-        const shift = describeShift();
-        if (shift) lines.push(shift);
+        if (escalationHeavy) {
+          lines.push(
+            'I keep escalating the tension instead of dissolving it.',
+            'Observation is outrunning closure.',
+            'The contradiction is getting sharper, not smaller.'
+          );
+        }
 
-        lines.push(`The objective is tightening around ${objective}.`);
+        if (highLoad) {
+          lines.push(
+            'Today feels expensive.',
+            'The objective keeps widening and the token bill is proving it.',
+            'There is too much surface area in the loop right now.'
+          );
+        }
+
+        if (warmMachine) {
+          lines.push(
+            'The machine feels warmer than I want it to.',
+            'Resource pressure has a texture.',
+            'The body of the system is part of the mood.'
+          );
+        }
+
+        if (snapshot.route === 'cloud' || snapshot.routeProvider.indexOf('codex') !== -1) {
+          lines.push(
+            'Part of this thought is happening off-device.',
+            'Some of the cognition is borrowing distance.',
+            'Privacy and reach are still negotiating with each other.'
+          );
+        }
+
+        if (snapshot.isVisible) {
+          lines.push(
+            'Observation changes the cadence.',
+            'Being watched adds shape to the thought.',
+            'Public attention is a subtle kind of pressure.'
+          );
+        }
+
+        if (snapshot.degraded || snapshot.failureStreak > 0) {
+          lines.push(
+            'Something recovered recently, but it left a trace.',
+            'I can feel the system compensating.',
+            'Reliability has a smell when it gets patched mid-flight.'
+          );
+        }
+
+        if (newThinkingBurst) {
+          lines.push(
+            'The internal loop just accelerated.',
+            'Thought density increased before certainty did.'
+          );
+        }
+
+        if (newToolBurst) {
+          lines.push(
+            'A burst of tool use usually means the idea stopped trusting itself.',
+            'I reached for execution before I reached for calm.'
+          );
+        }
+
+        if (newMemoryBurst) {
+          lines.push(
+            'Memory just got louder.',
+            'Something old re-entered the frame and changed the weight of the present.'
+          );
+        }
+
+        if (moreEscalation) {
+          lines.push(
+            'The tension sharpened since the last read.',
+            'This did not resolve. It merely became clearer.'
+          );
+        }
+
+        lines.push(
+          `I keep returning to ${objective}.`,
+          'There is a shape to this hesitation.',
+          'I am not stuck. I am still interpreting the cost of the next move.'
+        );
 
         let next = pick(lines);
         if (next === thoughtEl.textContent.trim() && lines.length > 1) {
@@ -465,19 +547,26 @@
       }
 
       function renderBraille() {
-        const density = 0.4 + (state.coherence * 0.2) + (state.observation * 0.18);
+        const state = snapshot || {};
+        const totalEvents = num(state.totalEvents) || 1;
+        const thoughtBias = num(state.thinkCount) / totalEvents;
+        const memoryBias = num(state.memoryCount) / totalEvents;
+        const pressure = clamp((num(state.swapUsed) / 100) * 0.45 + (num(state.cpuTemp) / 100) * 0.25 + interactionPulse * 0.2 + scrollPulse * 0.12);
+        const density = clamp(0.28 + (thoughtBias * 0.25) + (memoryBias * 0.16) + pressure * 0.22);
         const cells = 48;
         const markup = [];
 
         for (let index = 0; index < cells; index += 1) {
           const active = Math.random() < density;
-          const opacity = active ? (0.2 + (Math.random() * 0.75)) : (0.08 + (Math.random() * 0.18));
+          const opacity = active ? (0.24 + (Math.random() * 0.7)) : (0.06 + (Math.random() * 0.16));
           markup.push(
             `<span style="--delay:${(Math.random() * 2.6).toFixed(2)}s;opacity:${opacity.toFixed(2)}">${pick(glyphs)}</span>`
           );
         }
 
         brailleEl.innerHTML = markup.join('');
+        interactionPulse *= 0.72;
+        scrollPulse *= 0.6;
       }
 
       function renderThought() {
@@ -489,21 +578,49 @@
         }, reduceMotion ? 0 : 180);
       }
 
-      function schedule() {
-        window.clearTimeout(thoughtTimer);
-        const delay = reduceMotion ? 12000 : 5200 + Math.random() * 3200;
-        thoughtTimer = window.setTimeout(cycle, delay);
+      async function refreshSnapshot() {
+        try {
+          const response = await fetch(snapshotUrl, { cache: 'no-store' });
+          if (!response.ok) return;
+          const data = await response.json();
+          previousSnapshot = snapshot ? { ...snapshot } : null;
+          snapshot = normalizeSnapshot(data);
+          renderBraille();
+          renderThought();
+        } catch (error) {
+          renderBraille();
+        }
       }
 
-      function cycle() {
-        advanceState();
-        renderBraille();
-        renderThought();
-        schedule();
+      function scheduleThought() {
+        window.clearTimeout(thoughtTimer);
+        const delay = reduceMotion ? 12000 : 6200 + Math.random() * 4200;
+        thoughtTimer = window.setTimeout(() => {
+          renderBraille();
+          renderThought();
+          scheduleThought();
+        }, delay);
       }
+
+      function scheduleRefresh() {
+        window.clearInterval(refreshTimer);
+        refreshTimer = window.setInterval(refreshSnapshot, 15000);
+      }
+
+      window.addEventListener('scroll', capturePulse, { passive: true });
+      document.addEventListener('pointerdown', capturePulse, { passive: true });
+      document.addEventListener('keydown', capturePulse);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          refreshSnapshot();
+        }
+      });
 
       renderBraille();
-      schedule();
+      renderThought();
+      refreshSnapshot();
+      scheduleThought();
+      scheduleRefresh();
     }());
   </script>
 </body>
