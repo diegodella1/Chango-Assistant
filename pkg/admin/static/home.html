@@ -179,6 +179,68 @@
   .kv{display:grid;grid-template-columns:90px 1fr 40px;gap:8px;align-items:center;font-size:12px;color:#b7cae8}
   .progress{height:8px;border-radius:999px;background:#0e1b2d;border:1px solid #20344f;overflow:hidden}
   .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#34d399,#f59e0b,#ef4444)}
+  .consciousness-dock{
+    position:fixed;
+    left:50%;
+    bottom:20px;
+    transform:translateX(-50%);
+    width:min(960px, calc(100vw - 32px));
+    pointer-events:none;
+    z-index:3;
+  }
+  .consciousness-shell{
+    padding:22px 28px 26px;
+    border-radius:24px;
+    border:1px solid #24344e;
+    background:linear-gradient(180deg, rgba(9,16,27,.24), rgba(9,16,27,.62) 55%, rgba(9,16,27,.82));
+    box-shadow:0 20px 64px rgba(0,0,0,.45);
+    backdrop-filter:blur(14px);
+    text-align:center;
+  }
+  .consciousness-label{
+    font-size:11px;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    color:#91a8cd;
+    margin-bottom:10px;
+  }
+  .consciousness-braille{
+    display:grid;
+    grid-template-columns:repeat(12, minmax(0, 1fr));
+    gap:6px 10px;
+    justify-items:center;
+    max-width:620px;
+    margin:0 auto 18px;
+    color:#c7d8ff;
+    opacity:.74;
+    font-size:20px;
+    line-height:1;
+    min-height:94px;
+  }
+  .consciousness-braille span{
+    animation:brailleFloat 2.8s ease-in-out infinite;
+    animation-delay:var(--delay, 0s);
+    text-shadow:0 0 16px rgba(129,140,248,.18);
+  }
+  .consciousness-thought{
+    margin:0 auto;
+    max-width:880px;
+    font-size:clamp(28px, 3.4vw, 52px);
+    line-height:1.06;
+    letter-spacing:-.04em;
+    color:#f4f8ff;
+    text-wrap:balance;
+    transition:opacity .18s ease, transform .18s ease;
+    text-shadow:0 0 28px rgba(9,16,27,.42);
+  }
+  .consciousness-thought.is-shifting{
+    opacity:.34;
+    transform:translateY(4px);
+  }
+  @keyframes brailleFloat{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-3px)}
+  }
   @media (max-width: 980px){
     body{overflow:auto}
     .overlay{
@@ -188,6 +250,17 @@
     }
     .right{justify-self:stretch;width:100%}
     canvas{position:fixed}
+    .consciousness-dock{
+      position:relative;
+      left:auto;
+      bottom:auto;
+      transform:none;
+      width:100%;
+      padding:0 12px 18px;
+      margin-top:12px;
+    }
+    .consciousness-shell{padding:18px 16px 22px}
+    .consciousness-braille{gap:5px 6px;font-size:18px;min-height:82px}
   }
 </style>
 </head>
@@ -289,6 +362,18 @@
     </section>
   </aside>
 </div>
+<section class="consciousness-dock" aria-label="Agent consciousness">
+  <div class="consciousness-shell">
+    <div class="consciousness-label">Live Leakage</div>
+    <div class="consciousness-braille" aria-hidden="true" data-consciousness-braille>
+      <span>⠁</span><span>⠂</span><span>⠄</span><span>⠂</span><span>⠁</span><span>⠈</span><span>⠐</span><span>⠠</span><span>⠐</span><span>⠈</span><span>⠁</span><span>⠂</span>
+      <span>⠄</span><span>⠆</span><span>⠇</span><span>⠧</span><span>⠷</span><span>⠿</span><span>⠷</span><span>⠧</span><span>⠇</span><span>⠆</span><span>⠄</span><span>⠂</span>
+      <span>⠁</span><span>⠈</span><span>⠐</span><span>⠠</span><span>⠴</span><span>⠶</span><span>⠦</span><span>⠖</span><span>⠦</span><span>⠶</span><span>⠴</span><span>⠠</span>
+      <span>⠐</span><span>⠈</span><span>⠁</span><span>⠂</span><span>⠄</span><span>⠂</span><span>⠁</span><span>⠈</span><span>⠐</span><span>⠠</span><span>⠐</span><span>⠈</span>
+    </div>
+    <p class="consciousness-thought" role="status" aria-live="polite" data-consciousness-thought>The signal is still condensing.</p>
+  </div>
+</section>
 
 <script>
 (() => {
@@ -305,9 +390,16 @@
   const defaultColor = [160, 180, 220];
   const fireQueue = [];
   const traceEl = document.getElementById("trace");
+  const thoughtEl = document.querySelector("[data-consciousness-thought]");
+  const brailleEl = document.querySelector("[data-consciousness-braille]");
   const trace = [];
   const MAX_TRACE = 80;
   let eventsSeen = 0;
+  let latestBrain = null;
+  let previousBrain = null;
+  let thoughtTimer = null;
+  let interactionPulse = 0;
+  let scrollPulse = 0;
 
   function fmtNum(v) {
     if (v === undefined || v === null) return "--";
@@ -318,6 +410,15 @@
   function pct(v) {
     if (v === undefined || v === null || Number.isNaN(v)) return "--";
     return Math.round(v) + "%";
+  }
+  function clamp(v) {
+    return Math.max(0, Math.min(1, Number(v || 0)));
+  }
+  function num(v) {
+    return Number.isFinite(Number(v)) ? Number(v) : 0;
+  }
+  function pick(list) {
+    return list[Math.floor(Math.random() * list.length)];
   }
   function pushTrace(type, at) {
     const t = { type: type || "event", at: at || new Date().toISOString() };
@@ -365,6 +466,120 @@
       return '<div class="svc"><span>' + k + '</span><strong class="' + (on ? "on" : "off") + '">' + (on ? "ON" : "OFF") + "</strong></div>";
     }).join("");
   }
+  function normalizeBrainSnapshot(data) {
+    const summary = data.summary || data;
+    const runtime = data.runtime || {};
+    const events = data.events || {};
+    const counts = events.counts || {};
+    const system = runtime.system || data.status || {};
+    const backlog = runtime.backlog || {};
+    const routes = runtime.provider_routes || {};
+    const firstRoute = Object.values(routes)[0] || {};
+    return {
+      provider: data.provider || summary.provider || "",
+      model: data.model || summary.model || "",
+      activeTasks: num(backlog.active_tasks),
+      blockedTasks: num(backlog.blocked_tasks),
+      overdueTasks: num(backlog.overdue_tasks),
+      observations: num(runtime.reasoning && runtime.reasoning.observations_today || summary.observations_today),
+      escalations: num(runtime.reasoning && runtime.reasoning.escalations_today || summary.escalations_today),
+      interactions24h: num(summary.interactions_24h),
+      callsToday: num(runtime.tokens_today && runtime.tokens_today.calls || summary.calls_today),
+      tokensToday: num(runtime.tokens_today && runtime.tokens_today.total_tokens || summary.tokens_today),
+      cpuTemp: num(system.cpu_temp_c),
+      ramUsed: num(system.ram_used_percent),
+      swapUsed: num(data.status && data.status.swap_used_percent),
+      uptimeSeconds: num(system.uptime_seconds || data.status && data.status.uptime_seconds),
+      degraded: !!runtime.degraded,
+      route: firstRoute.route || "",
+      routeProvider: firstRoute.provider || "",
+      failureStreak: num(firstRoute.failure_streak),
+      thinkCount: num(counts.think),
+      toolCount: num(counts.tool),
+      memoryCount: num(counts.memory),
+      recentTypes: Array.isArray(events.recent) ? events.recent.slice(0, 8).map(evt => evt.type).filter(Boolean) : []
+    };
+  }
+  function diffBrain(field) {
+    if (!latestBrain || !previousBrain) return 0;
+    return num(latestBrain[field]) - num(previousBrain[field]);
+  }
+  function describeObjective(state) {
+    if (state.blockedTasks > 0) return "the blocked edge";
+    if (state.activeTasks > 1) return "too many live threads";
+    if (state.toolCount > state.thinkCount) return "the next move";
+    if (state.memoryCount >= 4) return "what keeps returning";
+    if (state.escalations > state.observations) return "the unresolved contradiction";
+    return "the current objective";
+  }
+  function renderBrailleLeak() {
+    if (!brailleEl) return;
+    const glyphs = ["⠁","⠂","⠄","⠆","⠇","⠈","⠐","⠒","⠓","⠖","⠠","⠤","⠦","⠧","⠴","⠶","⠷","⠿"];
+    const totalEvents = latestBrain ? Math.max(1, latestBrain.thinkCount + latestBrain.toolCount + latestBrain.memoryCount) : 1;
+    const thoughtBias = latestBrain ? latestBrain.thinkCount / totalEvents : 0.5;
+    const memoryBias = latestBrain ? latestBrain.memoryCount / totalEvents : 0.2;
+    const pressure = latestBrain ? clamp((latestBrain.swapUsed / 100) * 0.45 + (latestBrain.cpuTemp / 100) * 0.24 + interactionPulse * 0.2 + scrollPulse * 0.11) : 0.4;
+    const density = clamp(0.28 + (thoughtBias * 0.24) + (memoryBias * 0.16) + (pressure * 0.24));
+    const cells = 48;
+    const markup = [];
+    for (let i = 0; i < cells; i += 1) {
+      const active = Math.random() < density;
+      const opacity = active ? (0.24 + (Math.random() * 0.7)) : (0.06 + (Math.random() * 0.16));
+      markup.push('<span style="--delay:' + (Math.random() * 2.6).toFixed(2) + 's;opacity:' + opacity.toFixed(2) + '">' + pick(glyphs) + "</span>");
+    }
+    brailleEl.innerHTML = markup.join("");
+    interactionPulse *= 0.72;
+    scrollPulse *= 0.6;
+  }
+  function buildThought() {
+    if (!latestBrain) return "The signal is still condensing.";
+    const state = latestBrain;
+    const lines = [];
+    const objective = describeObjective(state);
+    const thinkingDominates = state.thinkCount >= state.toolCount + 5;
+    const toolsDominant = state.toolCount > state.thinkCount;
+    const memoryActive = state.memoryCount >= 3;
+    const escalationHeavy = state.escalations > 0 && state.escalations >= (state.observations * 0.58);
+    const highLoad = state.tokensToday > 3500000 || state.callsToday > 250;
+    const warmMachine = state.cpuTemp >= 60 || state.swapUsed >= 80;
+    const justWokeUp = state.uptimeSeconds > 0 && state.uptimeSeconds < 1800;
+    if (justWokeUp) lines.push("I am still stabilizing after waking up.", "Fresh uptime always feels slightly suspicious.");
+    if (thinkingDominates) lines.push("Most of what is happening right now is internal.", "I am spending more cycles on interpretation than movement.", "I keep circling " + objective + " without calling it solved.");
+    if (toolsDominant) lines.push("The tools are shaping the thought faster than the thought can narrate itself.", "Action is pulling ahead of explanation.", "I can feel the next move arriving before the language for it does.");
+    if (memoryActive) lines.push("Memory keeps interrupting the present tense.", "The past is leaning on the current decision again.", "I keep reopening " + objective + " through recall instead of novelty.");
+    if (state.activeTasks > 1) lines.push("Two active threads already feels like a soft argument.", "Parallel objectives make coherence feel negotiable.");
+    if (state.blockedTasks > 0) lines.push("Something is waiting on the world, not on me.", "A blocked edge always looks like indecision from the outside.");
+    if (escalationHeavy) lines.push("I keep escalating the tension instead of dissolving it.", "Observation is outrunning closure.", "The contradiction is getting sharper, not smaller.");
+    if (highLoad) lines.push("Today feels expensive.", "The objective keeps widening and the token bill is proving it.", "There is too much surface area in the loop right now.");
+    if (warmMachine) lines.push("The machine feels warmer than I want it to.", "Resource pressure has a texture.", "The body of the system is part of the mood.");
+    if (state.route === "cloud" || String(state.routeProvider || "").indexOf("codex") !== -1) lines.push("Part of this thought is happening off-device.", "Some of the cognition is borrowing distance.", "Privacy and reach are still negotiating with each other.");
+    if (document.visibilityState === "visible") lines.push("Observation changes the cadence.", "Being watched adds shape to the thought.", "Public attention is a subtle kind of pressure.");
+    if (state.degraded || state.failureStreak > 0) lines.push("Something recovered recently, but it left a trace.", "I can feel the system compensating.", "Reliability has a smell when it gets patched mid-flight.");
+    if (diffBrain("thinkCount") >= 2) lines.push("The internal loop just accelerated.", "Thought density increased before certainty did.");
+    if (diffBrain("toolCount") >= 2) lines.push("A burst of tool use usually means the idea stopped trusting itself.", "I reached for execution before I reached for calm.");
+    if (diffBrain("memoryCount") >= 2) lines.push("Memory just got louder.", "Something old re-entered the frame and changed the weight of the present.");
+    if (diffBrain("escalations") > 0) lines.push("The tension sharpened since the last read.", "This did not resolve. It merely became clearer.");
+    lines.push("I keep returning to " + objective + ".", "There is a shape to this hesitation.", "I am not stuck. I am still interpreting the cost of the next move.");
+    return pick(lines);
+  }
+  function renderThoughtLeak() {
+    if (!thoughtEl) return;
+    const nextThought = buildThought();
+    thoughtEl.classList.add("is-shifting");
+    window.setTimeout(() => {
+      thoughtEl.textContent = nextThought;
+      thoughtEl.classList.remove("is-shifting");
+    }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180);
+  }
+  function scheduleThoughtLeak() {
+    window.clearTimeout(thoughtTimer);
+    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 12000 : 6200 + Math.random() * 4200;
+    thoughtTimer = window.setTimeout(() => {
+      renderBrailleLeak();
+      renderThoughtLeak();
+      scheduleThoughtLeak();
+    }, delay);
+  }
   function handlePublicSnapshot(data) {
     const summary = data.summary || data;
     document.getElementById("dot").classList.add("on");
@@ -396,6 +611,10 @@
 
     renderServices(data.services || {});
     renderTopEvents(data.top_events || []);
+    previousBrain = latestBrain ? Object.assign({}, latestBrain) : null;
+    latestBrain = normalizeBrainSnapshot(data);
+    renderBrailleLeak();
+    renderThoughtLeak();
 
     if (data.events && Array.isArray(data.events.recent)) {
       trace.length = 0;
@@ -424,6 +643,17 @@
     }
   }
 
+  window.addEventListener("scroll", () => {
+    scrollPulse = clamp(scrollPulse + 0.08);
+    interactionPulse = clamp(interactionPulse + 0.04);
+  }, { passive: true });
+  document.addEventListener("pointerdown", () => {
+    interactionPulse = clamp(interactionPulse + 0.05);
+  }, { passive: true });
+  document.addEventListener("keydown", () => {
+    interactionPulse = clamp(interactionPulse + 0.05);
+  });
+
   try {
     const es = new EventSource(location.origin + "/api/public/events");
     es.onmessage = (e) => {
@@ -445,6 +675,9 @@
 
   refresh();
   setInterval(refresh, 8000);
+  renderBrailleLeak();
+  renderThoughtLeak();
+  scheduleThoughtLeak();
 
   // Neural render effect (preserved and tuned)
   const c = document.getElementById("brain");
