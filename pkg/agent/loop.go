@@ -456,6 +456,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 	// 1. Update tool contexts
 	al.updateToolContexts(opts.Channel, opts.ChatID)
+	localFastPath := strings.EqualFold(al.cfg.Agents.Defaults.Provider, "llamacpp")
 
 	// 2. Build messages (skip history for heartbeat)
 	var history []providers.Message
@@ -463,6 +464,10 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	if !opts.NoHistory {
 		history = al.sessions.GetHistory(opts.SessionKey)
 		summary = al.sessions.GetSummary(opts.SessionKey)
+		if localFastPath {
+			history = compactLocalHistory(history, 4)
+			summary = truncateLocalSummary(summary, 1200)
+		}
 	}
 	messages := al.contextBuilder.BuildMessages(
 		history,
@@ -474,7 +479,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	)
 
 	// 2b. Working memory scratchpad — inject active thoughts for this session
-	if !opts.NoHistory {
+	if !opts.NoHistory && !localFastPath {
 		scratchpadText := al.scratchpad.Format(opts.SessionKey)
 		if scratchpadText != "" {
 			scratchpadMsg := providers.Message{
@@ -504,7 +509,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	// 2d. Inner monologue — plan before responding (System 2 thinking)
 	// Skip for heartbeat, cron, short messages, and /commands
 	var monologueResult string
-	if !opts.NoHistory && len(opts.UserMessage) > 20 && !strings.HasPrefix(opts.UserMessage, "/") && opts.Feature == telemetry.FeatureChat {
+	if !localFastPath && !opts.NoHistory && len(opts.UserMessage) > 20 && !strings.HasPrefix(opts.UserMessage, "/") && opts.Feature == telemetry.FeatureChat {
 		monologueResult = al.innerMonologue(ctx, opts.UserMessage, history)
 		if monologueResult != "" {
 			// Inject the monologue as a system message just before the user message
@@ -520,7 +525,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 
 	// 2e. Analogical reasoning — search KG and memory for similar past experiences
 	// Skip for heartbeat, cron, and /commands
-	if !opts.NoHistory && opts.UserMessage != "" && !strings.HasPrefix(opts.UserMessage, "/") {
+	if !localFastPath && !opts.NoHistory && opts.UserMessage != "" && !strings.HasPrefix(opts.UserMessage, "/") {
 		analogies := al.findAnalogies(opts.UserMessage)
 		if analogies != "" {
 			analogyMsg := providers.Message{
@@ -537,7 +542,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	// 2f. Autonomy signals — recurrent topics and challenge bias
-	if !opts.NoHistory && opts.UserMessage != "" && opts.Feature == telemetry.FeatureChat {
+	if !localFastPath && !opts.NoHistory && opts.UserMessage != "" && opts.Feature == telemetry.FeatureChat {
 		if autonomyHint := buildAutonomyHint(opts.UserMessage, history); autonomyHint != "" {
 			hint := providers.Message{
 				Role:    "system",
@@ -760,6 +765,20 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	return finalContent, media, nil
+}
+
+func compactLocalHistory(history []providers.Message, maxMessages int) []providers.Message {
+	if maxMessages <= 0 || len(history) <= maxMessages {
+		return history
+	}
+	return append([]providers.Message(nil), history[len(history)-maxMessages:]...)
+}
+
+func truncateLocalSummary(summary string, maxChars int) string {
+	if maxChars <= 0 || len(summary) <= maxChars {
+		return summary
+	}
+	return summary[:maxChars] + "\n\n[... resumen recortado para modo local ...]"
 }
 
 // runLLMIteration executes the LLM call loop with tool handling.
