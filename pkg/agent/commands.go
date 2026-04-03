@@ -18,7 +18,7 @@ var defaultProviderModels = map[string]string{
 	"anthropic":  "claude-sonnet-4-20250514",
 	"deepseek":   "deepseek-chat",
 	"gemini":     "gemini-2.5-flash",
-	"llamacpp":   "local",
+	"llamacpp":   "gemma-4-E2B-it",
 }
 
 // handleModelCommand handles the /model command to view or change the current model at runtime.
@@ -42,6 +42,9 @@ func (al *AgentLoop) handleModelCommand(content string) (string, bool) {
 
 		// Update config and persist
 		al.cfg.Agents.Defaults.Model = newModel
+		if strings.EqualFold(al.cfg.Agents.Defaults.Provider, "llamacpp") {
+			al.cfg.Providers.LlamaCpp.DefaultModel = newModel
+		}
 		if al.configPath != "" {
 			if err := config.SaveConfig(al.configPath, al.cfg); err != nil {
 				logger.WarnCF("agent", "Failed to persist model change",
@@ -93,7 +96,9 @@ func (al *AgentLoop) handleProviderCommand(content string) (string, bool) {
 
 	// Set default model for the new provider
 	newModel := oldModel
-	if dm, ok := defaultProviderModels[newProvider]; ok {
+	if newProvider == "llamacpp" && strings.TrimSpace(al.cfg.Providers.LlamaCpp.DefaultModel) != "" {
+		newModel = strings.TrimSpace(al.cfg.Providers.LlamaCpp.DefaultModel)
+	} else if dm, ok := defaultProviderModels[newProvider]; ok {
 		newModel = dm
 	}
 	al.cfg.Agents.Defaults.Model = newModel

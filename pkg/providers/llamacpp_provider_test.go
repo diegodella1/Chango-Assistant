@@ -18,6 +18,29 @@ func TestBuildChatMLPrompt(t *testing.T) {
 	}
 }
 
+func TestBuildGemmaPrompt(t *testing.T) {
+	messages := []Message{
+		{Role: "system", Content: "Sos un asistente útil."},
+		{Role: "user", Content: "Hola, ¿cómo estás?"},
+		{Role: "assistant", Content: "Todo bien."},
+	}
+
+	prompt := buildGemmaPrompt(messages)
+
+	expected := "<start_of_turn>user\nSystem instruction:\nSos un asistente útil.<end_of_turn>\n<start_of_turn>user\nHola, ¿cómo estás?<end_of_turn>\n<start_of_turn>model\nTodo bien.<end_of_turn>\n<start_of_turn>model\n"
+	if prompt != expected {
+		t.Errorf("Gemma prompt mismatch.\nGot:\n%s\nExpected:\n%s", prompt, expected)
+	}
+}
+
+func TestBuildLocalPromptUsesGemmaFormat(t *testing.T) {
+	messages := []Message{{Role: "user", Content: "Hola"}}
+	prompt := buildLocalPrompt(messages, "/models/gemma-4-e2b-it-Q8_0.gguf")
+	if !contains(prompt, "<start_of_turn>user") {
+		t.Error("expected Gemma prompt format for gemma model")
+	}
+}
+
 func TestBuildChatMLPromptMultimodal(t *testing.T) {
 	messages := []Message{
 		{Role: "user", Parts: []ContentPart{

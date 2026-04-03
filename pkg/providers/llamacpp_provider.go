@@ -36,7 +36,7 @@ func NewLlamaCppProvider(cfg config.LlamaCppConfig) (*LlamaCppProvider, error) {
 		p.httpProv = NewHTTPProvider("", cfg.APIBase, "")
 		p.defaultMdl = cfg.DefaultModel
 		if p.defaultMdl == "" {
-			p.defaultMdl = "qwen2.5-1.5b-instruct"
+			p.defaultMdl = "gemma-4-E2B-it"
 		}
 
 	case "binary":
@@ -156,9 +156,9 @@ func truncateMessagesForContext(messages []Message, maxChars int) []Message {
 	return append(system, kept...)
 }
 
-// chatBinary runs llama-cli as a subprocess with a ChatML prompt.
+// chatBinary runs llama-cli as a subprocess with a model-appropriate prompt format.
 func (p *LlamaCppProvider) chatBinary(ctx context.Context, messages []Message, tools []ToolDefinition, options map[string]interface{}) (*LLMResponse, error) {
-	prompt := buildChatMLPrompt(messages)
+	prompt := buildLocalPrompt(messages, p.cfg.ModelPath)
 
 	maxTok := p.maxTokens()
 	if mt, ok := options["max_tokens"].(int); ok && mt > 0 {
@@ -235,8 +235,8 @@ func (p *LlamaCppProvider) chatBinary(ctx context.Context, messages []Message, t
 	output = stripSpecialTokens(output)
 
 	logger.InfoCF("llamacpp", "Inference complete", map[string]interface{}{
-		"elapsed":     elapsed.String(),
-		"output_len":  len(output),
+		"elapsed":      elapsed.String(),
+		"output_len":   len(output),
 		"output_runes": len([]rune(output)),
 	})
 
@@ -279,7 +279,20 @@ func (p *LlamaCppProvider) Ping(ctx context.Context) error {
 	return nil
 }
 
-// buildChatMLPrompt converts messages to ChatML format (Qwen uses this natively).
+// buildLocalPrompt converts messages to the prompt format expected by the local model.
+func buildLocalPrompt(messages []Message, modelHint string) string {
+	if usesGemmaPrompt(modelHint) {
+		return buildGemmaPrompt(messages)
+	}
+	return buildChatMLPrompt(messages)
+}
+
+func usesGemmaPrompt(modelHint string) bool {
+	lower := strings.ToLower(strings.TrimSpace(modelHint))
+	return strings.Contains(lower, "gemma")
+}
+
+// buildChatMLPrompt converts messages to ChatML format.
 func buildChatMLPrompt(messages []Message) string {
 	var sb strings.Builder
 	for _, msg := range messages {
@@ -309,6 +322,44 @@ func buildChatMLPrompt(messages []Message) string {
 
 	// Prompt the assistant to respond
 	sb.WriteString("<|im_start|>assistant\n")
+	return sb.String()
+}
+
+// buildGemmaPrompt converts messages to Gemma instruction format.
+func buildGemmaPrompt(messages []Message) string {
+	var sb strings.Builder
+	for _, msg := range messages {
+		role := "user"
+		if msg.Role == "assistant" {
+			role = "model"
+		}
+
+		content := msg.Content
+		if content == "" && len(msg.Parts) > 0 {
+			for _, part := range msg.Parts {
+				if part.Type == "text" && part.Text != "" {
+					content += part.Text + "\n"
+				}
+			}
+			content = strings.TrimSpace(content)
+		}
+
+		if msg.ToolCallID != "" {
+			content = fmt.Sprintf("[Tool Result %s]: %s", msg.ToolCallID, content)
+		}
+
+		if msg.Role == "system" {
+			content = "System instruction:\n" + content
+		}
+
+		sb.WriteString("<start_of_turn>")
+		sb.WriteString(role)
+		sb.WriteString("\n")
+		sb.WriteString(content)
+		sb.WriteString("<end_of_turn>\n")
+	}
+
+	sb.WriteString("<start_of_turn>model\n")
 	return sb.String()
 }
 
@@ -366,18 +417,11 @@ func CreateLlamaCppProvider(cfg *config.Config) (LLMProvider, error) {
 func LlamaCppModelInfo() []map[string]string {
 	return []map[string]string{
 		{
-			"name": "Qwen2.5-1.5B-Instruct",
-			"file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-			"size": "~1.0 GB",
-			"use":  "Intent routing, short replies, summarization",
-			"url":  "huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF",
-		},
-		{
-			"name": "Qwen2.5-0.5B-Instruct",
-			"file": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-			"size": "~400 MB",
-			"use":  "Fast intent classification, yes/no, simple extraction",
-			"url":  "huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+			"name": "Gemma 4 E2B Instruct",
+			"file": "gemma-4-e2b-it-Q8_0.gguf",
+			"size": "~5.0 GB",
+			"use":  "Local inner monologue, privacy routing, lightweight reasoning",
+			"url":  "huggingface.co/ggml-org/gemma-4-E2B-it-GGUF",
 		},
 	}
 }

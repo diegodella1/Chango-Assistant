@@ -77,7 +77,7 @@ var providerModels = map[string][]string{
 	"anthropic":  {"claude-sonnet-4-20250514", "claude-opus-4-20250514"},
 	"deepseek":   {"deepseek-chat", "deepseek-reasoner"},
 	"gemini":     {"gemini-2.5-flash", "gemini-2.5-pro"},
-	"llamacpp":   {"local", "qwen2.5-0.5b-instruct", "qwen2.5-1.5b-instruct"},
+	"llamacpp":   {"gemma-4-E2B-it", "local"},
 }
 
 type thinkingCancel struct {
