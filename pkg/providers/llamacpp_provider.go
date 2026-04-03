@@ -87,13 +87,15 @@ func (p *LlamaCppProvider) chatServer(ctx context.Context, messages []Message, t
 	}
 
 	// Truncate messages to fit within context window.
-	// Reserve tokens for output. Estimate ~4 chars per token.
+	// Reserve tokens for output. Use a conservative chars/token estimate for local models
+	// because the full Chango system prompt can tokenize much denser than plain chat text.
 	ctxSize := p.cfg.ContextSize
 	if ctxSize <= 0 {
 		ctxSize = 2048
 	}
-	maxPromptChars := (ctxSize - maxTok) * 4
+	maxPromptChars := (ctxSize - maxTok) * 2
 	messages = truncateMessagesForContext(messages, maxPromptChars)
+	messages = compactLocalMessages(messages, maxPromptChars)
 
 	resp, err := p.httpProv.Chat(ctx, messages, tools, model, options)
 	if err != nil {
@@ -154,6 +156,51 @@ func truncateMessagesForContext(messages []Message, maxChars int) []Message {
 	}
 
 	return append(system, kept...)
+}
+
+// compactLocalMessages applies an extra defensive trim before sending a request to
+// llama-server. The Chango system prompt can become very large, so keep only the
+// first system message (trimmed) plus a short tail of recent chat turns.
+func compactLocalMessages(messages []Message, maxChars int) []Message {
+	if len(messages) == 0 || maxChars <= 0 {
+		return messages
+	}
+
+	systemBudget := maxChars / 3
+	if systemBudget > 4000 {
+		systemBudget = 4000
+	}
+	if systemBudget < 1200 {
+		systemBudget = 1200
+	}
+
+	trimmed := make([]Message, 0, len(messages))
+	nonSystem := make([]Message, 0, len(messages))
+
+	for i, msg := range messages {
+		if msg.Role == "system" {
+			if i == 0 {
+				msg.Content = truncateToChars(msg.Content, systemBudget)
+				trimmed = append(trimmed, msg)
+			}
+			continue
+		}
+		nonSystem = append(nonSystem, msg)
+	}
+
+	if len(nonSystem) > 6 {
+		nonSystem = nonSystem[len(nonSystem)-6:]
+	}
+
+	trimmed = append(trimmed, nonSystem...)
+	return truncateMessagesForContext(trimmed, maxChars)
+}
+
+func truncateToChars(s string, maxChars int) string {
+	if maxChars <= 0 || len(s) <= maxChars {
+		return s
+	}
+	return s[:maxChars] + "\n\n[... contexto local recortado ...]"
 }
 
 // chatBinary runs llama-cli as a subprocess with a model-appropriate prompt format.
