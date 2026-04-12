@@ -783,7 +783,7 @@ func (s *Service) checkGitProjects() []Concern {
 		days := int(age.Hours() / 24)
 		summary := fmt.Sprintf("Proyecto '%s' sin commits hace %d dias", entry.Name(), days)
 
-		// Use Qwen local for a suggestion (~30 tokens, zero cloud cost)
+		// Use the local edge model for a suggestion (~30 tokens, zero cloud cost)
 		s.mu.RLock()
 		local := s.local
 		s.mu.RUnlock()

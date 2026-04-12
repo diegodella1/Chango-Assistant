@@ -394,6 +394,9 @@ func gatewayCmd() {
 		adminHandler.SetLightsTool(tools.NewLightsTool(cfg.WorkspacePath()))
 		adminHandler.SetVersion(version)
 		adminHandler.SetReloadFn(func() error {
+			if err := agentLoop.ReloadRuntimeFromConfig(); err != nil {
+				return err
+			}
 			return cronService.Load()
 		})
 		adminHandler.Register(healthMux)

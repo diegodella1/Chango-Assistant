@@ -82,7 +82,7 @@ func (al *AgentLoop) handleProviderCommand(content string) (string, bool) {
 	if newProvider == "" {
 		return fmt.Sprintf("Current provider: %s (model: %s)", al.cfg.Agents.Defaults.Provider, al.model), true
 	}
-	newProvider = strings.ToLower(newProvider)
+	newProvider = providers.NormalizeProviderName(newProvider)
 
 	oldProvider := al.cfg.Agents.Defaults.Provider
 	oldModel := al.model
@@ -158,7 +158,7 @@ func (al *AgentLoop) tryAutoRecovery() {
 		savedProvider := al.cfg.Agents.Defaults.Provider
 		savedModel := al.cfg.Agents.Defaults.Model
 
-		al.cfg.Agents.Defaults.Provider = candidate
+		al.cfg.Agents.Defaults.Provider = providers.NormalizeProviderName(candidate)
 		if dm, ok := defaultProviderModels[candidate]; ok {
 			al.cfg.Agents.Defaults.Model = dm
 		}

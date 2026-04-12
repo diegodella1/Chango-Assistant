@@ -168,9 +168,8 @@ func inferCapabilities(provider, model string) ModelCapabilities {
 		caps.Vision = CapabilitySupported
 	case strings.Contains(lower, "gpt-3.5"),
 		strings.Contains(lower, "claude-2"),
-		strings.Contains(lower, "qwen2.5-0.5b-instruct"),
-		strings.Contains(lower, "qwen2.5-1.5b-instruct"),
-		strings.Contains(lower, "qwen2.5-3b-instruct"),
+		strings.Contains(lower, "gemma-4-e2b"),
+		strings.Contains(lower, "gemma-4-e4b"),
 		strings.Contains(lower, "llama-2"):
 		caps.Vision = CapabilityUnsupported
 	}

@@ -78,6 +78,61 @@ func (al *AgentLoop) SetBackgroundProvider(p providers.LLMProvider, model string
 	al.backgroundModel = model
 }
 
+// ReloadRuntimeFromConfig rebuilds runtime provider state after config changes.
+// It updates the active provider/model plus local/background providers.
+func (al *AgentLoop) ReloadRuntimeFromConfig() error {
+	mainProvider, err := providers.CreateProvider(al.cfg)
+	if err != nil {
+		return err
+	}
+
+	al.provider = mainProvider
+	al.model = providers.NormalizeModelName(al.cfg.Agents.Defaults.Model)
+	al.contextWindow = al.cfg.Agents.Defaults.MaxTokens
+	al.maxIterations = al.cfg.Agents.Defaults.MaxToolIterations
+	al.contextBuilder.SetModel(al.model)
+
+	if al.subagentMgr != nil {
+		al.subagentMgr.SetProvider(mainProvider)
+		al.subagentMgr.SetDefaultModel(al.model)
+	}
+
+	al.localProvider = nil
+	if al.cfg.Providers.LlamaCpp.Enabled {
+		localProv, localErr := providers.CreateLlamaCppProvider(al.cfg)
+		if localErr != nil {
+			logger.WarnCF("agent", "Failed to reload local provider", map[string]interface{}{
+				"error": localErr.Error(),
+			})
+		} else {
+			al.localProvider = localProv
+		}
+	}
+
+	al.backgroundProvider = nil
+	al.backgroundModel = ""
+	if bgName := providers.NormalizeProviderName(al.cfg.Background.Provider); bgName != "" {
+		bgProv, bgErr := providers.CreateProviderByName(al.cfg, bgName)
+		if bgErr != nil {
+			logger.WarnCF("agent", "Failed to reload background provider", map[string]interface{}{
+				"provider": bgName,
+				"error":    bgErr.Error(),
+			})
+		} else {
+			al.backgroundProvider = bgProv
+			al.backgroundModel = providers.NormalizeModelName(al.cfg.Background.Model)
+		}
+	}
+
+	logger.InfoCF("agent", "Runtime reloaded from config", map[string]interface{}{
+		"provider":         providers.NormalizeProviderName(al.cfg.Agents.Defaults.Provider),
+		"model":            al.model,
+		"has_local":        al.localProvider != nil,
+		"background_model": al.backgroundModel,
+	})
+	return nil
+}
+
 // bgProvider returns the background provider if set, otherwise the main provider.
 func (al *AgentLoop) bgProvider() providers.LLMProvider {
 	if al.backgroundProvider != nil {

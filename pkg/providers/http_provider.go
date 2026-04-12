@@ -301,14 +301,15 @@ func AvailableProviders(cfg *config.Config) []string {
 }
 
 func CreateProvider(cfg *config.Config) (LLMProvider, error) {
-	model := cfg.Agents.Defaults.Model
-	providerName := strings.ToLower(cfg.Agents.Defaults.Provider)
+	model := NormalizeModelName(cfg.Agents.Defaults.Model)
+	providerName := NormalizeProviderName(cfg.Agents.Defaults.Provider)
 
 	var apiKey, apiBase, proxy string
 
 	lowerModel := strings.ToLower(model)
 
-	// First, try to use explicitly configured provider
+	// First, try to use an explicitly configured provider.
+	// If the user selected one, do not silently fall back to another backend.
 	if providerName != "" {
 		switch providerName {
 		case "groq":
@@ -418,9 +419,10 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 
 		case "llamacpp", "llama", "local", "qwen":
 			return CreateLlamaCppProvider(cfg)
-
+		default:
+			return nil, fmt.Errorf("unsupported provider: %s", providerName)
 		}
-
+		return nil, fmt.Errorf("provider %q is selected but not configured", providerName)
 	}
 
 	// Fallback: detect provider from model name
@@ -544,7 +546,7 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 // Used for background/escalation providers that don't need privacy routing or fallback wrapping.
 func CreateProviderByName(cfg *config.Config, providerName string) (LLMProvider, error) {
 	var apiKey, apiBase string
-	switch strings.ToLower(providerName) {
+	switch NormalizeProviderName(providerName) {
 	case "groq":
 		apiKey = cfg.Providers.Groq.APIKey
 		apiBase = cfg.Providers.Groq.APIBase

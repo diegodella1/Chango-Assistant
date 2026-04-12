@@ -138,7 +138,7 @@ func (pr *PrivacyRouter) Chat(ctx context.Context, messages []Message, tools []T
 		atomic.AddInt64(&pr.stats.Catches, 1)
 
 		// Even for sensitive content: if tools are requested, escalate to cloud.
-		// The local model (Qwen 0.5B) can't generate tool calls reliably.
+		// The local edge model can't generate tool calls reliably enough yet.
 		// Trade-off: privacy vs functionality — functionality wins when tools are needed.
 		if len(tools) > 0 {
 			logger.WarnCF("privacy", "Sensitive content detected but tools needed — routing to cloud", map[string]interface{}{

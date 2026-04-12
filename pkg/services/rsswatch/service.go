@@ -37,7 +37,7 @@ type Service struct {
 	bus       *bus.MessageBus
 	state     *state.Manager
 	workspace string
-	local     providers.LLMProvider // Qwen local for classification
+	local     providers.LLMProvider // local edge model for classification
 	seen      map[string]bool      // URLs already processed
 	digest    []RSSItem            // today's relevant items
 	lastDay   string               // track day changes for digest delivery

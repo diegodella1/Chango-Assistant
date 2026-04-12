@@ -1685,12 +1685,22 @@ func (h *Handler) agentReload(w http.ResponseWriter, r *http.Request) {
 	h.config.Agents = newCfg.Agents
 	h.config.Providers = newCfg.Providers
 	h.config.Tools = newCfg.Tools
+	h.config.Gateway = newCfg.Gateway
 	h.config.Heartbeat = newCfg.Heartbeat
 	h.config.Sentinel = newCfg.Sentinel
 	h.config.Devices = newCfg.Devices
 	h.config.Council = newCfg.Council
 	h.config.Channels = newCfg.Channels
 	h.config.Briefing = newCfg.Briefing
+	h.config.Privacy = newCfg.Privacy
+	h.config.Background = newCfg.Background
+	h.config.Health = newCfg.Health
+	h.config.RSS = newCfg.RSS
+	h.config.Reasoning = newCfg.Reasoning
+	h.config.Admin = newCfg.Admin
+	h.config.Autonomy = newCfg.Autonomy
+	h.config.TokenBudget = newCfg.TokenBudget
+	h.config.Wallet = newCfg.Wallet
 	reloaded = append(reloaded, "config")
 
 	// Reload cron jobs

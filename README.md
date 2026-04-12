@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Platform-Raspberry%20Pi%205-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white" alt="Raspberry Pi">
   <img src="https://img.shields.io/badge/Channel-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram">
   <img src="https://img.shields.io/badge/LLM-Multi--provider-8B5CF6?style=flat-square" alt="Multi-provider">
@@ -74,6 +74,7 @@ Chango also **auto-distills memories** — after each conversation, it extracts 
 - Gmail (read, search, send, reply)
 - Calendar (events, appointments, multiple calendars)
 - Drive (list, search, read documents)
+- Real account ownership: Chango has its own mailbox, calendar access, and Drive access
 
 **Communication & Media**
 - Voice transcription (Groq STT) + Text-to-Speech (Edge TTS, es-AR-TomasNeural)
@@ -85,10 +86,15 @@ Chango also **auto-distills memories** — after each conversation, it extracts 
 - Subagent system for parallel multi-step tasks
 - Reminders, tasks, cron jobs, snippets
 - HTTP requests to arbitrary APIs
+- GitHub-aware workflows for code changes and deployments
 
 **Smart Home**
 - Magic Home WiFi lights (discovery, on/off, RGB, brightness)
 - I2C / SPI hardware bus interaction
+
+**Money**
+- Lightning wallet via LNbits
+- Can check balance, create invoices, and pay Bolt11 invoices within configured limits
 
 **Security**
 - Encrypted credential vault (AES-256-GCM)
@@ -165,6 +171,54 @@ Chango also **auto-distills memories** — after each conversation, it extracts 
 
 ---
 
+## Provider Routing
+
+Chango is not tied to a single cloud model. It has:
+
+- A **main chat provider** selected in `agents.defaults.provider`
+- A **main model** selected in `agents.defaults.model`
+- An optional **local provider** (`llamacpp`) for monologue, privacy routing, and cheap local work
+- An optional **background provider** for cron / heartbeat / summarization escalation
+
+Important behavior:
+
+- If you select `openai`, Chango now uses `openai` or fails clearly. It does not silently fall back to `openrouter`.
+- Provider changes made through the admin panel or `/provider` are reloaded into the live runtime.
+- Sensitive turns may still be routed to the local model first by the Privacy Router, depending on policy.
+- Tool-heavy turns can still prefer cloud when the local model is too weak for reliable tool calling.
+
+---
+
+## What It Can Actually Own
+
+Chango is not "connected to" these things in an abstract sense. In this setup, they are part of its operating surface:
+
+- **Email**: its own Gmail / Google Workspace mailbox
+- **Calendar**: its own Google Calendar access
+- **Drive**: read/search/upload/share operations on Google Drive
+- **Wallet**: Lightning wallet through LNbits
+- **GitHub**: repo access for reading, editing, committing, and deploying code
+- **Telegram identity**: its own bot endpoint for ongoing conversations
+
+That means it can do real actions, not just talk about them.
+
+---
+
+## Limits
+
+Chango is powerful, but it is still an orchestration system around models, tools, and policies. Its practical limits matter:
+
+- It does **not** have continuous consciousness. Most "thought" is reconstructed from files, memory, and the current turn.
+- It does **not** learn arbitrary new skills from one example. It improves through notes, prompt updates, experiments, and code changes.
+- It does **not** guarantee correctness. Web research, tool use, and cloud model outputs can still be wrong.
+- It is only as capable as its configured credentials and tools. No API key, no action.
+- Local models are cheaper and more private, but weaker for long-context reasoning and tool calling.
+- Cloud providers are stronger, but introduce token cost, rate limits, outages, and privacy tradeoffs.
+- Wallet access should be treated as high-risk capability and bounded with strict spend limits.
+- Email, Drive, shell, and GitHub access mean misconfiguration can cause real side effects. This is an autonomous system, not a toy.
+
+---
+
 ## Quick Start
 
 ### 1. Clone and configure
@@ -203,6 +257,21 @@ Edit `~/.picoclaw/config.json`:
   }
 }
 ```
+
+Pick the active cloud provider explicitly:
+
+```jsonc
+{
+  "agents": {
+    "defaults": {
+      "provider": "openai",
+      "model": "gpt-5"
+    }
+  }
+}
+```
+
+If `provider` is set to `openai` but no OpenAI credential is configured, startup should fail clearly instead of silently routing to another backend.
 
 ### 3. Build and run
 

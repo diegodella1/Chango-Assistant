@@ -81,7 +81,7 @@ type HealthEndpoint struct {
 	Container    string `json:"container"`     // docker container to restart on failure
 }
 
-// RSSConfig configures the RSS/news reader (Go fetch + Qwen local filter).
+// RSSConfig configures the RSS/news reader (Go fetch + local edge model filter).
 type RSSConfig struct {
 	Enabled   bool      `json:"enabled" env:"PICOCLAW_RSS_ENABLED"`
 	Feeds     []RSSFeed `json:"feeds"`
@@ -310,7 +310,7 @@ type ProvidersConfig struct {
 	LlamaCpp      LlamaCppConfig `json:"llamacpp"`
 }
 
-// LlamaCppConfig configures local inference via llama.cpp (Qwen, etc.)
+// LlamaCppConfig configures local inference via llama.cpp (Gemma, etc.)
 type LlamaCppConfig struct {
 	Enabled      bool    `json:"enabled" env:"PICOCLAW_PROVIDERS_LLAMACPP_ENABLED"`
 	Mode         string  `json:"mode" env:"PICOCLAW_PROVIDERS_LLAMACPP_MODE"`                   // "server" or "binary"

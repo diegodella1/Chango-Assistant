@@ -13,6 +13,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
 // maskSecret returns "****" + last 4 chars, or empty if empty.
@@ -55,6 +56,13 @@ func decodeBody(r *http.Request, v interface{}) error {
 
 func (h *Handler) saveConfig() error {
 	return config.SaveConfig(h.configPath, h.config)
+}
+
+func (h *Handler) reloadRuntime() error {
+	if h.reloadFn == nil {
+		return nil
+	}
+	return h.reloadFn()
 }
 
 // --- Providers ---
@@ -140,6 +148,11 @@ func (h *Handler) settingsProviders(w http.ResponseWriter, r *http.Request) {
 		if err := h.saveConfig(); err != nil {
 			logger.ErrorCF("admin", "SaveConfig error", map[string]interface{}{"error": err.Error()})
 			jsonErr(w, http.StatusInternalServerError, "save failed")
+			return
+		}
+		if err := h.reloadRuntime(); err != nil {
+			logger.ErrorCF("admin", "Runtime reload error", map[string]interface{}{"error": err.Error()})
+			jsonErr(w, http.StatusInternalServerError, "saved config but runtime reload failed: "+err.Error())
 			return
 		}
 		logger.InfoC("admin", "Providers config updated")
@@ -414,10 +427,10 @@ func (h *Handler) settingsAgent(w http.ResponseWriter, r *http.Request) {
 		}
 		a := &h.config.Agents.Defaults
 		if req.Provider != "" {
-			a.Provider = req.Provider
+			a.Provider = providers.NormalizeProviderName(req.Provider)
 		}
 		if req.Model != "" {
-			a.Model = req.Model
+			a.Model = providers.NormalizeModelName(req.Model)
 		}
 		if req.Temperature >= 0 && req.Temperature <= 2 {
 			a.Temperature = req.Temperature
@@ -428,10 +441,19 @@ func (h *Handler) settingsAgent(w http.ResponseWriter, r *http.Request) {
 		if req.MaxToolIterations > 0 {
 			a.MaxToolIterations = req.MaxToolIterations
 		}
+		if _, err := providers.CreateProvider(h.config); err != nil {
+			jsonErr(w, http.StatusBadRequest, "invalid provider/model configuration: "+err.Error())
+			return
+		}
 
 		if err := h.saveConfig(); err != nil {
 			logger.ErrorCF("admin", "SaveConfig error", map[string]interface{}{"error": err.Error()})
 			jsonErr(w, http.StatusInternalServerError, "save failed")
+			return
+		}
+		if err := h.reloadRuntime(); err != nil {
+			logger.ErrorCF("admin", "Runtime reload error", map[string]interface{}{"error": err.Error()})
+			jsonErr(w, http.StatusInternalServerError, "saved config but runtime reload failed: "+err.Error())
 			return
 		}
 		logger.InfoC("admin", "Agent config updated")
