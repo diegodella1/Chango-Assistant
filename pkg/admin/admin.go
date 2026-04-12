@@ -22,6 +22,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/providers"
 	statepkg "github.com/sipeed/picoclaw/pkg/state"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
@@ -753,6 +754,14 @@ func (h *Handler) buildRuntimeDashboard() (map[string]interface{}, error) {
 		var reasoning map[string]interface{}
 		if json.Unmarshal(reasoningData, &reasoning) == nil {
 			result["reasoning"] = reasoning
+		}
+	}
+
+	if h.config != nil {
+		selection := providers.RuntimeSelection(h.config)
+		result["provider_selection"] = selection
+		if !selection.Valid {
+			result["degraded"] = true
 		}
 	}
 

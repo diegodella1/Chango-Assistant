@@ -317,6 +317,8 @@ Runs as a Docker container deployed via [Coolify](https://coolify.io/) on a Rasp
 **Alone**: monitors, reflects, remembers, alerts, improves itself.
 **Assisted**: thinks deep, executes with 30+ tools, challenges assumptions, learns from every interaction.
 
+For a more sober breakdown of the runtime design and where it is still weak, read [docs/ASSISTANT_ARCHITECTURE.md](docs/ASSISTANT_ARCHITECTURE.md).
+
 ---
 
 <p align="center">

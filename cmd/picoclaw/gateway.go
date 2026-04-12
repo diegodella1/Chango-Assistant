@@ -350,6 +350,7 @@ func gatewayCmd() {
 	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		build, goVer := formatBuildInfo()
+		selection := providers.RuntimeSelection(cfg)
 		status := map[string]interface{}{
 			"status":     "ok",
 			"version":    formatVersion(),
@@ -357,6 +358,10 @@ func gatewayCmd() {
 			"build_time": build,
 			"go_version": goVer,
 			"uptime":     time.Since(startTime).String(),
+			"selection":  selection,
+		}
+		if !selection.Valid {
+			status["status"] = "degraded"
 		}
 		if pr, ok := providers.IsPrivacyRouter(provider); ok {
 			runtime := pr.RuntimeStatus()
