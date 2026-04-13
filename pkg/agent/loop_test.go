@@ -373,6 +373,39 @@ func (m *simpleMockProvider) GetDefaultModel() string {
 	return "mock-model"
 }
 
+type sequenceMockProvider struct {
+	responses []string
+	callCount int
+}
+
+func (m *sequenceMockProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, opts map[string]interface{}) (*providers.LLMResponse, error) {
+	idx := m.callCount
+	if idx >= len(m.responses) {
+		idx = len(m.responses) - 1
+	}
+	m.callCount++
+	return &providers.LLMResponse{
+		Content:   m.responses[idx],
+		ToolCalls: []providers.ToolCall{},
+	}, nil
+}
+
+func (m *sequenceMockProvider) GetDefaultModel() string {
+	return "mock-model"
+}
+
+type errorMockProvider struct {
+	err error
+}
+
+func (m *errorMockProvider) Chat(ctx context.Context, messages []providers.Message, tools []providers.ToolDefinition, model string, opts map[string]interface{}) (*providers.LLMResponse, error) {
+	return nil, m.err
+}
+
+func (m *errorMockProvider) GetDefaultModel() string {
+	return "mock-model"
+}
+
 // mockCustomTool is a simple mock tool for registration testing
 type mockCustomTool struct{}
 
@@ -525,5 +558,111 @@ func TestToolResult_UserFacingToolDoesSendMessage(t *testing.T) {
 	// User-facing tool should include the output in final response
 	if response != "Command output: hello world" {
 		t.Errorf("Expected 'Command output: hello world', got: %s", response)
+	}
+}
+
+func TestProcessMessage_RetriesEmptyDirectResponse(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 3,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &sequenceMockProvider{
+		responses: []string{"", "Respuesta final"},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider, "")
+	helper := testHelper{al: al}
+
+	ctx := context.Background()
+	msg := bus.InboundMessage{
+		Channel:    "test",
+		SenderID:   "user1",
+		ChatID:     "chat1",
+		Content:    "hola",
+		SessionKey: "test-session",
+	}
+
+	response := helper.executeAndGetResponse(t, ctx, msg)
+
+	if response != "Respuesta final" {
+		t.Fatalf("Expected retried response, got: %q", response)
+	}
+	if provider.callCount != 2 {
+		t.Fatalf("Expected provider to be called twice, got %d", provider.callCount)
+	}
+}
+
+func TestAgentLoopRun_PreservesUserFriendlyErrorResponse(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				Model:             "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 3,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &errorMockProvider{err: context.DeadlineExceeded}
+	al := NewAgentLoop(cfg, msgBus, provider, "")
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	done := make(chan error, 1)
+	go func() {
+		done <- al.Run(runCtx)
+	}()
+
+	err = msgBus.PublishInbound(bus.InboundMessage{
+		Channel:    "test",
+		SenderID:   "user1",
+		ChatID:     "chat1",
+		Content:    "hola",
+		SessionKey: "test-session",
+	})
+	if err != nil {
+		t.Fatalf("PublishInbound failed: %v", err)
+	}
+
+	readCtx, cancelRead := context.WithTimeout(context.Background(), responseTimeout)
+	defer cancelRead()
+	outbound, ok := msgBus.SubscribeOutbound(readCtx)
+	if !ok {
+		t.Fatal("Expected outbound message")
+	}
+
+	if outbound.Content != "La API tardó demasiado en responder (timeout). Intentá con un mensaje más corto o cambiá de modelo con /model." {
+		t.Fatalf("Expected user-friendly timeout message, got: %q", outbound.Content)
+	}
+
+	cancelRun()
+	select {
+	case runErr := <-done:
+		if runErr != nil {
+			t.Fatalf("Run returned error: %v", runErr)
+		}
+	case <-time.After(responseTimeout):
+		t.Fatal("Timed out waiting for agent loop to stop")
 	}
 }

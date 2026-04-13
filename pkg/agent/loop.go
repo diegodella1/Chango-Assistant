@@ -217,7 +217,9 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 
 			response, media, err := al.processMessage(ctx, msg)
 			if err != nil {
-				response = fmt.Sprintf("Error processing message: %v", err)
+				if strings.TrimSpace(response) == "" {
+					response = fmt.Sprintf("Error processing message: %v", err)
+				}
 				media = nil
 			}
 
