@@ -300,7 +300,7 @@ func (al *AgentLoop) ProcessHeartbeat(ctx context.Context, content, channel, cha
 		Channel:         channel,
 		ChatID:          chatID,
 		UserMessage:     content,
-		DefaultResponse: "I've completed processing but have no response to give.",
+		DefaultResponse: "No pude generar una respuesta útil esta vez. Probá de nuevo en unos segundos.",
 		EnableSummary:   false,
 		SendResponse:    false,
 		NoHistory:       true, // Don't load session history for heartbeat
@@ -368,6 +368,20 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		return response, nil, nil
 	}
 
+	// Handle /capabilities command
+	if strings.TrimSpace(msg.Content) == "/capabilities" {
+		var sb strings.Builder
+		sb.WriteString("Capacidades activas en este runtime\n\n")
+		sb.WriteString(fmt.Sprintf("Provider: %s\nModel: %s\n", al.cfg.Agents.Defaults.Provider, al.model))
+		if route := al.runtimeProviderSummary(); route != "" {
+			sb.WriteString(fmt.Sprintf("Ruta LLM: %s\n\n", route))
+		} else {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(al.runtimeCapabilitySummary())
+		return sb.String(), nil, nil
+	}
+
 	// Detect feature: cron jobs have SenderID "cron"
 	feature := telemetry.FeatureChat
 	if msg.SenderID == "cron" {
@@ -381,7 +395,7 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		ChatID:          msg.ChatID,
 		UserMessage:     msg.Content,
 		Media:           msg.Media,
-		DefaultResponse: "I've completed processing but have no response to give.",
+		DefaultResponse: "No pude generar una respuesta útil esta vez. Probá reformular el mensaje o reintentá en unos segundos.",
 		EnableSummary:   true,
 		SendResponse:    false,
 		Feature:         feature,
@@ -811,6 +825,25 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 
 		// Check if no tool calls - we're done
 		if len(response.ToolCalls) == 0 {
+			if strings.TrimSpace(response.Content) == "" {
+				logger.WarnCF("agent", "LLM returned empty response without tool calls",
+					map[string]interface{}{
+						"iteration": iteration,
+						"feature":   opts.Feature,
+					})
+				if iteration >= al.maxIterations {
+					break
+				}
+
+				messages = append(messages,
+					providers.Message{Role: "assistant", Content: response.Content},
+					providers.Message{
+						Role:    "system",
+						Content: "Tu respuesta anterior quedó vacía. Respondé con texto útil para el usuario. No devuelvas una respuesta vacía.",
+					},
+				)
+				continue
+			}
 			finalContent = response.Content
 			logger.InfoCF("agent", "LLM response without tool calls (direct answer)",
 				map[string]interface{}{

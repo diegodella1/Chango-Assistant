@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/sipeed/picoclaw/pkg/auth"
 	"github.com/sipeed/picoclaw/pkg/config"
@@ -136,8 +137,8 @@ func statusCmd() {
 		fmt.Printf("Model: %s\n", cfg.Agents.Defaults.Model)
 
 		hasOpenRouter := cfg.Providers.OpenRouter.APIKey != ""
-		hasAnthropic := cfg.Providers.Anthropic.APIKey != ""
-		hasOpenAI := cfg.Providers.OpenAI.APIKey != ""
+		hasAnthropic := cfg.Providers.Anthropic.APIKey != "" || cfg.Providers.Anthropic.AuthMethod != ""
+		hasOpenAI := cfg.Providers.OpenAI.APIKey != "" || cfg.Providers.OpenAI.AuthMethod != ""
 		hasGemini := cfg.Providers.Gemini.APIKey != ""
 		hasZhipu := cfg.Providers.Zhipu.APIKey != ""
 		hasGroq := cfg.Providers.Groq.APIKey != ""
@@ -152,6 +153,13 @@ func statusCmd() {
 		fmt.Println("OpenRouter API:", status(hasOpenRouter))
 		fmt.Println("Anthropic API:", status(hasAnthropic))
 		fmt.Println("OpenAI API:", status(hasOpenAI))
+		if hasOpenAI {
+			mode := strings.TrimSpace(cfg.Providers.OpenAI.AuthMethod)
+			if mode == "" {
+				mode = "api_key"
+			}
+			fmt.Println("OpenAI auth mode:", mode)
+		}
 		fmt.Println("Gemini API:", status(hasGemini))
 		fmt.Println("Zhipu API:", status(hasZhipu))
 		fmt.Println("Groq API:", status(hasGroq))

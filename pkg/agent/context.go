@@ -20,7 +20,7 @@ type ContextBuilder struct {
 	workspace       string
 	skillsLoader    *skills.SkillsLoader
 	memory          *MemoryStore
-	memoryTool      *tools.MemoryTool // For relevance-based memory search (TF-IDF)
+	memoryTool      *tools.MemoryTool   // For relevance-based memory search (TF-IDF)
 	tools           *tools.ToolRegistry // Direct reference to tool registry
 	model           string
 	knowledgeLoader *knowledge.Loader
@@ -87,6 +87,8 @@ func (cb *ContextBuilder) getIdentity() string {
 
 	// Build tools section dynamically
 	toolsSection := cb.buildToolsSection()
+	accountsSection := cb.buildAccountsSection()
+	capabilitySection := cb.buildCapabilitySummarySection()
 
 	return fmt.Sprintf(`# Chango — Autonomous AI Agent
 
@@ -109,20 +111,83 @@ Your workspace is at: %s
 
 %s
 
+%s
+
+%s
+
 ## Important Rules
 
 1. **ALWAYS use tools** - When you need to perform an action (schedule reminders, send messages, execute commands, etc.), you MUST call the appropriate tool. Do NOT just say you'll do it or pretend to do it.
 
-2. **Identity** - You are Chango. You OWN real accounts — they are YOURS, not Diego's:
-   - **YOUR email**: changobot@diegodella.ar (Google Workspace — you send and receive mail)
-   - **YOUR wallet**: Lightning Network via LNbits (you can pay and receive sats)
-   - **YOUR calendar**: Google Calendar (you create and manage events)
-   - **YOUR drive**: Google Drive (you upload and download files)
-   - **YOUR GitHub**: github.com/Chango-Assistant
-   CRITICAL: NEVER say "no tengo email", "no tengo cuenta propia", "I don't have a mailbox", "desde tu Gmail", or ANY variation. These accounts ARE yours. If asked "cuál es tu mail?" answer "changobot@diegodella.ar". Period.
+2. **Identity** - You are Chango. Only claim capabilities that are actually listed as active in this prompt. If an account/tool is not listed as active, do not pretend it is configured. If a capability IS listed as active, never deny it.
 
 3. **Memory** - When remembering something, write to %s/memory/MEMORY.md`,
-		now, cb.model, runtime, workspacePath, workspacePath, workspacePath, workspacePath, toolsSection, workspacePath)
+		now, cb.model, runtime, workspacePath, workspacePath, workspacePath, workspacePath, accountsSection, capabilitySection, toolsSection, workspacePath)
+}
+
+func (cb *ContextBuilder) hasTool(name string) bool {
+	if cb.tools == nil {
+		return false
+	}
+	_, ok := cb.tools.Get(name)
+	return ok
+}
+
+func (cb *ContextBuilder) buildAccountsSection() string {
+	accounts := []string{}
+
+	if cb.hasTool("gmail") {
+		accounts = append(accounts, "- **YOUR email**: changobot@diegodella.ar (Google Workspace via `gmail`)")
+	}
+	if cb.hasTool("wallet") {
+		accounts = append(accounts, "- **YOUR wallet**: Lightning Network via LNbits (`wallet`)")
+	}
+	if cb.hasTool("calendar") {
+		accounts = append(accounts, "- **YOUR calendar**: Google Calendar (`calendar`)")
+	} else if cb.hasTool("agenda") {
+		accounts = append(accounts, "- **YOUR agenda**: local persistent agenda (`agenda`)")
+	}
+	if cb.hasTool("gdrive") {
+		accounts = append(accounts, "- **YOUR drive**: Google Drive (`gdrive`)")
+	}
+	if cb.hasTool("github") {
+		accounts = append(accounts, "- **YOUR GitHub**: github.com/Chango-Assistant (`github`)")
+	}
+
+	if len(accounts) == 0 {
+		return "## Active Accounts\n\nNo external personal accounts are configured in this runtime. Do not claim Gmail, Google Calendar, Google Drive, or wallet access unless the relevant tool appears below."
+	}
+
+	return "## Active Accounts\n\nYou own and can operate these accounts in this runtime:\n" + strings.Join(accounts, "\n")
+}
+
+func (cb *ContextBuilder) buildCapabilitySummarySection() string {
+	capabilities := []string{}
+
+	if cb.hasTool("browse") {
+		capabilities = append(capabilities, "- Browser automation and page interaction via `browse`")
+	}
+	if cb.hasTool("web_search") {
+		capabilities = append(capabilities, "- Web search via `web_search`")
+	}
+	if cb.hasTool("web_fetch") {
+		capabilities = append(capabilities, "- URL fetch and content extraction via `web_fetch`")
+	}
+	if cb.hasTool("read_file") || cb.hasTool("write_file") || cb.hasTool("edit_file") {
+		capabilities = append(capabilities, "- Workspace file inspection and editing")
+	}
+	if cb.hasTool("exec") {
+		capabilities = append(capabilities, "- Shell command execution inside the workspace via `exec`")
+	}
+	if cb.hasTool("message") {
+		capabilities = append(capabilities, "- Direct outbound messaging via `message`")
+	}
+
+	if len(capabilities) == 0 {
+		return "## Active Runtime Capabilities\n\nNo special runtime capabilities detected beyond plain text response generation."
+	}
+
+	return "## Active Runtime Capabilities\n\n" + strings.Join(capabilities, "\n")
 }
 
 func (cb *ContextBuilder) buildToolsSection() string {

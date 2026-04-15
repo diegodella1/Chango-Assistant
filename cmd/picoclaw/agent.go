@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/chzyer/readline"
 	"github.com/sipeed/picoclaw/pkg/agent"
@@ -53,6 +55,7 @@ func agentCmd() {
 
 	msgBus := bus.NewMessageBus()
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider, getConfigPath())
+	agentLoop.SetEventCallback(newCLIEventPrinter())
 
 	// Print agent startup info (only for interactive mode)
 	startupInfo := agentLoop.GetStartupInfo()
@@ -74,6 +77,25 @@ func agentCmd() {
 	} else {
 		fmt.Printf("%s Interactive mode (Ctrl+C to exit)\n\n", logo)
 		interactiveMode(agentLoop, sessionKey)
+	}
+}
+
+func newCLIEventPrinter() func(string) {
+	var mu sync.Mutex
+	lastType := ""
+	lastAt := time.Time{}
+
+	return func(eventType string) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		now := time.Now()
+		if eventType == lastType && now.Sub(lastAt) < 300*time.Millisecond {
+			return
+		}
+		lastType = eventType
+		lastAt = now
+		fmt.Fprintf(os.Stderr, "[activity] %s\n", eventType)
 	}
 }
 

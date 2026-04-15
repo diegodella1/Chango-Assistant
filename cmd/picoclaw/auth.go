@@ -104,6 +104,10 @@ func authLoginOpenAI(useDeviceCode bool) {
 	appCfg, err := loadConfig()
 	if err == nil {
 		appCfg.Providers.OpenAI.AuthMethod = "oauth"
+		appCfg.Agents.Defaults.Provider = "openai"
+		if strings.TrimSpace(appCfg.Agents.Defaults.Model) == "" || strings.Contains(strings.ToLower(appCfg.Agents.Defaults.Model), "claude") {
+			appCfg.Agents.Defaults.Model = "gpt-5.2-codex"
+		}
 		if err := config.SaveConfig(getConfigPath(), appCfg); err != nil {
 			fmt.Printf("Warning: could not update config: %v\n", err)
 		}
@@ -134,6 +138,10 @@ func authLoginPasteToken(provider string) {
 			appCfg.Providers.Anthropic.AuthMethod = "token"
 		case "openai":
 			appCfg.Providers.OpenAI.AuthMethod = "token"
+			appCfg.Agents.Defaults.Provider = "openai"
+			if strings.TrimSpace(appCfg.Agents.Defaults.Model) == "" || strings.Contains(strings.ToLower(appCfg.Agents.Defaults.Model), "claude") {
+				appCfg.Agents.Defaults.Model = "gpt-5.2-codex"
+			}
 		}
 		if err := config.SaveConfig(getConfigPath(), appCfg); err != nil {
 			fmt.Printf("Warning: could not update config: %v\n", err)

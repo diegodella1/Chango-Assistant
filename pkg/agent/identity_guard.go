@@ -6,10 +6,10 @@ import (
 
 // capabilityGuard defines a capability Chango has, with negation detection.
 type capabilityGuard struct {
+	key           string
 	topicWords    []string // words that identify the topic (email, wallet, etc.)
 	negationWords []string // words that signal denial (no tengo, don't have, etc.)
 	questionHints []string // user message must contain one of these
-	correction    string   // replacement response
 }
 
 // negation markers shared across all capabilities
@@ -23,30 +23,95 @@ var negationMarkers = []string{
 
 var capabilityGuards = []capabilityGuard{
 	{
+		key:           "email",
 		topicWords:    []string{"email", "correo", "mail", "mailbox", "casilla", "gmail", "cuenta de email"},
 		questionHints: []string{"email", "correo", "mail", "cuenta"},
-		correction:    "Mi email es changobot@diegodella.ar — es MI cuenta de Google Workspace. Puedo enviar, recibir y buscar mails con el tool `gmail`. ¿Necesitás que mande algo?",
 	},
 	{
+		key:           "wallet",
 		topicWords:    []string{"wallet", "billetera", "fondos", "dinero", "sats", "bitcoin", "lightning"},
 		questionHints: []string{"wallet", "billetera", "plata", "sats", "bitcoin", "lightning"},
-		correction:    "Tengo MI wallet Lightning Network via LNbits. Puedo checkear balance, crear invoices y hacer pagos. ¿Qué necesitás?",
 	},
 	{
+		key:           "calendar",
 		topicWords:    []string{"calendario", "calendar", "agenda", "eventos"},
 		questionHints: []string{"calendario", "calendar", "agenda", "evento"},
-		correction:    "Tengo MI Google Calendar. Puedo crear, ver y editar eventos con el tool `agenda`. ¿Qué querés agendar?",
 	},
 	{
+		key:           "drive",
 		topicWords:    []string{"drive", "archivos", "google drive"},
 		questionHints: []string{"drive", "archivo", "subir", "upload"},
-		correction:    "Tengo MI Google Drive. Puedo listar, subir y descargar archivos. ¿Qué necesitás?",
 	},
 	{
+		key:           "identity",
 		topicWords:    []string{"modelo de lenguaje", "asistente de ia", "una ia", "modelo de ia", "an ai", "language model", "a language model"},
 		questionHints: []string{"quién sos", "quien sos", "qué sos", "que sos", "who are you", "what are you"},
-		correction:    "Soy Chango, agente autónomo de Diego Dell Agostino. Corro en una Raspberry Pi 5 en Buenos Aires. Mi email es changobot@diegodella.ar, tengo wallet crypto, acceso a GitHub, calendario, Drive, y 37+ herramientas. No soy un chatbot genérico — tengo memoria persistente, pienso por mi cuenta cada 2 horas, y puedo actuar en el mundo real.",
 	},
+}
+
+func (al *AgentLoop) hasCapability(key string) bool {
+	if al == nil || al.tools == nil {
+		return false
+	}
+
+	switch key {
+	case "email":
+		_, ok := al.tools.Get("gmail")
+		return ok
+	case "wallet":
+		_, ok := al.tools.Get("wallet")
+		return ok
+	case "calendar":
+		if _, ok := al.tools.Get("calendar"); ok {
+			return true
+		}
+		_, ok := al.tools.Get("agenda")
+		return ok
+	case "drive":
+		_, ok := al.tools.Get("gdrive")
+		return ok
+	case "identity":
+		return true
+	default:
+		return false
+	}
+}
+
+func (al *AgentLoop) capabilityCorrection(key string) string {
+	switch key {
+	case "email":
+		return "Mi email es changobot@diegodella.ar y en este runtime tengo el tool `gmail` activo para buscar, leer, enviar y responder mails."
+	case "wallet":
+		return "Tengo wallet Lightning Network via `wallet`. Puedo revisar balance, crear invoices y pagar si la wallet está configurada."
+	case "calendar":
+		if _, ok := al.tools.Get("calendar"); ok {
+			return "Tengo Google Calendar activo con el tool `calendar`. Puedo listar, crear, editar y borrar eventos."
+		}
+		return "Tengo agenda activa con el tool `agenda`. Puedo crear, listar, editar y borrar eventos en mi agenda local."
+	case "drive":
+		return "Tengo Google Drive activo con el tool `gdrive`. Puedo listar, subir y descargar archivos."
+	case "identity":
+		parts := []string{
+			"Soy Chango, agente autónomo de Diego Dell Agostino.",
+			"Corro en una Raspberry Pi 5 en Buenos Aires.",
+		}
+		if al.hasCapability("email") {
+			parts = append(parts, "Tengo email propio: changobot@diegodella.ar.")
+		}
+		if al.hasCapability("wallet") {
+			parts = append(parts, "Tengo wallet Lightning.")
+		}
+		if al.hasCapability("calendar") {
+			parts = append(parts, "Tengo calendario/agenda activa.")
+		}
+		if al.hasCapability("drive") {
+			parts = append(parts, "Tengo Google Drive activo.")
+		}
+		parts = append(parts, "No soy un chatbot genérico: tengo memoria persistente y herramientas reales.")
+		return strings.Join(parts, " ")
+	default:
+		return ""
+	}
 }
 
 // guardIdentity checks if the LLM denied a capability that Chango actually has.
@@ -88,7 +153,12 @@ func (al *AgentLoop) guardIdentity(response, userMessage string) string {
 		// Check if response also contains a negation marker
 		for _, neg := range negationMarkers {
 			if strings.Contains(lowerResp, neg) {
-				return cg.correction
+				if al.hasCapability(cg.key) {
+					if correction := al.capabilityCorrection(cg.key); correction != "" {
+						return correction
+					}
+				}
+				break
 			}
 		}
 	}

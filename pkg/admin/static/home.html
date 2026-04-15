@@ -13,31 +13,39 @@
 </script>
 <style>
   :root{
-    --bg:#06090f;
-    --panel:#0f1622cc;
-    --panel-solid:#101a28;
-    --line:#2a3d57;
-    --text:#dbe8ff;
-    --muted:#89a2c7;
-    --ok:#34d399;
-    --warn:#f59e0b;
-    --bad:#ef4444;
-    --think:#818cf8;
-    --tool:#f472b6;
-    --memory:#34d399;
-    --browse:#38bdf8;
-    --learn:#fbbf24;
-    --reasoning:#c084fc;
-    --heartbeat:#fb7185;
-    --cron:#94a3b8;
+    --bg:#071019;
+    --bg-deep:#04070d;
+    --panel:#0d1826cc;
+    --panel-solid:#101b2d;
+    --panel-strong:#132338;
+    --line:#244362;
+    --line-soft:#1b3148;
+    --text:#e5f0ff;
+    --muted:#88a3c5;
+    --ink:#8ac5ff;
+    --ok:#43d6a7;
+    --warn:#ffba52;
+    --bad:#ff6b74;
+    --think:#8c91ff;
+    --tool:#ff7cc6;
+    --memory:#4addb4;
+    --browse:#4ec5ff;
+    --learn:#ffd15d;
+    --reasoning:#d098ff;
+    --heartbeat:#ff7f9d;
+    --cron:#b7c5d9;
+    --glow:0 20px 60px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box}
+  html,body{height:100%}
   body{
     margin:0;
     font-family:"Space Grotesk","IBM Plex Sans",system-ui,sans-serif;
-    background:var(--bg);
+    background:
+      radial-gradient(circle at 12% 18%, rgba(78,197,255,.10), transparent 28%),
+      radial-gradient(circle at 88% 12%, rgba(255,124,198,.08), transparent 24%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
     color:var(--text);
-    height:100vh;
     overflow:hidden;
   }
   canvas{
@@ -46,268 +54,603 @@
     width:100vw;
     height:100vh;
   }
+  .scanlines{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    background:linear-gradient(to bottom, rgba(255,255,255,.03), rgba(255,255,255,0) 2px);
+    background-size:100% 6px;
+    opacity:.08;
+    mix-blend-mode:soft-light;
+  }
   .overlay{
     position:fixed;
     inset:0;
     display:grid;
-    grid-template-columns:minmax(320px, 560px) 1fr minmax(260px, 360px);
+    grid-template-columns:minmax(320px, 420px) minmax(440px, 1fr) minmax(280px, 360px);
     gap:16px;
     padding:16px;
+  }
+  .stack{display:flex;flex-direction:column;gap:12px;min-height:0}
+  .card{
+    position:relative;
+    background:linear-gradient(160deg, rgba(14,24,38,.92), rgba(7,16,25,.84) 65%);
+    border:1px solid var(--line-soft);
+    border-radius:18px;
+    backdrop-filter:blur(10px);
+    box-shadow:var(--glow);
+    overflow:hidden;
+  }
+  .card::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(130deg, rgba(138,197,255,.08), transparent 22%, transparent 78%, rgba(255,124,198,.06));
     pointer-events:none;
   }
-  .left,.right{
+  .hero{
+    padding:18px 18px 16px;
+    min-height:312px;
     display:flex;
     flex-direction:column;
-    gap:12px;
-    pointer-events:auto;
-  }
-  .left{grid-column:1}
-  .right{grid-column:3;justify-self:end;width:min(360px,28vw)}
-  .card{
-    background:linear-gradient(165deg, #0d1522dd, #0b1320b0 60%, #0b132095);
-    border:1px solid #1d2e45;
-    border-radius:14px;
-    backdrop-filter:blur(8px);
-    box-shadow:0 10px 32px #00000066;
-  }
-  .header{
-    padding:14px 16px;
-    display:flex;
     justify-content:space-between;
-    align-items:flex-start;
-    gap:12px;
   }
-  .title{font-size:22px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
-  .subtitle{font-size:12px;color:var(--muted);margin-top:2px}
-  .statusline{
-    display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:8px
-  }
-  .dot{width:8px;height:8px;border-radius:99px;background:#3f4f68}
-  .dot.on{background:var(--ok);box-shadow:0 0 12px #34d39999}
-  .pill{
-    border:1px solid #2f4d73;
-    background:#142136;
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 10px;
+    border:1px solid rgba(138,197,255,.22);
     border-radius:999px;
-    padding:4px 10px;
-    font-size:11px;
-    color:#b6caf0;
+    color:#c3d8f3;
     text-transform:uppercase;
-    letter-spacing:.08em;
-    white-space:nowrap;
+    letter-spacing:.14em;
+    font-size:10px;
+    background:rgba(12,27,43,.62);
   }
-  .pill.live{
-    border-color:#6b2f3c;
-    background:#2a1118;
-    color:#fca5a5;
+  .eyebrow .pulse{
+    width:7px;height:7px;border-radius:99px;background:var(--ok);box-shadow:0 0 16px rgba(67,214,167,.75);
   }
-  .grid{
+  h1{
+    margin:16px 0 0;
+    font-size:clamp(32px,4.7vw,58px);
+    line-height:.95;
+    letter-spacing:-.04em;
+    text-transform:uppercase;
+  }
+  .hero-copy{
+    max-width:28ch;
+    color:#b8cbe5;
+    font-size:14px;
+    line-height:1.55;
+    margin-top:16px;
+  }
+  .hero-grid{
     display:grid;
     grid-template-columns:repeat(2,minmax(0,1fr));
     gap:10px;
-    padding:0 12px 12px;
+    margin-top:18px;
   }
   .metric{
-    background:#0f1a2c99;
-    border:1px solid #20344f;
-    border-radius:10px;
-    padding:10px;
-    min-height:74px;
+    background:rgba(13,28,45,.72);
+    border:1px solid rgba(53,87,119,.65);
+    border-radius:14px;
+    padding:12px;
+    min-height:82px;
   }
-  .metric .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-  .metric .v{font-size:22px;font-weight:700;margin-top:4px;line-height:1.1}
-  .metric .s{font-size:11px;color:#9cb5db;margin-top:3px}
-  .links{padding:0 12px 12px;display:flex;gap:10px;flex-wrap:wrap}
-  .links a{
-    color:#b6caf0;text-decoration:none;font-size:12px;padding:6px 10px;border:1px solid #2c4568;border-radius:8px;background:#11213a
-  }
-  .links a:hover{background:#173055}
-  .footer-links{
-    padding:0 12px 14px;
-    font-size:12px;
+  .metric .k{
+    font-size:10px;
     color:var(--muted);
-    line-height:1.5;
+    text-transform:uppercase;
+    letter-spacing:.12em;
   }
-  .footer-links a{
-    color:#b6caf0;
-    text-decoration:none;
-    border-bottom:1px dotted #4f6d99;
+  .metric .v{
+    margin-top:6px;
+    font-size:24px;
+    font-weight:700;
+    line-height:1;
   }
-  .footer-links a:hover{color:#dbe8ff;border-bottom-color:#dbe8ff}
+  .metric .s{
+    margin-top:6px;
+    color:#a5c0dd;
+    font-size:11px;
+  }
+  .meta-row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:14px;
+  }
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:7px 11px;
+    border-radius:999px;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.09em;
+    border:1px solid rgba(67,104,140,.65);
+    background:rgba(12,26,42,.7);
+    color:#c2d8f0;
+  }
+  .pill strong{font-weight:700;color:#fff}
+  .section{
+    padding:14px 16px 16px;
+  }
+  .section-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:12px;
+    margin-bottom:12px;
+  }
   .section-title{
     font-size:12px;
-    color:#9cb5db;
+    color:#a5c2e4;
     text-transform:uppercase;
-    letter-spacing:.1em;
-    padding:12px 12px 0;
+    letter-spacing:.12em;
     font-weight:700;
   }
-  .services{padding:10px 12px 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .svc{
-    border:1px solid #243b59;
-    border-radius:8px;
-    padding:8px;
-    display:flex;justify-content:space-between;align-items:center;
-    font-size:12px;background:#0e1b2d99
-  }
-  .svc .on{color:var(--ok)}
-  .svc .off{color:#8aa1c4}
-  .trace-head{
-    padding:12px 12px 8px;
-    display:flex;justify-content:space-between;align-items:center
-  }
-  .trace-head .mode{font-size:12px;color:#a3c0ea}
-  .event{
+  .section-sub{
     font-size:12px;
-    color:#d8e8ff;
-    border-top:1px solid #20344f;
+    color:var(--muted);
+  }
+  .route-card{
+    padding:16px;
+    min-height:164px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+  .route-top{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    align-items:flex-start;
+  }
+  .route-value{
+    font-size:22px;
+    line-height:1.08;
+    font-weight:700;
+    max-width:18ch;
+  }
+  .route-meta{
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.5;
+  }
+  .runtime-flags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .runtime-flag{
     padding:8px 10px;
-    display:flex;align-items:center;gap:8px;
+    border-radius:12px;
+    background:rgba(11,25,39,.82);
+    border:1px solid rgba(46,75,101,.72);
+    color:#d7e7f8;
+    font-size:12px;
   }
-  .event small{margin-left:auto;color:#7f99bf}
-  .trace{
-    max-height:44vh;
+  .runtime-flag .dim{color:var(--muted)}
+  .cap-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+  }
+  .cap{
+    padding:12px;
+    border-radius:14px;
+    border:1px solid rgba(39,69,95,.78);
+    background:rgba(8,21,34,.78);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .cap-label{
+    font-size:13px;
+    font-weight:600;
+    line-height:1.2;
+  }
+  .cap-status{
+    min-width:44px;
+    text-align:center;
+    padding:5px 8px;
+    border-radius:999px;
+    font-size:10px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    border:1px solid rgba(39,69,95,.78);
+    color:var(--muted);
+    background:rgba(13,27,42,.75);
+  }
+  .cap.on .cap-status{
+    border-color:rgba(67,214,167,.48);
+    color:#d8fff3;
+    background:rgba(15,63,51,.62);
+  }
+  .service-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+  }
+  .svc{
+    border:1px solid rgba(39,69,95,.75);
+    border-radius:12px;
+    padding:10px 12px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+    background:rgba(8,21,34,.72);
+    font-size:12px;
+  }
+  .svc strong.on{color:var(--ok)}
+  .svc strong.off{color:#7f95ae}
+  .trace-card,.health-card,.load-card,.pulse-card{min-height:0}
+  .trace,.pulse-feed{
+    max-height:34vh;
     overflow:auto;
+    padding:0 16px 16px;
   }
-  .chip{width:8px;height:8px;border-radius:99px;display:inline-block}
-  .bars{padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px}
-  .barline{display:grid;grid-template-columns:80px 1fr 44px;gap:8px;align-items:center;font-size:12px}
+  .event,.pulse-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 0;
+    border-top:1px solid rgba(35,58,82,.82);
+    font-size:12px;
+  }
+  .event:first-child,.pulse-item:first-child{border-top:none}
+  .chip{
+    width:10px;
+    height:10px;
+    border-radius:99px;
+    flex:0 0 auto;
+    box-shadow:0 0 16px rgba(255,255,255,.12);
+  }
+  .event .label,.pulse-item .label{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  .event .name,.pulse-item .name{
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    font-size:11px;
+  }
+  .event .desc,.pulse-item .desc{
+    color:var(--muted);
+    font-size:12px;
+  }
+  .event small,.pulse-item small{
+    color:#7f98b7;
+    font-size:11px;
+  }
+  .bars{
+    padding:0 16px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .barline{
+    display:grid;
+    grid-template-columns:96px 1fr 44px;
+    gap:10px;
+    align-items:center;
+    font-size:12px;
+  }
+  .barline span:first-child{
+    color:#cfe0f5;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+  }
   .bar{
-    height:8px;border-radius:999px;background:#0e1b2d;border:1px solid #20344f;overflow:hidden
+    height:9px;
+    border-radius:999px;
+    background:rgba(13,27,43,.92);
+    border:1px solid rgba(34,57,82,.82);
+    overflow:hidden;
   }
-  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38bdf8,#818cf8)}
-  .health{padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px}
-  .kv{display:grid;grid-template-columns:90px 1fr 40px;gap:8px;align-items:center;font-size:12px;color:#b7cae8}
-  .progress{height:8px;border-radius:999px;background:#0e1b2d;border:1px solid #20344f;overflow:hidden}
-  .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#34d399,#f59e0b,#ef4444)}
-  @media (max-width: 980px){
+  .bar > i{
+    display:block;
+    height:100%;
+    width:0;
+    background:linear-gradient(90deg, #4ec5ff, #8c91ff 55%, #ff7cc6);
+  }
+  .health{
+    padding:0 16px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .kv{
+    display:grid;
+    grid-template-columns:72px 1fr 44px;
+    gap:10px;
+    align-items:center;
+    font-size:12px;
+    color:#c7d9ed;
+  }
+  .progress{
+    height:9px;
+    border-radius:999px;
+    background:rgba(11,23,37,.94);
+    border:1px solid rgba(34,57,82,.82);
+    overflow:hidden;
+  }
+  .progress > i{
+    display:block;
+    height:100%;
+    width:0;
+    background:linear-gradient(90deg, #43d6a7, #ffba52, #ff6b74);
+  }
+  .links{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    padding:0 16px 16px;
+  }
+  .links a{
+    text-decoration:none;
+    color:#dbe9fb;
+    background:rgba(14,28,45,.9);
+    border:1px solid rgba(42,69,95,.85);
+    border-radius:12px;
+    padding:10px 12px;
+    font-size:12px;
+  }
+  .links a:hover{background:rgba(20,43,68,.95)}
+  .footnote{
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.5;
+    padding:0 16px 16px;
+  }
+  .footnote a{
+    color:#b9ddff;
+    text-decoration:none;
+    border-bottom:1px dotted rgba(185,221,255,.55);
+  }
+  .center-column{display:flex;flex-direction:column;gap:12px;min-height:0}
+  @media (max-width: 1180px){
     body{overflow:auto}
     .overlay{
       position:relative;
       grid-template-columns:1fr;
       padding:12px;
     }
-    .right{justify-self:stretch;width:100%}
-    canvas{position:fixed}
+    canvas,.scanlines{position:fixed}
+    .trace,.pulse-feed{max-height:none}
+    .center-column{order:3}
   }
 </style>
 </head>
 <body>
 <canvas id="brain"></canvas>
+<div class="scanlines"></div>
 <div class="overlay">
-  <div class="left">
-    <section class="card">
-      <div class="header">
-        <div>
-          <div class="title">Chango Brain</div>
-          <div class="subtitle">Runtime neural view + operational telemetry</div>
-          <div class="statusline">
-            <span class="dot" id="dot"></span>
-            <span id="stateText">connecting...</span>
+  <section class="stack">
+    <article class="card hero">
+      <div>
+        <span class="eyebrow"><span class="pulse"></span> live cognitive runtime</span>
+        <h1>Chango Brain</h1>
+        <div class="hero-copy">
+          Control-room view for what the agent can actually do right now: provider route, active tools, recent actions and runtime health. No fake capabilities, no black box.
+        </div>
+      </div>
+      <div>
+        <div class="meta-row">
+          <span class="pill" id="statePill">status <strong id="stateText">connecting</strong></span>
+          <span class="pill" id="eventPill">pulse <strong id="eventState">idle</strong></span>
+          <span class="pill" id="authPill">auth <strong id="authMode">--</strong></span>
+        </div>
+        <div class="hero-grid">
+          <article class="metric">
+            <div class="k">Uptime</div>
+            <div class="v" id="uptime">--</div>
+            <div class="s" id="provider">provider --</div>
+          </article>
+          <article class="metric">
+            <div class="k">Memory Vault</div>
+            <div class="v" id="notes">--</div>
+            <div class="s">notes indexed</div>
+          </article>
+          <article class="metric">
+            <div class="k">Interactions 24h</div>
+            <div class="v" id="int24">--</div>
+            <div class="s">recent conversations</div>
+          </article>
+          <article class="metric">
+            <div class="k">Tokens Today</div>
+            <div class="v" id="tokens">--</div>
+            <div class="s"><span id="calls">--</span> calls</div>
+          </article>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Service Matrix</div>
+            <div class="section-sub">Background processes visible from config</div>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-          <span class="pill live" id="eventState">idle</span>
-          <span class="pill" id="modelPill">model --</span>
+        <div class="service-grid" id="services"></div>
+      </div>
+    </article>
+
+    <article class="card health-card">
+      <div class="section-head" style="padding:14px 16px 0">
+        <div>
+          <div class="section-title">System Health</div>
+          <div class="section-sub">Current machine load</div>
         </div>
+        <div class="section-sub" id="lastUpdated">--</div>
       </div>
-      <div class="grid">
-        <article class="metric">
-          <div class="k">Uptime</div>
-          <div class="v" id="uptime">--</div>
-          <div class="s" id="provider">provider --</div>
-        </article>
-        <article class="metric">
-          <div class="k">Memory Vault</div>
-          <div class="v" id="notes">--</div>
-          <div class="s">notes indexed</div>
-        </article>
-        <article class="metric">
-          <div class="k">Interactions 24h</div>
-          <div class="v" id="int24">--</div>
-          <div class="s">recent conversations</div>
-        </article>
-        <article class="metric">
-          <div class="k">Tokens Today</div>
-          <div class="v" id="tokens">--</div>
-          <div class="s"><span id="calls">--</span> calls</div>
-        </article>
-        <article class="metric">
-          <div class="k">Reasoning</div>
-          <div class="v"><span id="obs">--</span>/<span id="esc">--</span></div>
-          <div class="s">observations / escalations</div>
-        </article>
-        <article class="metric">
-          <div class="k">Cron Jobs</div>
-          <div class="v" id="cron">--</div>
-          <div class="s">enabled jobs</div>
-        </article>
-      </div>
-      <div class="links">
-        <a href="/admin">admin</a>
-        <a href="/about">about</a>
-        <a href="/pitch/">pitch</a>
-      </div>
-      <div class="footer-links">
-        other this we built:
-        <a href="https://mundial.diegodella.ar" target="_blank" rel="noopener noreferrer">mundial.diegodella.ar</a> |
-        <a href="https://diegodella.ar" target="_blank" rel="noopener noreferrer">diegodella.ar</a> |
-        <a href="https://hermes.diegodella.ar" target="_blank" rel="noopener noreferrer">hermes.diegodella.ar</a> |
-        <a href="https://adpilot.diegodella.ar" target="_blank" rel="noopener noreferrer">adpilot.diegodella.ar</a>
-        and others
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="section-title">Service Matrix</div>
-      <div class="services" id="services"></div>
-    </section>
-  </div>
-
-  <aside class="right">
-    <section class="card">
-      <div class="trace-head">
-        <div class="section-title" style="padding:0">Top Event Load</div>
-        <div class="mode" id="eventCount">0 events</div>
-      </div>
-      <div class="bars" id="topBars"></div>
-    </section>
-    <section class="card">
-      <div class="trace-head">
-        <div class="section-title" style="padding:0">Live Trace</div>
-        <div class="mode" id="lastUpdated">--</div>
-      </div>
-      <div class="trace" id="trace"></div>
-    </section>
-    <section class="card">
-      <div class="section-title">System Health</div>
       <div class="health">
         <div class="kv"><span>CPU</span><div class="progress"><i id="cpuBar"></i></div><span id="cpuTxt">--</span></div>
         <div class="kv"><span>RAM</span><div class="progress"><i id="ramBar"></i></div><span id="ramTxt">--</span></div>
         <div class="kv"><span>Disk</span><div class="progress"><i id="diskBar"></i></div><span id="diskTxt">--</span></div>
         <div class="kv"><span>Swap</span><div class="progress"><i id="swapBar"></i></div><span id="swapTxt">--</span></div>
       </div>
-    </section>
+    </article>
+  </section>
+
+  <section class="center-column">
+    <article class="card route-card">
+      <div class="route-top">
+        <div>
+          <div class="section-title" style="padding:0">Active LLM Route</div>
+          <div class="route-value" id="providerRoute">Resolving runtime path...</div>
+        </div>
+        <span class="pill" id="modelPill">model --</span>
+      </div>
+      <div class="route-meta" id="routeMeta">Waiting for public runtime snapshot.</div>
+      <div class="runtime-flags" id="runtimeFlags"></div>
+    </article>
+
+    <article class="card">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Capability Wall</div>
+            <div class="section-sub">What the runtime can actually use</div>
+          </div>
+          <div class="section-sub" id="capCount">0 active</div>
+        </div>
+        <div class="cap-grid" id="capGrid"></div>
+      </div>
+    </article>
+
+    <article class="card pulse-card">
+      <div class="section-head" style="padding:14px 16px 0">
+        <div>
+          <div class="section-title">Proof Of Action</div>
+          <div class="section-sub">Latest pulses from the runtime event bus</div>
+        </div>
+        <div class="section-sub" id="eventCount">0 events</div>
+      </div>
+      <div class="pulse-feed" id="pulseFeed"></div>
+    </article>
+
+    <article class="card">
+      <div class="section-head" style="padding:14px 16px 0">
+        <div>
+          <div class="section-title">Shortcuts</div>
+          <div class="section-sub">Operational entry points</div>
+        </div>
+      </div>
+      <div class="links">
+        <a href="/admin">Admin</a>
+        <a href="/about">About</a>
+        <a href="/pitch/">Pitch</a>
+      </div>
+      <div class="footnote">
+        Other projects:
+        <a href="https://mundial.diegodella.ar" target="_blank" rel="noopener noreferrer">mundial.diegodella.ar</a>,
+        <a href="https://diegodella.ar" target="_blank" rel="noopener noreferrer">diegodella.ar</a>,
+        <a href="https://hermes.diegodella.ar" target="_blank" rel="noopener noreferrer">hermes.diegodella.ar</a>,
+        <a href="https://adpilot.diegodella.ar" target="_blank" rel="noopener noreferrer">adpilot.diegodella.ar</a>
+      </div>
+    </article>
+  </section>
+
+  <aside class="stack">
+    <article class="card load-card">
+      <div class="section-head" style="padding:14px 16px 0">
+        <div>
+          <div class="section-title">Top Event Load</div>
+          <div class="section-sub">Most frequent runtime pulses</div>
+        </div>
+      </div>
+      <div class="bars" id="topBars"></div>
+    </article>
+
+    <article class="card trace-card">
+      <div class="section-head" style="padding:14px 16px 0">
+        <div>
+          <div class="section-title">Live Trace</div>
+          <div class="section-sub">Chronological event stream</div>
+        </div>
+      </div>
+      <div class="trace" id="trace"></div>
+    </article>
+
+    <article class="card">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Reasoning Ops</div>
+            <div class="section-sub">Background observation counters</div>
+          </div>
+        </div>
+        <div class="hero-grid" style="margin-top:0">
+          <article class="metric">
+            <div class="k">Observations</div>
+            <div class="v" id="obs">--</div>
+            <div class="s">today</div>
+          </article>
+          <article class="metric">
+            <div class="k">Escalations</div>
+            <div class="v" id="esc">--</div>
+            <div class="s">today</div>
+          </article>
+          <article class="metric">
+            <div class="k">Cron Jobs</div>
+            <div class="v" id="cron">--</div>
+            <div class="s">enabled</div>
+          </article>
+          <article class="metric">
+            <div class="k">Version</div>
+            <div class="v" id="versionText">--</div>
+            <div class="s">runtime build</div>
+          </article>
+        </div>
+      </div>
+    </article>
   </aside>
 </div>
 
 <script>
 (() => {
   const eventColors = {
-    think: [129, 140, 248],
-    memory: [52, 211, 153],
-    learn: [251, 191, 36],
-    browse: [56, 189, 248],
-    tool: [244, 114, 182],
-    reasoning: [192, 132, 252],
-    cron: [148, 163, 184],
-    heartbeat: [251, 113, 133]
+    think: [140, 145, 255],
+    memory: [74, 221, 180],
+    learn: [255, 209, 93],
+    browse: [78, 197, 255],
+    tool: [255, 124, 198],
+    reasoning: [208, 152, 255],
+    cron: [183, 197, 217],
+    heartbeat: [255, 127, 157]
   };
-  const defaultColor = [160, 180, 220];
+  const eventDescriptions = {
+    think: "Model reasoning pass",
+    memory: "Persistent memory touched",
+    learn: "Learning workflow triggered",
+    browse: "Web navigation or search activity",
+    tool: "Tool call executed",
+    reasoning: "Background reasoning loop",
+    cron: "Scheduled job pulse",
+    heartbeat: "Heartbeat automation pulse"
+  };
+  const defaultColor = [138, 197, 255];
   const fireQueue = [];
-  const traceEl = document.getElementById("trace");
   const trace = [];
   const MAX_TRACE = 80;
   let eventsSeen = 0;
+
+  const traceEl = document.getElementById("trace");
+  const pulseFeedEl = document.getElementById("pulseFeed");
+  const capGrid = document.getElementById("capGrid");
+  const runtimeFlags = document.getElementById("runtimeFlags");
 
   function fmtNum(v) {
     if (v === undefined || v === null) return "--";
@@ -319,22 +662,38 @@
     if (v === undefined || v === null || Number.isNaN(v)) return "--";
     return Math.round(v) + "%";
   }
+  function formatTime(ts) {
+    const dt = new Date(ts);
+    const hh = String(dt.getHours()).padStart(2, "0");
+    const mm = String(dt.getMinutes()).padStart(2, "0");
+    return hh + ":" + mm;
+  }
   function pushTrace(type, at) {
-    const t = { type: type || "event", at: at || new Date().toISOString() };
-    trace.unshift(t);
+    trace.unshift({ type: type || "event", at: at || new Date().toISOString() });
     if (trace.length > MAX_TRACE) trace.length = MAX_TRACE;
     eventsSeen++;
     renderTrace();
+    renderPulseFeed();
   }
   function renderTrace() {
     document.getElementById("eventCount").textContent = eventsSeen + " events";
-    traceEl.innerHTML = trace.slice(0, 40).map(item => {
-      const dt = new Date(item.at);
-      const hh = String(dt.getHours()).padStart(2, "0");
-      const mm = String(dt.getMinutes()).padStart(2, "0");
+    traceEl.innerHTML = trace.slice(0, 32).map(item => {
       const col = eventColors[item.type] || defaultColor;
-      return '<div class="event"><span class="chip" style="background:rgb(' + col.join(",") + ')"></span>' +
-        item.type + "<small>" + hh + ":" + mm + "</small></div>";
+      return '<div class="event">' +
+        '<span class="chip" style="background:rgb(' + col.join(",") + ')"></span>' +
+        '<div class="label"><span class="name">' + item.type + '</span><span class="desc">' +
+        (eventDescriptions[item.type] || "Runtime event") + '</span></div>' +
+        '<small>' + formatTime(item.at) + '</small></div>';
+    }).join("");
+  }
+  function renderPulseFeed() {
+    pulseFeedEl.innerHTML = trace.slice(0, 10).map(item => {
+      const col = eventColors[item.type] || defaultColor;
+      return '<div class="pulse-item">' +
+        '<span class="chip" style="background:rgb(' + col.join(",") + ')"></span>' +
+        '<div class="label"><span class="name">' + item.type + '</span><span class="desc">' +
+        (eventDescriptions[item.type] || "Runtime event") + '</span></div>' +
+        '<small>' + formatTime(item.at) + '</small></div>';
     }).join("");
   }
   function setProgress(id, v) {
@@ -352,9 +711,9 @@
     root.innerHTML = rows.map(r => {
       const type = String(r.type || "event");
       const count = Number(r.count || 0);
-      const width = Math.max(6, Math.round((count / max) * 100));
+      const width = Math.max(8, Math.round((count / max) * 100));
       return '<div class="barline"><span>' + type + '</span><div class="bar"><i style="width:' + width +
-        '%"></i></div><span>' + count + "</span></div>";
+        '%"></i></div><span>' + count + '</span></div>';
     }).join("");
   }
   function renderServices(services) {
@@ -362,13 +721,42 @@
     const keys = ["heartbeat", "sentinel", "reasoning", "rss", "health"];
     el.innerHTML = keys.map(k => {
       const on = !!(services && services[k]);
-      return '<div class="svc"><span>' + k + '</span><strong class="' + (on ? "on" : "off") + '">' + (on ? "ON" : "OFF") + "</strong></div>";
+      return '<div class="svc"><span>' + k + '</span><strong class="' + (on ? "on" : "off") + '">' + (on ? "ON" : "OFF") + '</strong></div>';
     }).join("");
+  }
+  function renderCapabilities(caps) {
+    const rows = Array.isArray(caps) ? caps : [];
+    const active = rows.filter(c => String(c.status || "").toLowerCase() === "on").length;
+    document.getElementById("capCount").textContent = active + " active";
+    capGrid.innerHTML = rows.map(cap => {
+      const on = String(cap.status || "").toLowerCase() === "on";
+      return '<div class="cap ' + (on ? 'on' : 'off') + '">' +
+        '<span class="cap-label">' + (cap.label || cap.key || 'capability') + '</span>' +
+        '<span class="cap-status">' + (on ? 'on' : 'off') + '</span></div>';
+    }).join("");
+  }
+  function renderRuntimeFlags(summary, data) {
+    const flags = [];
+    if (summary.provider) flags.push({ label: "provider", value: summary.provider });
+    if (summary.model) flags.push({ label: "model", value: summary.model });
+    if (summary.auth_mode) flags.push({ label: "auth", value: summary.auth_mode });
+    if (summary.last_activity) flags.push({ label: "last seen", value: formatTime(summary.last_activity) });
+    runtimeFlags.innerHTML = flags.map(f =>
+      '<span class="runtime-flag"><span class="dim">' + f.label + ':</span> ' + f.value + '</span>'
+    ).join("");
+    document.getElementById("providerRoute").textContent = data.provider_route || summary.provider_route || "Runtime route unavailable";
+    document.getElementById("routeMeta").textContent =
+      "Provider " + (summary.provider || "--") + " running model " + (summary.model || "--") +
+      (summary.auth_mode ? " with " + summary.auth_mode + " auth." : ".");
+  }
+  function setOnlineState(online) {
+    document.getElementById("stateText").textContent = online ? "online" : "offline";
+    document.getElementById("statePill").style.borderColor = online ? "rgba(67,214,167,.42)" : "rgba(255,107,116,.32)";
+    document.getElementById("statePill").style.background = online ? "rgba(12,45,34,.52)" : "rgba(49,20,27,.52)";
   }
   function handlePublicSnapshot(data) {
     const summary = data.summary || data;
-    document.getElementById("dot").classList.add("on");
-    document.getElementById("stateText").textContent = "online";
+    setOnlineState(true);
     document.getElementById("uptime").textContent = summary.uptime_short || summary.uptime || "--";
     document.getElementById("notes").textContent = fmtNum(summary.notes);
     document.getElementById("int24").textContent = fmtNum(summary.interactions_24h);
@@ -379,6 +767,11 @@
     document.getElementById("cron").textContent = fmtNum(summary.cron_jobs);
     document.getElementById("provider").textContent = (summary.provider || "provider --") + " / " + (summary.model || "--");
     document.getElementById("modelPill").textContent = (summary.model || "--").slice(0, 24);
+    document.getElementById("authMode").textContent = summary.auth_mode || data.auth_mode || "--";
+    document.getElementById("versionText").textContent = (data.version || "--").slice(0, 12);
+
+    renderRuntimeFlags(summary, data);
+    renderCapabilities(data.capabilities || summary.capabilities || []);
 
     const st = data.status || {};
     const cpu = Number(st.cpu_temp_c || 0);
@@ -402,7 +795,9 @@
       data.events.recent.slice(0, MAX_TRACE).forEach(evt => {
         trace.push({ type: evt.type, at: evt.at });
       });
+      eventsSeen = Math.max(eventsSeen, trace.length);
       renderTrace();
+      renderPulseFeed();
     }
     document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString();
   }
@@ -419,7 +814,7 @@
         const data = await r.json();
         handlePublicSnapshot(data);
       } catch (e) {
-        document.getElementById("stateText").textContent = "offline";
+        setOnlineState(false);
       }
     }
   }
@@ -446,7 +841,6 @@
   refresh();
   setInterval(refresh, 8000);
 
-  // Neural render effect (preserved and tuned)
   const c = document.getElementById("brain");
   const ctx = c.getContext("2d");
   const dpr = Math.min(window.devicePixelRatio || 1, 2);

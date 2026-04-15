@@ -21,6 +21,20 @@ var defaultProviderModels = map[string]string{
 	"llamacpp":   "local",
 }
 
+func (al *AgentLoop) defaultModelForProvider(provider string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "openai" || provider == "gpt" {
+		authMode := strings.ToLower(strings.TrimSpace(al.cfg.Providers.OpenAI.AuthMethod))
+		if authMode == "oauth" || authMode == "token" {
+			return "gpt-5.2-codex"
+		}
+	}
+	if dm, ok := defaultProviderModels[provider]; ok {
+		return dm
+	}
+	return al.model
+}
+
 // handleModelCommand handles the /model command to view or change the current model at runtime.
 // Returns the response string and true if the command was handled.
 func (al *AgentLoop) handleModelCommand(content string) (string, bool) {
@@ -92,10 +106,7 @@ func (al *AgentLoop) handleProviderCommand(content string) (string, bool) {
 	al.cfg.Agents.Defaults.Provider = newProvider
 
 	// Set default model for the new provider
-	newModel := oldModel
-	if dm, ok := defaultProviderModels[newProvider]; ok {
-		newModel = dm
-	}
+	newModel := al.defaultModelForProvider(newProvider)
 	al.cfg.Agents.Defaults.Model = newModel
 
 	// Try creating the new provider
@@ -154,9 +165,7 @@ func (al *AgentLoop) tryAutoRecovery() {
 		savedModel := al.cfg.Agents.Defaults.Model
 
 		al.cfg.Agents.Defaults.Provider = candidate
-		if dm, ok := defaultProviderModels[candidate]; ok {
-			al.cfg.Agents.Defaults.Model = dm
-		}
+		al.cfg.Agents.Defaults.Model = al.defaultModelForProvider(candidate)
 
 		newProv, err := providers.CreateProvider(al.cfg)
 		if err != nil {
@@ -208,6 +217,9 @@ func (al *AgentLoop) handleStatusCommand(content string) (string, bool) {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "📊 Estado del sistema\n\n")
 	fmt.Fprintf(&sb, "Provider: %s\nModelo: %s\nTools: %d activos\nUptime: %s\n", provider, model, toolCount, uptimeStr)
+	if runtime := al.runtimeProviderSummary(); runtime != "" {
+		fmt.Fprintf(&sb, "Ruta LLM: %s\n", runtime)
+	}
 
 	// Token usage today
 	if al.tracker != nil {
@@ -230,5 +242,83 @@ func (al *AgentLoop) handleStatusCommand(content string) (string, bool) {
 		}
 	}
 
+	if caps := al.runtimeCapabilitySummary(); caps != "" {
+		fmt.Fprintf(&sb, "\n\nCapacidades activas:\n%s", caps)
+	}
+
 	return sb.String(), true
+}
+
+func (al *AgentLoop) runtimeProviderSummary() string {
+	provider := strings.ToLower(al.cfg.Agents.Defaults.Provider)
+
+	switch provider {
+	case "openai", "gpt":
+		authMode := strings.ToLower(strings.TrimSpace(al.cfg.Providers.OpenAI.AuthMethod))
+		switch authMode {
+		case "oauth", "token":
+			return "OpenAI OAuth/ChatGPT Codex backend"
+		case "":
+			return "OpenAI API"
+		default:
+			return fmt.Sprintf("OpenAI (%s)", authMode)
+		}
+	case "anthropic", "claude":
+		authMode := strings.ToLower(strings.TrimSpace(al.cfg.Providers.Anthropic.AuthMethod))
+		if authMode == "oauth" || authMode == "token" {
+			return "Anthropic OAuth/Claude auth backend"
+		}
+		return "Anthropic API"
+	case "openrouter":
+		return "OpenRouter API"
+	case "groq":
+		return "Groq API"
+	case "deepseek":
+		return "DeepSeek API"
+	case "gemini", "google":
+		return "Google Gemini API"
+	default:
+		if provider == "" {
+			return ""
+		}
+		return provider
+	}
+}
+
+func (al *AgentLoop) runtimeCapabilitySummary() string {
+	type capability struct {
+		label string
+		ok    bool
+	}
+
+	caps := []capability{
+		{label: "email (`gmail`)", ok: al.hasCapability("email")},
+		{label: "wallet (`wallet`)", ok: al.hasCapability("wallet")},
+		{label: "calendar (`calendar`/`agenda`)", ok: al.hasCapability("calendar")},
+		{label: "drive (`gdrive`)", ok: al.hasCapability("drive")},
+		{label: "browser automation (`browse`)", ok: al.toolActive("browse")},
+		{label: "web search (`web_search`)", ok: al.toolActive("web_search")},
+		{label: "web fetch (`web_fetch`)", ok: al.toolActive("web_fetch")},
+		{label: "shell (`exec`)", ok: al.toolActive("exec")},
+		{label: "messaging (`message`)", ok: al.toolActive("message")},
+	}
+
+	lines := make([]string, 0, len(caps))
+	for _, cap := range caps {
+		status := "off"
+		if cap.ok {
+			status = "on"
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s", cap.label, status))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (al *AgentLoop) toolActive(name string) bool {
+	if al == nil || al.tools == nil {
+		return false
+	}
+	_, ok := al.tools.Get(name)
+	return ok
 }

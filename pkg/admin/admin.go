@@ -80,6 +80,12 @@ type AdminEvent struct {
 	At   string `json:"at"`
 }
 
+type runtimeCapabilityView struct {
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	Status string `json:"status"`
+}
+
 // Emit sends an event to all connected SSE clients.
 func (eb *EventBus) Emit(eventType string) {
 	evt := AdminEvent{
@@ -481,6 +487,9 @@ func (h *Handler) publicBrain(w http.ResponseWriter, r *http.Request) {
 		if diskCfg, err := config.LoadConfig(h.configPath); err == nil {
 			resp["provider"] = diskCfg.Agents.Defaults.Provider
 			resp["model"] = diskCfg.Agents.Defaults.Model
+			resp["provider_route"] = providerRouteSummary(diskCfg)
+			resp["auth_mode"] = providerAuthMode(diskCfg)
+			resp["capabilities"] = runtimeCapabilitiesFromConfig(diskCfg)
 		}
 	}
 
@@ -560,9 +569,16 @@ func (h *Handler) buildPublicStatus() (map[string]interface{}, error) {
 		if diskCfg, err := config.LoadConfig(h.configPath); err == nil {
 			result["model"] = diskCfg.Agents.Defaults.Model
 			result["provider"] = diskCfg.Agents.Defaults.Provider
+			result["provider_route"] = providerRouteSummary(diskCfg)
+			result["auth_mode"] = providerAuthMode(diskCfg)
+			result["capabilities"] = runtimeCapabilitiesFromConfig(diskCfg)
 		}
 	} else if h.config != nil && h.config.Agents.Defaults.Model != "" {
 		result["model"] = h.config.Agents.Defaults.Model
+		result["provider"] = h.config.Agents.Defaults.Provider
+		result["provider_route"] = providerRouteSummary(h.config)
+		result["auth_mode"] = providerAuthMode(h.config)
+		result["capabilities"] = runtimeCapabilitiesFromConfig(h.config)
 	}
 
 	vaultDir := filepath.Join(h.workspacePath, "obsidian")
@@ -662,6 +678,104 @@ func (h *Handler) buildPublicStatus() (map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+func providerAuthMode(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Agents.Defaults.Provider)) {
+	case "openai", "gpt":
+		if mode := strings.TrimSpace(cfg.Providers.OpenAI.AuthMethod); mode != "" {
+			return mode
+		}
+		if cfg.Providers.OpenAI.APIKey != "" {
+			return "api_key"
+		}
+	case "anthropic", "claude":
+		if mode := strings.TrimSpace(cfg.Providers.Anthropic.AuthMethod); mode != "" {
+			return mode
+		}
+		if cfg.Providers.Anthropic.APIKey != "" {
+			return "api_key"
+		}
+	case "openrouter":
+		if cfg.Providers.OpenRouter.APIKey != "" {
+			return "api_key"
+		}
+	case "groq":
+		if cfg.Providers.Groq.APIKey != "" {
+			return "api_key"
+		}
+	}
+	return ""
+}
+
+func providerRouteSummary(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	provider := strings.ToLower(strings.TrimSpace(cfg.Agents.Defaults.Provider))
+	switch provider {
+	case "openai", "gpt":
+		mode := strings.ToLower(strings.TrimSpace(cfg.Providers.OpenAI.AuthMethod))
+		if mode == "oauth" || mode == "token" {
+			return "OpenAI OAuth / ChatGPT Codex backend"
+		}
+		return "OpenAI API"
+	case "anthropic", "claude":
+		mode := strings.ToLower(strings.TrimSpace(cfg.Providers.Anthropic.AuthMethod))
+		if mode == "oauth" || mode == "token" {
+			return "Anthropic auth backend"
+		}
+		return "Anthropic API"
+	case "openrouter":
+		return "OpenRouter API"
+	case "groq":
+		return "Groq API"
+	case "deepseek":
+		return "DeepSeek API"
+	case "gemini", "google":
+		return "Google Gemini API"
+	case "llamacpp", "local", "llama":
+		return "Local llama.cpp runtime"
+	default:
+		if provider == "" {
+			return ""
+		}
+		return provider
+	}
+}
+
+func runtimeCapabilitiesFromConfig(cfg *config.Config) []runtimeCapabilityView {
+	if cfg == nil {
+		return nil
+	}
+
+	hasGoogle := cfg.Tools.Google.ServiceAccountFile != "" && cfg.Tools.Google.ImpersonateEmail != ""
+	hasWallet := cfg.Wallet.LNbitsURL != "" && cfg.Wallet.AdminKey != "" && cfg.Wallet.InvoiceKey != ""
+	hasSearch := cfg.Tools.Web.DuckDuckGo.Enabled || cfg.Tools.Web.Brave.Enabled || cfg.Tools.Web.Serper.Enabled
+
+	caps := []runtimeCapabilityView{
+		{Key: "browse", Label: "Browser Automation", Status: "on"},
+		{Key: "search", Label: "Web Search", Status: offIfFalse(hasSearch)},
+		{Key: "fetch", Label: "Web Fetch", Status: "on"},
+		{Key: "shell", Label: "Shell Exec", Status: "on"},
+		{Key: "files", Label: "Workspace Files", Status: "on"},
+		{Key: "memory", Label: "Persistent Memory", Status: "on"},
+		{Key: "email", Label: "Gmail", Status: offIfFalse(hasGoogle)},
+		{Key: "calendar", Label: "Google Calendar", Status: offIfFalse(hasGoogle)},
+		{Key: "drive", Label: "Google Drive", Status: offIfFalse(hasGoogle)},
+		{Key: "wallet", Label: "Lightning Wallet", Status: offIfFalse(hasWallet)},
+	}
+	return caps
+}
+
+func offIfFalse(v bool) string {
+	if v {
+		return "on"
+	}
+	return "off"
 }
 
 // fileInfo is the JSON shape returned by the list endpoint.
