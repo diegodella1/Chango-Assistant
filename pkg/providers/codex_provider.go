@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -16,6 +17,8 @@ type CodexProvider struct {
 	client      *openai.Client
 	accountID   string
 	tokenSource func() (string, string, error)
+	mu          sync.Mutex
+	lastRespID  map[string]string
 }
 
 const defaultCodexInstructions = "You are Codex, a coding assistant."
@@ -32,6 +35,7 @@ func NewCodexProvider(token, accountID string) *CodexProvider {
 	return &CodexProvider{
 		client:    &client,
 		accountID: accountID,
+		lastRespID: map[string]string{},
 	}
 }
 
@@ -54,7 +58,9 @@ func (p *CodexProvider) Chat(ctx context.Context, messages []Message, tools []To
 		}
 	}
 
-	params := buildCodexParams(messages, tools, model, options)
+	sessionKey, _ := options["session_key"].(string)
+	model = normalizeCodexModel(model)
+	params := prepareCodexParams(messages, tools, model, options, p.getLastResponseID(sessionKey))
 
 	// ChatGPT backend requires streaming — collect events until response.completed
 	stream := p.client.Responses.NewStreaming(ctx, params, opts...)
@@ -75,14 +81,30 @@ func (p *CodexProvider) Chat(ctx context.Context, messages []Message, tools []To
 		if err != nil {
 			return nil, fmt.Errorf("codex API call: no response.completed event received and fallback request failed: %w", err)
 		}
+		p.rememberResponseID(sessionKey, fallbackResp.ID)
 		return parseCodexResponse(fallbackResp), nil
 	}
 
+	p.rememberResponseID(sessionKey, finalResp.ID)
 	return parseCodexResponse(finalResp), nil
 }
 
 func (p *CodexProvider) GetDefaultModel() string {
 	return "gpt-5.2-codex"
+}
+
+func normalizeCodexModel(model string) string {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if m == "" {
+		return "gpt-5.2-codex"
+	}
+	if strings.Contains(m, "codex") {
+		return model
+	}
+	if strings.HasPrefix(m, "gpt-5") || strings.HasPrefix(m, "openai/gpt-5") {
+		return "gpt-5.2-codex"
+	}
+	return model
 }
 
 func buildCodexParams(messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) responses.ResponseNewParams {
@@ -190,6 +212,20 @@ func buildCodexParams(messages []Message, tools []ToolDefinition, model string, 
 	return params
 }
 
+func prepareCodexParams(messages []Message, tools []ToolDefinition, model string, options map[string]interface{}, previousRespID string) responses.ResponseNewParams {
+	params := buildCodexParams(messages, tools, model, options)
+	if previousRespID == "" {
+		return params
+	}
+	if continuationItems, ok := codexContinuationInput(messages); ok {
+		params.PreviousResponseID = openai.Opt(previousRespID)
+		params.Input = responses.ResponseNewParamsInputUnion{
+			OfInputItemList: continuationItems,
+		}
+	}
+	return params
+}
+
 func translateToolsForCodex(tools []ToolDefinition) []responses.ToolUnionParam {
 	result := make([]responses.ToolUnionParam, 0, len(tools))
 	for _, t := range tools {
@@ -249,11 +285,66 @@ func parseCodexResponse(resp *responses.Response) *LLMResponse {
 	}
 
 	return &LLMResponse{
+		ResponseID:   resp.ID,
 		Content:      content.String(),
 		ToolCalls:    toolCalls,
 		FinishReason: finishReason,
 		Usage:        usage,
 	}
+}
+
+func codexContinuationInput(messages []Message) (responses.ResponseInputParam, bool) {
+	if len(messages) < 2 || messages[len(messages)-1].Role != "tool" {
+		return nil, false
+	}
+
+	start := len(messages) - 1
+	for start >= 0 && messages[start].Role == "tool" {
+		start--
+	}
+	if start < 0 {
+		return nil, false
+	}
+
+	assistantMsg := messages[start]
+	if assistantMsg.Role != "assistant" || len(assistantMsg.ToolCalls) == 0 {
+		return nil, false
+	}
+
+	items := make(responses.ResponseInputParam, 0, len(messages)-(start+1))
+	for _, msg := range messages[start+1:] {
+		if msg.Role != "tool" || msg.ToolCallID == "" {
+			return nil, false
+		}
+		items = append(items, responses.ResponseInputItemUnionParam{
+			OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
+				CallID: msg.ToolCallID,
+				Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{
+					OfString: openai.Opt(msg.Content),
+				},
+			},
+		})
+	}
+
+	return items, true
+}
+
+func (p *CodexProvider) getLastResponseID(sessionKey string) string {
+	if sessionKey == "" {
+		return ""
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.lastRespID[sessionKey]
+}
+
+func (p *CodexProvider) rememberResponseID(sessionKey, responseID string) {
+	if sessionKey == "" || responseID == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastRespID[sessionKey] = responseID
 }
 
 func isReasoningModel(model string) bool {

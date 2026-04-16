@@ -28,6 +28,7 @@ type HTTPProvider struct {
 	apiKey     string
 	apiBase    string
 	httpClient *http.Client
+	tokenSource func() (string, error)
 }
 
 func NewHTTPProvider(apiKey, apiBase, proxy string) *HTTPProvider {
@@ -51,9 +52,24 @@ func NewHTTPProvider(apiKey, apiBase, proxy string) *HTTPProvider {
 	}
 }
 
+func NewHTTPProviderWithTokenSource(apiKey, apiBase, proxy string, tokenSource func() (string, error)) *HTTPProvider {
+	p := NewHTTPProvider(apiKey, apiBase, proxy)
+	p.tokenSource = tokenSource
+	return p
+}
+
 func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, model string, options map[string]interface{}) (*LLMResponse, error) {
 	if p.apiBase == "" {
 		return nil, fmt.Errorf("API base not configured")
+	}
+
+	apiKey := p.apiKey
+	if p.tokenSource != nil {
+		tok, err := p.tokenSource()
+		if err != nil {
+			return nil, fmt.Errorf("refreshing token: %w", err)
+		}
+		apiKey = tok
 	}
 
 	// Strip provider prefix from model name (e.g., moonshot/kimi-k2.5 -> kimi-k2.5)
@@ -127,8 +143,8 @@ func (p *HTTPProvider) Chat(ctx context.Context, messages []Message, tools []Too
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		if p.apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+p.apiKey)
+		if apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
 
 		resp, err = p.httpClient.Do(req)
@@ -273,6 +289,49 @@ func createCodexAuthProvider() (LLMProvider, error) {
 	return NewCodexProviderWithTokenSource(cred.AccessToken, cred.AccountID, createCodexTokenSource()), nil
 }
 
+func createOpenAIAuthProvider(apiBase, proxy string) (LLMProvider, error) {
+	cred, err := auth.GetCredential("openai")
+	if err != nil {
+		return nil, fmt.Errorf("loading auth credentials: %w", err)
+	}
+	if cred == nil {
+		return nil, fmt.Errorf("no credentials for openai. Run: picoclaw auth login --provider openai")
+	}
+	if apiBase == "" {
+		apiBase = "https://api.openai.com/v1"
+	}
+	return NewHTTPProviderWithTokenSource(cred.AccessToken, apiBase, proxy, createOpenAITokenSource()), nil
+}
+
+func shouldUseCodexProvider(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(m, "codex")
+}
+
+func createOpenAITokenSource() func() (string, error) {
+	return func() (string, error) {
+		cred, err := auth.GetCredential("openai")
+		if err != nil {
+			return "", fmt.Errorf("loading auth credentials: %w", err)
+		}
+		if cred == nil {
+			return "", fmt.Errorf("no credentials for openai. Run: picoclaw auth login --provider openai")
+		}
+		if cred.AuthMethod == "oauth" && cred.NeedsRefresh() && cred.RefreshToken != "" {
+			oauthCfg := auth.OpenAIOAuthConfig()
+			refreshed, err := auth.RefreshAccessToken(cred, oauthCfg)
+			if err != nil {
+				return "", fmt.Errorf("refreshing token: %w", err)
+			}
+			if err := auth.SetCredential("openai", refreshed); err != nil {
+				return "", fmt.Errorf("saving refreshed token: %w", err)
+			}
+			return refreshed.AccessToken, nil
+		}
+		return cred.AccessToken, nil
+	}
+}
+
 // AvailableProviders returns the names of providers that have credentials configured.
 func AvailableProviders(cfg *config.Config) []string {
 	var available []string
@@ -321,8 +380,25 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 			}
 		case "openai", "gpt":
 			if cfg.Providers.OpenAI.APIKey != "" || cfg.Providers.OpenAI.AuthMethod != "" {
-				if cfg.Providers.OpenAI.AuthMethod == "oauth" || cfg.Providers.OpenAI.AuthMethod == "token" {
+				if cfg.Providers.OpenAI.AuthMethod == "oauth" {
 					p, err := createCodexAuthProvider()
+					if err != nil {
+						return nil, err
+					}
+					return wrapWithFallbackAndPrivacy(p, cfg)
+				}
+				if cfg.Providers.OpenAI.AuthMethod == "token" {
+					apiBase = cfg.Providers.OpenAI.APIBase
+					proxy = cfg.Providers.OpenAI.Proxy
+					var (
+						p   LLMProvider
+						err error
+					)
+					if shouldUseCodexProvider(model) {
+						p, err = createCodexAuthProvider()
+					} else {
+						p, err = createOpenAIAuthProvider(apiBase, proxy)
+					}
 					if err != nil {
 						return nil, err
 					}
@@ -459,8 +535,25 @@ func CreateProvider(cfg *config.Config) (LLMProvider, error) {
 			}
 
 		case (strings.Contains(lowerModel, "gpt") || strings.HasPrefix(model, "openai/")) && (cfg.Providers.OpenAI.APIKey != "" || cfg.Providers.OpenAI.AuthMethod != ""):
-			if cfg.Providers.OpenAI.AuthMethod == "oauth" || cfg.Providers.OpenAI.AuthMethod == "token" {
+			if cfg.Providers.OpenAI.AuthMethod == "oauth" {
 				p, err := createCodexAuthProvider()
+				if err != nil {
+					return nil, err
+				}
+				return wrapWithFallbackAndPrivacy(p, cfg)
+			}
+			if cfg.Providers.OpenAI.AuthMethod == "token" {
+				var (
+					p   LLMProvider
+					err error
+				)
+				apiBase = cfg.Providers.OpenAI.APIBase
+				proxy = cfg.Providers.OpenAI.Proxy
+				if shouldUseCodexProvider(model) {
+					p, err = createCodexAuthProvider()
+				} else {
+					p, err = createOpenAIAuthProvider(apiBase, proxy)
+				}
 				if err != nil {
 					return nil, err
 				}

@@ -63,6 +63,33 @@ func TestBuildCodexParams_ToolCallConversation(t *testing.T) {
 	}
 }
 
+func TestCodexContinuationInput(t *testing.T) {
+	messages := []Message{
+		{Role: "user", Content: "What's the weather?"},
+		{
+			Role: "assistant",
+			ToolCalls: []ToolCall{
+				{ID: "call_1", Name: "get_weather", Arguments: map[string]interface{}{"city": "SF"}},
+			},
+		},
+		{Role: "tool", Content: `{"temp":72}`, ToolCallID: "call_1"},
+	}
+
+	items, ok := codexContinuationInput(messages)
+	if !ok {
+		t.Fatal("expected continuation input to be detected")
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].OfFunctionCallOutput == nil {
+		t.Fatal("expected function_call_output item")
+	}
+	if items[0].OfFunctionCallOutput.CallID != "call_1" {
+		t.Fatalf("call_id = %q, want %q", items[0].OfFunctionCallOutput.CallID, "call_1")
+	}
+}
+
 func TestBuildCodexParams_WithTools(t *testing.T) {
 	tools := []ToolDefinition{
 		{
@@ -254,6 +281,34 @@ func TestCodexProvider_GetDefaultModel(t *testing.T) {
 	p := NewCodexProvider("test-token", "")
 	if got := p.GetDefaultModel(); got != "gpt-5.2-codex" {
 		t.Errorf("GetDefaultModel() = %q, want %q", got, "gpt-5.2-codex")
+	}
+}
+
+func TestPrepareCodexParams_UsesPreviousResponseIDForToolContinuation(t *testing.T) {
+	messages := []Message{
+		{Role: "user", Content: "weather?"},
+		{
+			Role: "assistant",
+			ToolCalls: []ToolCall{
+				{ID: "call_abc", Name: "lookup_weather", Arguments: map[string]any{"city": "SF"}},
+			},
+		},
+		{Role: "tool", Content: `{"temp_c":22}`, ToolCallID: "call_abc"},
+	}
+
+	params := prepareCodexParams(messages, nil, "gpt-5", map[string]any{"session_key": "sess-1"}, "resp_1")
+	if !params.PreviousResponseID.Valid() || params.PreviousResponseID.Or("") != "resp_1" {
+		t.Fatalf("previous_response_id = %q, want %q", params.PreviousResponseID.Or(""), "resp_1")
+	}
+	if params.Input.OfInputItemList == nil || len(params.Input.OfInputItemList) != 1 {
+		t.Fatalf("expected single continuation input item, got %#v", params.Input.OfInputItemList)
+	}
+	item := params.Input.OfInputItemList[0]
+	if item.OfFunctionCallOutput == nil {
+		t.Fatal("expected function_call_output item")
+	}
+	if item.OfFunctionCallOutput.CallID != "call_abc" {
+		t.Fatalf("call_id = %q, want %q", item.OfFunctionCallOutput.CallID, "call_abc")
 	}
 }
 

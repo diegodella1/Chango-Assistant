@@ -19,6 +19,7 @@ type FunctionCall struct {
 }
 
 type LLMResponse struct {
+	ResponseID   string     `json:"response_id,omitempty"`
 	Content      string     `json:"content"`
 	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
 	FinishReason string     `json:"finish_reason"`

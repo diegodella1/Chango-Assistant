@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/sipeed/picoclaw/pkg/constants"
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -75,6 +76,23 @@ func RunToolLoop(ctx context.Context, config ToolLoopConfig, messages []provider
 
 		// 4. If no tool calls, we're done
 		if len(response.ToolCalls) == 0 {
+			if strings.TrimSpace(response.Content) == "" {
+				logger.WarnCF("toolloop", "LLM returned empty response without tool calls",
+					map[string]any{
+						"iteration": iteration,
+					})
+				if iteration >= config.MaxIterations {
+					break
+				}
+				messages = append(messages,
+					providers.Message{Role: "assistant", Content: response.Content},
+					providers.Message{
+						Role:    "system",
+						Content: "Your previous reply was empty. Respond with a direct, useful answer for the user. Do not leave the content blank.",
+					},
+				)
+				continue
+			}
 			finalContent = response.Content
 			logger.InfoCF("toolloop", "LLM response without tool calls (direct answer)",
 				map[string]any{
