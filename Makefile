@@ -1,4 +1,4 @@
-.PHONY: all build install uninstall clean help test
+.PHONY: all build install uninstall clean help test check-go-version
 
 # Build variables
 BINARY_NAME=picoclaw
@@ -14,8 +14,9 @@ GO_VERSION=$(shell $(GO) version | awk '{print $$3}')
 LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME) -X main.goVersion=$(GO_VERSION)"
 
 # Go variables
-GO?=go
+GO?=$(shell if [ -x /usr/local/go/bin/go ]; then echo /usr/local/go/bin/go; else echo go; fi)
 GOFLAGS?=-v
+MIN_GO_VERSION?=1.26.0
 
 # Installation
 INSTALL_PREFIX?=$(HOME)/.local
@@ -63,8 +64,22 @@ BINARY_PATH=$(BUILD_DIR)/$(BINARY_NAME)-$(PLATFORM)-$(ARCH)
 # Default target
 all: build
 
+## check-go-version: Verify the installed Go version is new enough
+check-go-version:
+	@current=`$(GO) version | awk '{print $$3}' | sed 's/^go//'`; \
+	if [ -z "$$current" ]; then \
+		echo "Unable to determine Go version from '$(GO) version'"; \
+		exit 1; \
+	fi; \
+	if [ "$$(printf '%s\n%s\n' "$(MIN_GO_VERSION)" "$$current" | sort -V | head -n1)" != "$(MIN_GO_VERSION)" ]; then \
+		echo "Go $(MIN_GO_VERSION)+ required, found $$current"; \
+		echo "Update your Go toolchain."; \
+		echo "If you already have Go 1.21+, you can also use GOTOOLCHAIN with a compatible version."; \
+		exit 1; \
+	fi
+
 ## generate: Run generate
-generate:
+generate: check-go-version
 	@echo "Run generate..."
 	@rm -r ./$(CMD_DIR)/workspace 2>/dev/null || true
 	@$(GO) generate ./...
@@ -79,7 +94,7 @@ build: generate
 	@ln -sf $(BINARY_NAME)-$(PLATFORM)-$(ARCH) $(BUILD_DIR)/$(BINARY_NAME)
 
 ## build-all: Build picoclaw for all platforms
-build-all: generate
+build-all: check-go-version generate
 	@echo "Building for multiple platforms..."
 	@mkdir -p $(BUILD_DIR)
 	GOOS=linux GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./$(CMD_DIR)
@@ -120,19 +135,19 @@ clean:
 	@echo "Clean complete"
 
 ## fmt: Format Go code
-vet:
+vet: check-go-version
 	@$(GO) vet ./...
 
 ## fmt: Format Go code
-test:
+test: check-go-version
 	@$(GO) test ./...
 
 ## fmt: Format Go code
-fmt:
+fmt: check-go-version
 	@$(GO) fmt ./...
 
 ## deps: Update dependencies
-deps:
+deps: check-go-version
 	@$(GO) get -u ./...
 	@$(GO) mod tidy
 

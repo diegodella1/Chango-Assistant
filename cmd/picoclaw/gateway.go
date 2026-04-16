@@ -36,8 +36,20 @@ import (
 func gatewayCmd() {
 	startTime := time.Now()
 
-	// Check for --debug flag
 	args := os.Args[2:]
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			fmt.Println("Usage: picoclaw gateway [--debug]")
+			fmt.Println("")
+			fmt.Println("Starts the gateway, admin panel, channels, and background services.")
+			fmt.Println("")
+			fmt.Println("Options:")
+			fmt.Println("  --debug, -d    Enable debug logging")
+			return
+		}
+	}
+
+	// Check for --debug flag
 	for _, arg := range args {
 		if arg == "--debug" || arg == "-d" {
 			logger.SetLevel(logger.DEBUG)

@@ -38,6 +38,7 @@
   }
   *{box-sizing:border-box}
   html,body{height:100%}
+  html{color-scheme:dark}
   body{
     margin:0;
     font-family:"Space Grotesk","IBM Plex Sans",system-ui,sans-serif;
@@ -67,19 +68,44 @@
     position:fixed;
     inset:0;
     display:grid;
-    grid-template-columns:minmax(320px, 420px) minmax(440px, 1fr) minmax(280px, 360px);
-    gap:16px;
-    padding:16px;
+    grid-template-columns:minmax(250px, 320px) minmax(0, 1fr) minmax(250px, 320px);
+    gap:22px;
+    padding:18px;
+    pointer-events:none;
   }
-  .stack{display:flex;flex-direction:column;gap:12px;min-height:0}
+  .stack,.center-column{pointer-events:none}
+  .stack{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    min-height:0;
+    max-height:calc(100vh - 36px);
+    transition:transform .28s ease, opacity .28s ease;
+  }
+  .stack-left{
+    transform:translateX(-26px);
+    opacity:.76;
+    padding-left:18px;
+  }
+  .stack-right{
+    transform:translateX(26px);
+    opacity:.76;
+    padding-right:18px;
+  }
+  .stack-left:hover,.stack-left:focus-within,
+  .stack-right:hover,.stack-right:focus-within{
+    transform:translateX(0);
+    opacity:1;
+  }
   .card{
     position:relative;
-    background:linear-gradient(160deg, rgba(14,24,38,.92), rgba(7,16,25,.84) 65%);
+    background:linear-gradient(160deg, rgba(12,22,35,.70), rgba(7,16,25,.50) 65%);
     border:1px solid var(--line-soft);
     border-radius:18px;
-    backdrop-filter:blur(10px);
-    box-shadow:var(--glow);
+    backdrop-filter:blur(7px);
+    box-shadow:0 16px 42px rgba(0,0,0,.24);
     overflow:hidden;
+    pointer-events:auto;
   }
   .card::before{
     content:"";
@@ -90,7 +116,7 @@
   }
   .hero{
     padding:18px 18px 16px;
-    min-height:312px;
+    min-height:256px;
     display:flex;
     flex-direction:column;
     justify-content:space-between;
@@ -117,6 +143,7 @@
     line-height:.95;
     letter-spacing:-.04em;
     text-transform:uppercase;
+    text-wrap:balance;
   }
   .hero-copy{
     max-width:28ch;
@@ -197,11 +224,77 @@
     color:var(--muted);
   }
   .route-card{
-    padding:16px;
-    min-height:164px;
+    padding:12px 14px;
+    min-height:auto;
     display:flex;
     flex-direction:column;
-    gap:14px;
+    gap:10px;
+  }
+  .neural-dock{
+    padding:12px 14px;
+    min-height:auto;
+    background:linear-gradient(160deg, rgba(10,20,31,.52), rgba(7,16,25,.26) 70%);
+  }
+  .neural-copy{
+    color:#a9c3e2;
+    font-size:11px;
+    line-height:1.45;
+    max-width:40ch;
+  }
+  .neural-grid{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(110px,1fr));
+    gap:8px;
+    margin-top:10px;
+  }
+  .neural-stat{
+    border:1px solid rgba(44,76,104,.8);
+    border-radius:12px;
+    background:rgba(8,21,34,.34);
+    padding:8px 10px;
+  }
+  .neural-stat .k{
+    color:var(--muted);
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+  }
+  .neural-stat .v{
+    margin-top:6px;
+    font-size:20px;
+    line-height:1;
+    font-weight:700;
+  }
+  .neural-stat .s{
+    margin-top:4px;
+    color:#a6c2df;
+    font-size:10px;
+  }
+  .signal-strip{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:12px;
+  }
+  .signal-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    border-radius:999px;
+    border:1px solid rgba(44,76,104,.82);
+    background:rgba(8,21,34,.76);
+    padding:7px 11px;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:#cfe2f7;
+  }
+  .signal-chip i{
+    width:10px;
+    height:10px;
+    border-radius:99px;
+    display:block;
+    box-shadow:0 0 14px rgba(255,255,255,.18);
   }
   .route-top{
     display:flex;
@@ -291,9 +384,16 @@
   .svc strong.off{color:#7f95ae}
   .trace-card,.health-card,.load-card,.pulse-card{min-height:0}
   .trace,.pulse-feed{
-    max-height:34vh;
+    max-height:22vh;
     overflow:auto;
     padding:0 16px 16px;
+  }
+  .stack > .card:last-child,
+  .stack > .card:nth-last-child(2){
+    flex:0 0 auto;
+  }
+  .scroll-card{
+    overflow:auto;
   }
   .event,.pulse-item{
     display:flex;
@@ -417,17 +517,199 @@
     text-decoration:none;
     border-bottom:1px dotted rgba(185,221,255,.55);
   }
-  .center-column{display:flex;flex-direction:column;gap:12px;min-height:0}
+  .center-column{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    min-height:0;
+    align-items:center;
+    justify-content:flex-start;
+    padding-top:6px;
+  }
+  .center-column .card{
+    width:min(700px, calc(100vw - 680px));
+  }
+  .cinema-hud{
+    border-color:rgba(48,82,112,.55);
+    box-shadow:0 10px 30px rgba(0,0,0,.18);
+  }
+  .hud-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .hud-kicker{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:#cfe2f7;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.14em;
+  }
+  .hud-dot{
+    width:8px;
+    height:8px;
+    border-radius:999px;
+    background:var(--browse);
+    box-shadow:0 0 18px rgba(78,197,255,.7);
+  }
+  .hud-route{
+    font-size:15px;
+    line-height:1.15;
+    font-weight:700;
+    max-width:28ch;
+  }
+  .hud-meta{
+    color:var(--muted);
+    font-size:11px;
+    line-height:1.4;
+  }
+  .hud-flags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:8px;
+  }
+  .hud-flags .runtime-flag{
+    padding:6px 9px;
+    font-size:11px;
+    background:rgba(11,25,39,.56);
+  }
+  .hud-shortcuts{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:10px;
+  }
+  .hud-shortcuts a{
+    text-decoration:none;
+    color:#dbe9fb;
+    background:rgba(14,28,45,.66);
+    border:1px solid rgba(42,69,95,.65);
+    border-radius:999px;
+    padding:7px 10px;
+    font-size:11px;
+  }
+  .links a:focus-visible,
+  .hud-shortcuts a:focus-visible{
+    outline:2px solid rgba(138,197,255,.95);
+    outline-offset:3px;
+    box-shadow:0 0 0 4px rgba(78,197,255,.18);
+  }
+  .tool-overlay{
+    position:fixed;
+    left:50%;
+    bottom:24px;
+    transform:translateX(-50%);
+    width:min(980px, calc(100vw - 180px));
+    pointer-events:none;
+    display:flex;
+    justify-content:center;
+    z-index:4;
+  }
+  .tool-rack{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    justify-content:center;
+    padding:12px 16px;
+    border-radius:999px;
+    border:1px solid rgba(48,82,112,.55);
+    background:rgba(7,16,25,.42);
+    backdrop-filter:blur(7px);
+    box-shadow:0 12px 30px rgba(0,0,0,.18);
+  }
+  .tool-label{
+    color:#d8e8fb;
+    font-size:10px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    opacity:.82;
+  }
+  .tool-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 11px;
+    border-radius:999px;
+    border:1px solid rgba(51,83,112,.76);
+    background:rgba(10,22,35,.62);
+    color:#eaf3ff;
+    font-size:11px;
+    line-height:1;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+  }
+  .tool-chip i{
+    width:8px;
+    height:8px;
+    border-radius:999px;
+    display:block;
+    box-shadow:0 0 16px rgba(255,255,255,.25);
+  }
+  .tool-chip b{
+    font-weight:700;
+  }
+  .tool-chip small{
+    color:#a9c3e2;
+    font-size:10px;
+    letter-spacing:.04em;
+    text-transform:none;
+    max-width:16ch;
+  }
   @media (max-width: 1180px){
     body{overflow:auto}
     .overlay{
       position:relative;
       grid-template-columns:1fr;
       padding:12px;
+      pointer-events:auto;
     }
     canvas,.scanlines{position:fixed}
     .trace,.pulse-feed{max-height:none}
     .center-column{order:3}
+    .neural-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .center-column .card{width:100%}
+    .stack{max-height:none}
+    .stack-left,.stack-right{
+      transform:none;
+      opacity:1;
+      padding-left:0;
+      padding-right:0;
+    }
+    .tool-overlay{
+      position:relative;
+      left:auto;
+      bottom:auto;
+      transform:none;
+      width:100%;
+      padding:0 12px 12px;
+    }
+    .tool-rack{border-radius:18px}
+  }
+  @media (max-width: 720px){
+    .neural-grid{grid-template-columns:1fr 1fr}
+    .tool-rack{justify-content:flex-start}
+  }
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    .stack,
+    .stack-left,
+    .stack-right{
+      transition:none;
+      transform:none;
+      opacity:1;
+    }
+    .eyebrow .pulse,
+    .hud-dot,
+    .chip,
+    .tool-chip i{
+      box-shadow:none;
+    }
   }
 </style>
 </head>
@@ -435,7 +717,7 @@
 <canvas id="brain"></canvas>
 <div class="scanlines"></div>
 <div class="overlay">
-  <section class="stack">
+  <section class="stack stack-left">
     <article class="card hero">
       <div>
         <span class="eyebrow"><span class="pulse"></span> live cognitive runtime</span>
@@ -487,6 +769,19 @@
       </div>
     </article>
 
+    <article class="card scroll-card">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Capability Wall</div>
+            <div class="section-sub">What the runtime can actually use</div>
+          </div>
+          <div class="section-sub" id="capCount">0 active</div>
+        </div>
+        <div class="cap-grid" id="capGrid"></div>
+      </div>
+    </article>
+
     <article class="card health-card">
       <div class="section-head" style="padding:14px 16px 0">
         <div>
@@ -505,32 +800,48 @@
   </section>
 
   <section class="center-column">
-    <article class="card route-card">
-      <div class="route-top">
+    <article class="card neural-dock cinema-hud">
+      <div class="hud-top">
         <div>
-          <div class="section-title" style="padding:0">Active LLM Route</div>
-          <div class="route-value" id="providerRoute">Resolving runtime path...</div>
+          <div class="hud-kicker"><span class="hud-dot"></span> neural mesh <span id="meshState">warming up</span></div>
+          <div class="hud-route" id="providerRoute">Resolving runtime path...</div>
+          <div class="hud-meta" id="routeMeta">Waiting for public runtime snapshot.</div>
         </div>
         <span class="pill" id="modelPill">model --</span>
       </div>
-      <div class="route-meta" id="routeMeta">Waiting for public runtime snapshot.</div>
-      <div class="runtime-flags" id="runtimeFlags"></div>
-    </article>
-
-    <article class="card">
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">Capability Wall</div>
-            <div class="section-sub">What the runtime can actually use</div>
-          </div>
-          <div class="section-sub" id="capCount">0 active</div>
-        </div>
-        <div class="cap-grid" id="capGrid"></div>
+      <div class="neural-grid">
+        <article class="neural-stat">
+          <div class="k">Glowing</div>
+          <div class="v" id="glowCount">0</div>
+          <div class="s">active neurons</div>
+        </article>
+        <article class="neural-stat">
+          <div class="k">Synapses</div>
+          <div class="v" id="synapseCount">0</div>
+          <div class="s">live links</div>
+        </article>
+        <article class="neural-stat">
+          <div class="k">Source</div>
+          <div class="v" id="pulseSource">ambient</div>
+          <div class="s" id="pulseSourceMeta">mesh pulse source</div>
+        </article>
+        <article class="neural-stat">
+          <div class="k">Density</div>
+          <div class="v" id="meshDensity">500</div>
+          <div class="s">rendered nodes</div>
+        </article>
+      </div>
+      <div class="hud-flags" id="runtimeFlags"></div>
+      <div class="hud-shortcuts">
+        <a href="/admin">Admin</a>
+        <a href="/about">About</a>
+        <a href="/pitch/">Pitch</a>
       </div>
     </article>
+  </section>
 
-    <article class="card pulse-card">
+  <aside class="stack stack-right">
+    <article class="card pulse-card scroll-card">
       <div class="section-head" style="padding:14px 16px 0">
         <div>
           <div class="section-title">Proof Of Action</div>
@@ -541,29 +852,6 @@
       <div class="pulse-feed" id="pulseFeed"></div>
     </article>
 
-    <article class="card">
-      <div class="section-head" style="padding:14px 16px 0">
-        <div>
-          <div class="section-title">Shortcuts</div>
-          <div class="section-sub">Operational entry points</div>
-        </div>
-      </div>
-      <div class="links">
-        <a href="/admin">Admin</a>
-        <a href="/about">About</a>
-        <a href="/pitch/">Pitch</a>
-      </div>
-      <div class="footnote">
-        Other projects:
-        <a href="https://mundial.diegodella.ar" target="_blank" rel="noopener noreferrer">mundial.diegodella.ar</a>,
-        <a href="https://diegodella.ar" target="_blank" rel="noopener noreferrer">diegodella.ar</a>,
-        <a href="https://hermes.diegodella.ar" target="_blank" rel="noopener noreferrer">hermes.diegodella.ar</a>,
-        <a href="https://adpilot.diegodella.ar" target="_blank" rel="noopener noreferrer">adpilot.diegodella.ar</a>
-      </div>
-    </article>
-  </section>
-
-  <aside class="stack">
     <article class="card load-card">
       <div class="section-head" style="padding:14px 16px 0">
         <div>
@@ -574,7 +862,7 @@
       <div class="bars" id="topBars"></div>
     </article>
 
-    <article class="card trace-card">
+    <article class="card trace-card scroll-card">
       <div class="section-head" style="padding:14px 16px 0">
         <div>
           <div class="section-title">Live Trace</div>
@@ -618,24 +906,43 @@
     </article>
   </aside>
 </div>
+<div class="tool-overlay">
+  <div class="tool-rack" id="toolRack">
+    <span class="tool-label">live tools</span>
+  </div>
+</div>
 
 <script>
 (() => {
   const eventColors = {
-    think: [140, 145, 255],
-    memory: [74, 221, 180],
+    think: [111, 120, 255],
+    memory: [41, 214, 151],
     learn: [255, 209, 93],
-    browse: [78, 197, 255],
-    tool: [255, 124, 198],
-    reasoning: [208, 152, 255],
-    cron: [183, 197, 217],
-    heartbeat: [255, 127, 157]
+    browse: [44, 196, 255],
+    search: [0, 226, 199],
+    fetch: [64, 160, 255],
+    shell: [255, 145, 64],
+    files: [154, 119, 255],
+    email: [255, 90, 152],
+    calendar: [209, 120, 255],
+    drive: [116, 255, 120],
+    tool: [255, 70, 198],
+    reasoning: [187, 118, 255],
+    cron: [151, 173, 198],
+    heartbeat: [255, 92, 122]
   };
   const eventDescriptions = {
     think: "Model reasoning pass",
     memory: "Persistent memory touched",
     learn: "Learning workflow triggered",
     browse: "Web navigation or search activity",
+    search: "Web search capability",
+    fetch: "Direct fetch capability",
+    shell: "Shell execution capability",
+    files: "Workspace file access",
+    email: "Gmail capability",
+    calendar: "Calendar capability",
+    drive: "Google Drive capability",
     tool: "Tool call executed",
     reasoning: "Background reasoning loop",
     cron: "Scheduled job pulse",
@@ -645,12 +952,47 @@
   const fireQueue = [];
   const trace = [];
   const MAX_TRACE = 80;
+  const toolTimeline = [];
+  const MAX_TOOLS = 8;
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let eventsSeen = 0;
+  let lastRealEventAt = null;
+  let lastRealEventType = "ambient";
+  let meshFrame = 0;
 
   const traceEl = document.getElementById("trace");
   const pulseFeedEl = document.getElementById("pulseFeed");
   const capGrid = document.getElementById("capGrid");
   const runtimeFlags = document.getElementById("runtimeFlags");
+  const toolRack = document.getElementById("toolRack");
+
+  function pushTool(type, at) {
+    const key = String(type || "event");
+    const when = at || new Date().toISOString();
+    const existing = toolTimeline.findIndex(item => item.type === key);
+    if (existing >= 0) toolTimeline.splice(existing, 1);
+    toolTimeline.unshift({ type: key, at: when });
+    if (toolTimeline.length > MAX_TOOLS) toolTimeline.length = MAX_TOOLS;
+    renderToolRack();
+  }
+  function renderToolRack() {
+    const rows = toolTimeline.length ? toolTimeline : [{ type: "ambient", at: new Date().toISOString() }];
+    toolRack.innerHTML =
+      '<span class="tool-label">live tools</span>' +
+      rows.map(item => {
+        const col = eventColors[item.type] || defaultColor;
+        const desc = eventDescriptions[item.type] || "Runtime activity";
+        const bg = 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',0.16)';
+        const border = 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',0.44)';
+        const glow = '0 0 18px rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',0.22)';
+        return '<span class="tool-chip" style="background:' + bg + ';border-color:' + border + ';box-shadow:' + glow + ';">' +
+          '<i style="background:rgb(' + col.join(",") + ')"></i>' +
+          '<b>' + item.type + '</b>' +
+          '<small>' + desc + '</small>' +
+        '</span>';
+      }).join("");
+  }
+  renderToolRack();
 
   function fmtNum(v) {
     if (v === undefined || v === null) return "--";
@@ -672,6 +1014,7 @@
     trace.unshift({ type: type || "event", at: at || new Date().toISOString() });
     if (trace.length > MAX_TRACE) trace.length = MAX_TRACE;
     eventsSeen++;
+    pushTool(type, at);
     renderTrace();
     renderPulseFeed();
   }
@@ -734,6 +1077,11 @@
         '<span class="cap-label">' + (cap.label || cap.key || 'capability') + '</span>' +
         '<span class="cap-status">' + (on ? 'on' : 'off') + '</span></div>';
     }).join("");
+    if (!toolTimeline.length) {
+      rows.filter(cap => String(cap.status || "").toLowerCase() === "on").slice(0, 6).forEach(cap => {
+        pushTool((cap.key || cap.label || "tool").toLowerCase(), new Date().toISOString());
+      });
+    }
   }
   function renderRuntimeFlags(summary, data) {
     const flags = [];
@@ -753,6 +1101,18 @@
     document.getElementById("stateText").textContent = online ? "online" : "offline";
     document.getElementById("statePill").style.borderColor = online ? "rgba(67,214,167,.42)" : "rgba(255,107,116,.32)";
     document.getElementById("statePill").style.background = online ? "rgba(12,45,34,.52)" : "rgba(49,20,27,.52)";
+  }
+  function updateMeshHud(glowing, activeSynapses) {
+    document.getElementById("glowCount").textContent = fmtNum(glowing);
+    document.getElementById("synapseCount").textContent = fmtNum(activeSynapses);
+    document.getElementById("meshDensity").textContent = "500";
+    const fresh = lastRealEventAt && (Date.now() - lastRealEventAt.getTime()) < 15000;
+    const source = fresh ? lastRealEventType : "ambient";
+    document.getElementById("pulseSource").textContent = source;
+    document.getElementById("meshState").textContent = fresh ? "live pulse stream" : "ambient visualization";
+    document.getElementById("pulseSourceMeta").textContent = fresh
+      ? "last runtime pulse at " + formatTime(lastRealEventAt)
+      : "no recent SSE event, mesh stays alive with ambient motion";
   }
   function handlePublicSnapshot(data) {
     const summary = data.summary || data;
@@ -834,6 +1194,8 @@
       const color = eventColors[type] || defaultColor;
       for (let i = 0; i < (type === "memory" ? 20 : 10); i++) fireQueue.push(color);
       document.getElementById("eventState").textContent = type;
+      lastRealEventType = type;
+      lastRealEventAt = new Date(at);
       pushTrace(type, at);
     };
   } catch (_) {}
@@ -900,17 +1262,24 @@
   for (let i = 0; i < MAX_SYN; i++) synapses.push({ ci: -1, life: 0, max: 0, color: defaultColor });
 
   function pos(n) {
-    const scale = Math.min(W, H) * 0.38;
+    const scale = Math.min(W, H) * 0.45;
     return { x: centerX() + n.nx * scale, y: centerY() + n.ny * scale };
   }
 
   let t = 0;
   function tick() {
     requestAnimationFrame(tick);
+    if (prefersReducedMotion.matches) {
+      ctx.clearRect(0, 0, W, H);
+      updateMeshHud(0, 0);
+      return;
+    }
     t += 0.002;
+    meshFrame++;
     ctx.clearRect(0, 0, W, H);
     const cos = Math.cos(t * 0.08);
     const sin = Math.sin(t * 0.08);
+    let glowingNow = 0;
 
     for (const n of neurons) {
       n.nx += n.vx;
@@ -925,11 +1294,13 @@
       n.vx *= 0.995;
       n.vy *= 0.995;
       n.glow *= 0.94;
+      if (n.glow > 0.22) glowingNow++;
       n._rx = n.nx * cos - n.nz * sin;
       n._rz = n.nx * sin + n.nz * cos;
     }
 
     const ambientRate = 0.012 + Math.sin(t * 0.3) * 0.006;
+    let activeSynapses = 0;
     for (let s = 0; s < MAX_SYN; s++) {
       if (synapses[s].life <= 0 && (fireQueue.length > 0 || Math.random() < ambientRate)) {
         const color = fireQueue.length > 0 ? fireQueue.shift() : defaultColor;
@@ -943,7 +1314,10 @@
         na.glow = 1; nb.glow = 1;
         na.glowColor = color; nb.glowColor = color;
       }
-      if (synapses[s].life > 0) synapses[s].life--;
+      if (synapses[s].life > 0) {
+        synapses[s].life--;
+        activeSynapses++;
+      }
     }
 
     ctx.lineWidth = 0.4;
@@ -1015,6 +1389,7 @@
       }
       ctx.fill();
     }
+    if (meshFrame % 6 === 0) updateMeshHud(glowingNow, activeSynapses);
   }
   tick();
 })();
