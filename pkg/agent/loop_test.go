@@ -13,6 +13,53 @@ import (
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
+func TestTrimHistoryForPrompt_KeepsRecentMessagesWithinBudget(t *testing.T) {
+	history := []providers.Message{
+		{Role: "user", Content: "uno"},
+		{Role: "assistant", Content: "dos"},
+		{Role: "user", Content: "tres"},
+		{Role: "assistant", Content: "cuatro"},
+		{Role: "user", Content: "cinco"},
+	}
+
+	got := trimHistoryForPrompt(history, 3, 100)
+	if len(got) != 3 {
+		t.Fatalf("len(trimmed) = %d, want 3", len(got))
+	}
+	if got[0].Content != "tres" || got[1].Content != "cuatro" || got[2].Content != "cinco" {
+		t.Fatalf("unexpected trimmed history: %#v", got)
+	}
+}
+
+func TestTrimHistoryForPrompt_PreservesToolBlock(t *testing.T) {
+	history := []providers.Message{
+		{Role: "user", Content: "old"},
+		{
+			Role:    "assistant",
+			Content: "",
+			ToolCalls: []providers.ToolCall{
+				{ID: "call_1", Name: "read_file"},
+			},
+		},
+		{Role: "tool", ToolCallID: "call_1", Content: "tool output"},
+		{Role: "assistant", Content: "answer"},
+	}
+
+	got := trimHistoryForPrompt(history, 4, 18)
+	if len(got) != 3 {
+		t.Fatalf("len(trimmed) = %d, want 3 to preserve tool block", len(got))
+	}
+	if got[0].Role != "assistant" || len(got[0].ToolCalls) != 1 {
+		t.Fatalf("expected assistant tool-call message first, got %#v", got[0])
+	}
+	if got[1].Role != "tool" || got[1].ToolCallID != "call_1" {
+		t.Fatalf("expected matching tool response, got %#v", got[1])
+	}
+	if got[2].Content != "answer" {
+		t.Fatalf("expected final assistant answer, got %#v", got[2])
+	}
+}
+
 // mockProvider is a simple mock LLM provider for testing
 type mockProvider struct{}
 

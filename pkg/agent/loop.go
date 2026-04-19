@@ -60,6 +60,11 @@ type AgentLoop struct {
 	consecutiveFails   int         // consecutive LLM failures for auto-recovery
 }
 
+const (
+	maxRecentContextMessages = 8
+	maxRecentContextChars    = 6000
+)
+
 // GetMemoryTool returns the memory tool for programmatic vault access (used by reasoning service).
 func (al *AgentLoop) GetMemoryTool() *tools.MemoryTool {
 	return al.memoryTool
@@ -477,6 +482,7 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	if !opts.NoHistory {
 		history = al.sessions.GetHistory(opts.SessionKey)
 		summary = al.sessions.GetSummary(opts.SessionKey)
+		history = trimHistoryForPrompt(history, maxRecentContextMessages, maxRecentContextChars)
 	}
 	messages := al.contextBuilder.BuildMessages(
 		history,
@@ -712,6 +718,77 @@ func (al *AgentLoop) runAgentLoop(ctx context.Context, opts processOptions) (str
 	}
 
 	return finalContent, media, nil
+}
+
+// trimHistoryForPrompt keeps only the most recent conversation blocks so each
+// LLM turn does not resend the full session history. Tool-call blocks are kept
+// together to avoid breaking assistant/tool causality.
+func trimHistoryForPrompt(history []providers.Message, maxMessages, maxChars int) []providers.Message {
+	if len(history) <= 1 || (maxMessages <= 0 && maxChars <= 0) {
+		return history
+	}
+
+	type block struct {
+		messages []providers.Message
+		chars    int
+	}
+
+	blocks := make([]block, 0, len(history))
+	for i := 0; i < len(history); {
+		msg := history[i]
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			j := i + 1
+			charCount := len(msg.Content)
+			for j < len(history) && history[j].Role == "tool" {
+				charCount += len(history[j].Content)
+				j++
+			}
+			blocks = append(blocks, block{
+				messages: append([]providers.Message(nil), history[i:j]...),
+				chars:    charCount,
+			})
+			i = j
+			continue
+		}
+
+		blocks = append(blocks, block{
+			messages: []providers.Message{msg},
+			chars:    len(msg.Content),
+		})
+		i++
+	}
+
+	selected := make([]block, 0, len(blocks))
+	totalMessages := 0
+	totalChars := 0
+
+	for i := len(blocks) - 1; i >= 0; i-- {
+		nextMessages := totalMessages + len(blocks[i].messages)
+		nextChars := totalChars + blocks[i].chars
+
+		if len(selected) > 0 {
+			if maxMessages > 0 && nextMessages > maxMessages {
+				break
+			}
+			if maxChars > 0 && nextChars > maxChars {
+				break
+			}
+		}
+
+		selected = append([]block{blocks[i]}, selected...)
+		totalMessages = nextMessages
+		totalChars = nextChars
+	}
+
+	if len(selected) == len(blocks) {
+		return history
+	}
+
+	trimmed := make([]providers.Message, 0, totalMessages)
+	for _, blk := range selected {
+		trimmed = append(trimmed, blk.messages...)
+	}
+	return trimmed
 }
 
 // runLLMIteration executes the LLM call loop with tool handling.
